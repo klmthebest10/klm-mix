@@ -1,0 +1,15 @@
+{
+  "appId": "com.klm.mix.hp",
+  "appName": "KLM Mix",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": true,
+    "backgroundColor": "#0e1014"
+  }
+}

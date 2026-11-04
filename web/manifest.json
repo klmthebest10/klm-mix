@@ -1,0 +1,12 @@
+{
+  "name": "KLM Mix HP",
+  "short_name": "KLM Mix",
+  "start_url": "/hp",
+  "display": "standalone",
+  "background_color": "#0e1014",
+  "theme_color": "#0e1014",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

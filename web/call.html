@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>KLM Call</title>
+<link rel="stylesheet" href="phone.css">
+<link rel="icon" href="icon-192.png">
+<style>
+  html, body { height: 100%; overflow: hidden; background: #000; }
+  #ret { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  #self { position: fixed; right: 12px; bottom: 90px; width: 30vw; max-width: 260px; aspect-ratio: 16/9; object-fit: cover; border-radius: 10px; border: 2px solid #fff6; transform: scaleX(-1); background: #111; z-index: 3; }
+  body.t-program #self { border: 4px solid var(--pgm); } body.t-preview #self { border: 4px solid var(--pvw); }
+  header { position: fixed; top: 0; left: 0; right: 0; display: flex; gap: 8px; align-items: center; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); background: linear-gradient(#000c, #0000); z-index: 4; }
+  footer { position: fixed; bottom: 0; left: 0; right: 0; display: flex; gap: 10px; justify-content: center; padding: 14px; padding-bottom: max(14px, env(safe-area-inset-bottom)); background: linear-gradient(#0000, #000d); z-index: 4; }
+  footer button { font-size: 22px; min-width: 60px; border-radius: 30px; background: #0009; border-color: #fff4; }
+  footer button.off { background: #b91c1c; }
+  #live { display: none; background: var(--pgm); color: #fff; font-weight: 800; padding: 3px 10px; border-radius: 6px; }
+  body.t-program #live { display: inline-block; }
+  #join { position: fixed; inset: 0; z-index: 10; background: radial-gradient(#1b2433, #000); overflow: auto; }
+</style>
+</head>
+<body>
+<video id="ret" autoplay playsinline></video>
+<video id="self" autoplay muted playsinline></video>
+<header><div class="brand" style="font-size:16px"><b>KLM</b> Call</div><span class="pill" id="status">…</span><span id="live">● ON AIR</span><span class="grow"></span><span class="muted" id="who"></span></header>
+<footer>
+  <button id="bMic" title="Mic">🎤</button>
+  <button id="bCam" title="Kamera">📷</button>
+  <button id="bFlip" title="Ganti kamera">🔄</button>
+  <button id="bVol" title="Suara studio">🔊</button>
+  <button id="bEnd" class="off" title="Keluar">✖</button>
+</footer>
+<div id="join"><div class="wrap">
+  <div class="brand" style="margin-top:20px"><b>KLM</b> Call</div>
+  <p class="muted">Bergabung sebagai tamu/narasumber siaran. Anda akan melihat & mendengar tayangan studio (tanpa gema suara sendiri).</p>
+  <div class="card">
+    <div id="srvBox"><label>Alamat PC (IP KLM Mix)</label><input id="jSrv" placeholder="192.168.1.10"></div>
+    <label>Nama Anda</label><input id="jName" placeholder="Nama narasumber">
+    <label>Nomor call (dari operator)</label><select id="jSlot"></select>
+    <label>Kualitas</label><select id="jQ"><option value="480">480p (internet lambat)</option><option value="720" selected>720p</option><option value="1080">1080p</option></select>
+  </div>
+  <button class="pri" id="jGo" style="width:100%;margin-top:14px;font-size:18px;padding:14px">📞 Gabung</button>
+  <p class="muted" style="margin-top:14px">Jaringan sama (Wi-Fi/LAN) langsung bisa. Untuk tamu dari luar, hubungkan lewat VPN (Tailscale/ZeroTier) ke PC studio.</p>
+</div></div>
+<script src="common.js"></script>
+<script src="call.js"></script>
+</body>
+</html>

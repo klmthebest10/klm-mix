@@ -1,0 +1,68 @@
+{
+  "name": "klm-mix",
+  "productName": "KLM Mix",
+  "version": "1.1.0",
+  "description": "KLM Mix - Studio produksi live (klon vMix) dengan KLMCAM & UTC KLM Acara terintegrasi",
+  "author": "KLM",
+  "license": "UNLICENSED",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "web": "node electron/server.js",
+    "dist:win": "electron-builder --win nsis portable --x64 --publish never",
+    "dist:dir": "electron-builder --win dir --x64 --publish never"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "selfsigned": "^2.4.1",
+    "ws": "^8.18.0",
+    "koffi": "^2.9.0"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.klm.mix",
+    "productName": "KLM Mix",
+    "copyright": "KLM",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "src/**",
+      "web/**",
+      "build/icon.png",
+      "build/icon-256.png",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**",
+      "node_modules/koffi/**"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "artifactName": "KLM-Mix-${version}-${arch}-${target}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KLM Mix",
+      "artifactName": "KLM-Mix-Setup-${version}.${ext}",
+      "include": "build/installer.nsh",
+      "perMachine": true,
+      "runAfterFinish": true
+    },
+    "portable": {
+      "artifactName": "KLM-Mix-Portable-${version}.${ext}"
+    }
+  }
+}

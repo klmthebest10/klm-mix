@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>KLM Mix - Output</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+  video { width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+  #hint { position: fixed; left: 12px; bottom: 10px; color: #fff8; font: 12px "Segoe UI", Arial; transition: opacity 1s; pointer-events: none; }
+</style>
+</head>
+<body>
+<video id="out" autoplay muted playsinline></video>
+<div id="hint">Dobel klik: layar penuh • Esc: keluar layar penuh</div>
+<script>
+  document.addEventListener('dblclick', () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
+  setTimeout(() => { document.getElementById('hint').style.opacity = 0; }, 4000);
+</script>
+</body>
+</html>

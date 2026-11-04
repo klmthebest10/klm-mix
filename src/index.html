@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KLM Mix</title>
+<link rel="icon" href="/build/icon.png">
+<link rel="stylesheet" href="/src/css/app.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand"><span class="logo">KLM</span><span class="logo2">Mix</span><span class="ver" id="ver"></span></div>
+    <nav class="menu">
+      <div class="dd">
+        <button class="mbtn">Proyek ▾</button>
+        <div class="ddm">
+          <button data-act="project-new">Proyek baru</button>
+          <button data-act="project-open">Buka proyek… <kbd>Ctrl+O</kbd></button>
+          <button data-act="project-save">Simpan proyek <kbd>Ctrl+S</kbd></button>
+          <button data-act="project-saveas">Simpan sebagai…</button>
+          <hr>
+          <button data-act="autosave-restore">Pulihkan sesi terakhir</button>
+        </div>
+      </div>
+      <button class="mbtn" data-act="add-input">＋ Tambah Input</button>
+      <div class="dd">
+        <button class="mbtn">Output ▾</button>
+        <div class="ddm">
+          <button data-act="external">Output Eksternal / Monitor 2…</button>
+          <button data-act="multiview">Multiview…</button>
+          <button data-act="snapshot">Snapshot Program <kbd>Ctrl+Shift+S</kbd></button>
+          <button data-act="open-rec-folder">Buka folder rekaman</button>
+        </div>
+      </div>
+      <button class="mbtn" data-act="settings">⚙ Pengaturan</button>
+      <button class="mbtn" data-act="phone">📱 HP & Jaringan</button>
+      <button class="mbtn" data-act="help">❔ Bantuan</button>
+    </nav>
+    <div class="status">
+      <span class="st" id="st-hp" title="Perangkat HP terhubung">📱 0</span>
+      <span class="st" id="st-fps">0 fps</span>
+      <span class="st" id="st-res"></span>
+      <span class="st" id="st-perf" title="Mode performa (klik untuk ganti)" style="cursor:pointer"></span>
+      <span class="st rec" id="st-rec" hidden>● REC 00:00:00</span>
+      <span class="st live" id="st-live" hidden>● LIVE 00:00:00</span>
+      <span class="st clock" id="st-clock">00:00:00</span>
+    </div>
+  </header>
+
+  <section id="stage">
+    <div class="screen pvw" id="pvwBox">
+      <div class="screen-head">
+        <span class="tag">PREVIEW</span><span class="sname" id="pvwName">—</span>
+        <div class="stools" id="pvwTools"></div>
+      </div>
+      <div class="cwrap"><canvas id="pvw"></canvas></div>
+    </div>
+
+    <div id="trans">
+      <button class="tb qp" data-act="quickplay" title="Quick Play: transisi langsung ke preview tanpa menukar">Quick Play</button>
+      <button class="tb cut" data-act="cut" title="Cut (Spasi)">CUT</button>
+      <div id="tslots"></div>
+      <div class="tbar-wrap"><span>T-Bar</span><input type="range" id="tbar" min="0" max="1000" value="0"></div>
+      <div class="sting"><button class="tb" data-act="stinger1">Stinger 1</button><button class="tb" data-act="stinger2">Stinger 2</button></div>
+      <button class="tb ftb" data-act="ftb" id="ftbBtn" title="Fade To Black (B)">FTB</button>
+    </div>
+
+    <div class="screen pgm" id="pgmBox">
+      <div class="screen-head">
+        <span class="tag">PROGRAM</span><span class="sname" id="pgmName">—</span>
+        <div class="stools">
+          <button class="ic" data-act="snapshot" title="Snapshot">📸</button>
+          <button class="ic" data-act="external" title="Output eksternal">🖥️</button>
+        </div>
+      </div>
+      <div class="cwrap"><canvas id="pgm"></canvas></div>
+    </div>
+  </section>
+
+  <section id="lower">
+    <div id="inputsPanel">
+      <div id="inputs"></div>
+    </div>
+    <div id="splitter"></div>
+    <aside id="dock">
+      <div class="dtabs">
+        <button data-tab="audio" class="on">🎚 Audio</button>
+        <button data-tab="title">🅃 Title UTC</button>
+        <button data-tab="replay">⏪ Replay</button>
+        <button data-tab="phone">📱 KLMCAM</button>
+        <button data-tab="playlist">📃 Playlist</button>
+        <button data-tab="ptz">🎥 PTZ</button>
+        <button data-tab="script">⚡ Skrip</button>
+      </div>
+      <div class="dbody" id="dock-audio"></div>
+      <div class="dbody" id="dock-title" hidden></div>
+      <div class="dbody" id="dock-replay" hidden></div>
+      <div class="dbody" id="dock-phone" hidden></div>
+      <div class="dbody" id="dock-playlist" hidden></div>
+      <div class="dbody" id="dock-ptz" hidden></div>
+      <div class="dbody" id="dock-script" hidden></div>
+    </aside>
+  </section>
+
+  <footer id="bottombar">
+    <button class="bb add" data-act="add-input">＋ Tambah Input</button>
+    <span class="sep"></span>
+    <button class="bb" data-act="record" id="bb-rec"><i class="dot"></i>Rekam</button>
+    <button class="bb" data-act="external" id="bb-ext"><i class="dot"></i>External</button>
+    <button class="bb" data-act="stream" id="bb-stream"><i class="dot"></i>Stream</button>
+    <button class="bb" data-act="multicorder" id="bb-mc"><i class="dot"></i>MultiCorder</button>
+    <button class="bb" data-act="playlist" id="bb-pl"><i class="dot"></i>PlayList</button>
+    <button class="bb" data-act="replay-toggle" id="bb-rp"><i class="dot"></i>Replay</button>
+    <button class="bb" data-act="ndi" id="bb-ndi" title="Output NDI (juga virtual camera via NDI Webcam)"><i class="dot"></i>NDI / VCam</button>
+    <span class="sep"></span>
+    <span class="ovl-lbl">Overlay</span>
+    <button class="bb ov" data-ov="0" id="bb-ov0">1</button>
+    <button class="bb ov" data-ov="1" id="bb-ov1">2</button>
+    <button class="bb ov" data-ov="2" id="bb-ov2">3</button>
+    <button class="bb ov" data-ov="3" id="bb-ov3">4</button>
+    <button class="bb" data-act="ovl-off" title="Matikan semua overlay">✕</button>
+    <span class="grow"></span>
+    <button class="bb" data-act="snapshot">📸 Snapshot</button>
+    <button class="bb" data-act="settings-stream">⚙ Stream</button>
+  </footer>
+</div>
+<div id="modal-root"></div>
+
+<script src="/src/vendor/qr.js"></script>
+<script src="/src/js/core.js"></script>
+<script src="/src/js/perf.js"></script>
+<script src="/src/js/effects.js"></script>
+<script src="/src/js/titles.js"></script>
+<script src="/src/js/inputs.js"></script>
+<script src="/src/js/audio.js"></script>
+<script src="/src/js/engine.js"></script>
+<script src="/src/js/record.js"></script>
+<script src="/src/js/replay.js"></script>
+<script src="/src/js/api.js"></script>
+<script src="/src/js/link.js"></script>
+<script src="/src/js/ptz.js"></script>
+<script src="/src/js/script.js"></script>
+<script src="/src/js/designer.js"></script>
+<script src="/src/js/ui.js"></script>
+<script src="/src/js/dialogs.js"></script>
+<script src="/src/js/dock.js"></script>
+<script src="/src/js/app.js"></script>
+</body>
+</html>

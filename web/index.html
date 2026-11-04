@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1014">
+<title>KLM Mix HP</title>
+<link rel="stylesheet" href="phone.css">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+</head>
+<body>
+<div class="wrap">
+  <div class="brand"><b>KLM</b> Mix <span class="muted" style="font-weight:400;font-size:13px">• HP</span></div>
+  <p class="muted">Kamera nirkabel (KLMCAM), remote switcher, title & audio untuk KLM Mix di PC. Semua lewat Wi-Fi lokal, tanpa internet.</p>
+
+  <div class="card" id="srvCard">
+    <label for="srv">Alamat PC (IP KLM Mix)</label>
+    <div class="row"><input id="srv" inputmode="url" placeholder="contoh: 192.168.1.10"><button class="pri" id="test" style="flex:none">Cek</button></div>
+    <div class="muted" id="srvInfo" style="margin-top:8px">Lihat IP di KLM Mix PC → menu "📱 HP & Jaringan".</div>
+  </div>
+
+  <button class="big" id="goCam"><i>📷</i><div><b>Kamera (KLMCAM)</b><span>Jadikan HP ini kamera wireless latensi rendah + tally</span></div></button>
+  <button class="big" id="goRemote"><i>🎛️</i><div><b>Remote Switcher</b><span>Cut, transisi, overlay, rekam, streaming, replay</span></div></button>
+  <button class="big" id="goTitle"><i>🅃</i><div><b>Title & Lower Third (UTC KLM Acara)</b><span>Ganti nama, running text, tampilkan/sembunyikan</span></div></button>
+  <button class="big" id="goCall"><i>📞</i><div><b>KLM Call (Tamu)</b><span>Narasumber jarak jauh: lihat tayangan studio + suara tanpa gema</span></div></button>
+  <button class="big" id="goAudio"><i>🎚️</i><div><b>Mixer Audio</b><span>Volume & mute tiap input dari HP</span></div></button>
+  <p class="muted" style="text-align:center;margin-top:18px">KLM Mix v1.1.0</p>
+</div>
+<script src="common.js"></script>
+<script>
+  const srv = document.getElementById('srv'), info = document.getElementById('srvInfo');
+  if (KMP.servedByPc) { document.getElementById('srvCard').style.display = 'none'; }
+  srv.value = KMP.get('server', '');
+  const save = () => KMP.set('server', srv.value.trim());
+  srv.addEventListener('change', save);
+  async function test() {
+    save();
+    const s = KMP.server(); if (!s.host) { info.textContent = 'Isi IP dulu.'; return false; }
+    info.textContent = 'Menghubungi ' + s.host + '…';
+    try {
+      const ctl = new AbortController(); setTimeout(() => ctl.abort(), 3500);
+      const r = await fetch('http://' + s.host + '/info', { signal: ctl.signal });
+      const j = await r.json();
+      info.innerHTML = '<span class="pill ok">Terhubung</span> ' + j.app + ' ' + j.version + (j.mixer ? '' : ' (mixer belum dibuka)');
+      return true;
+    } catch (e) { info.innerHTML = '<span class="pill warn">Gagal</span> Pastikan HP & PC di Wi-Fi yang sama dan KLM Mix sudah dibuka. Izinkan KLM Mix di Firewall Windows.'; return false; }
+  }
+  document.getElementById('test').onclick = test;
+  const go = async (page, extra) => { if (!KMP.servedByPc) { save(); if (!KMP.server().host) { KMP.toast('Isi IP PC dulu'); srv.focus(); return; } } location.href = KMP.page(page) + (extra || ''); };
+  document.getElementById('goCam').onclick = () => {
+    if (KMP.servedByPc && location.protocol !== 'https:') {
+      // kamera di browser butuh HTTPS
+      fetch('/info').then(r => r.json()).then(j => { if (j.ports.https) location.href = 'https://' + location.hostname + ':' + j.ports.https + '/cam'; else go('cam'); }).catch(() => go('cam'));
+    } else go('cam');
+  };
+  document.getElementById('goRemote').onclick = () => go('remote');
+  document.getElementById('goCall').onclick = () => {
+    if (KMP.servedByPc && location.protocol !== 'https:') fetch('/info').then(r => r.json()).then(j => { location.href = j.ports.https ? 'https://' + location.hostname + ':' + j.ports.https + '/call' : '/call'; }).catch(() => go('call'));
+    else go('call');
+  };
+  document.getElementById('goTitle').onclick = () => go('remote', '#title');
+  document.getElementById('goAudio').onclick = () => go('remote', '#audio');
+</script>
+</body>
+</html>
