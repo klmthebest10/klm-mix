@@ -220,6 +220,9 @@ function smokeTest() {
       fs.writeFileSync(path.join(out, 'panel.png'), (await mainWin.webContents.capturePage()).toPNG());
     } catch (e) { fail++; log('ERROR ' + (e && e.stack || e)); }
     log(fail ? 'HASIL: GAGAL (' + fail + ')' : 'HASIL: OK');
+    app.on('will-quit', () => log('will-quit')); app.on('quit', () => log('quit'));
+    process.on('exit', (c) => log('process exit ' + c));
+    log('keluar…');
     try { fs.writeFileSync(path.join(out, 'result.txt'), fail ? 'FAIL' : 'OK'); } catch (e) {}
     mainWin.removeAllListeners('close');
     try { utcOsr && utcOsr.stop(); } catch (e) {}
