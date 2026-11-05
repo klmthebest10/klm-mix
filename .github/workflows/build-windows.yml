@@ -30,7 +30,9 @@ jobs:
           $p = Start-Process -FilePath "node_modules\electron\dist\electron.exe" -ArgumentList "." -PassThru
           if (-not $p.WaitForExit(120000)) { Stop-Process -Id $p.Id -Force; Write-Host "::warning::Aplikasi tidak menutup sendiri (timeout)" } else { Write-Host "Aplikasi menutup normal, kode $($p.ExitCode)" }
           Get-Content "$env:KLM_SMOKE\smoke.log" -ErrorAction SilentlyContinue
-          Get-Process | Where-Object { $_.ProcessName -match "electron|ffmpeg" } | Format-Table Id, ProcessName, StartTime -AutoSize | Out-String | Write-Host
+          Start-Sleep -Seconds 3
+          $left = Get-Process -Name electron -ErrorAction SilentlyContinue
+          if ($left) { Write-Host "::warning::Masih ada proses electron tertinggal: $($left.Count)" } else { Write-Host "Tidak ada proses tertinggal" }
           if ((Get-Content "$env:KLM_SMOKE\result.txt" -ErrorAction SilentlyContinue) -ne 'OK') { Write-Host "::warning::Smoke test UTC tidak OK" }
 
       - name: Upload hasil smoke test

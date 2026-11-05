@@ -180,7 +180,16 @@ app.whenReady().then(async () => {
 app.on('second-instance', () => { if (mainWin) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.focus(); } });
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => { try { server.hub.shutdown(); } catch (e) {} try { utcOsr && utcOsr.stop(); } catch (e) {} });
-app.on('will-quit', () => { setTimeout(() => process.exit(0), 3000).unref(); });
+// Windows: proses Chromium (GPU/renderer offscreen) kadang tertinggal setelah keluar → aplikasi tidak bisa dibuka lagi
+// (single instance). Tutup file rekaman dulu, lalu hentikan proses sepenuhnya.
+let finalQuit = false;
+app.on('will-quit', (e) => {
+  if (finalQuit) return;
+  e.preventDefault(); finalQuit = true;
+  const ends = [...writers.values()].map((w) => new Promise((r) => { try { w.end(r); } catch (x) { r(); } setTimeout(r, 2000); }));
+  writers.clear();
+  Promise.all(ends).then(() => { try { process.kill(process.pid, 'SIGKILL'); } catch (x) { process.exit(0); } });
+});
 
 // ---------------- uji otomatis CI (KLM_SMOKE=folder) ----------------
 // Membuka aplikasi, memastikan panel UTC & lapisan UTC ON AIR benar-benar tampil di Program, lalu menyimpan screenshot.
@@ -227,7 +236,7 @@ function smokeTest() {
     mainWin.removeAllListeners('close');
     try { utcOsr && utcOsr.stop(); } catch (e) {}
     try { server.hub.shutdown(); } catch (e) {}
-    app.exit(fail ? 1 : 0);
-    setTimeout(() => process.exit(fail ? 1 : 0), 1500);
+    try { fs.writeFileSync(path.join(out, 'exit.txt'), String(fail ? 1 : 0)); } catch (e) {}
+    app.quit();
   })();
 }
