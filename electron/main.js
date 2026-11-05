@@ -189,7 +189,11 @@ function hardQuit(why) {
   try { server.hub.shutdown(); } catch (e) {}
   const ends = [...writers.values()].map((w) => new Promise((r) => { try { w.end(r); } catch (x) { r(); } setTimeout(r, 2500); }));
   writers.clear();
-  const kill = () => { try { process.kill(process.pid, 'SIGKILL'); } catch (x) { process.exit(0); } };
+  const kill = () => {
+    if (process.env.KLM_SMOKE) { try { fs.appendFileSync(path.join(process.env.KLM_SMOKE, 'smoke.log'), new Date().toISOString() + ' kill pid ' + process.pid + '\n'); } catch (e) {} }
+    try { app.exit(0); } catch (x) {}
+    try { process.kill(process.pid, 'SIGKILL'); } catch (x) { process.exit(0); }
+  };
   setTimeout(kill, 4000);
   Promise.all(ends).then(() => setTimeout(kill, 100));
 }

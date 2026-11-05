@@ -28,7 +28,10 @@ jobs:
         run: |
           $env:KLM_SMOKE = "$env:RUNNER_TEMP\smoke"
           $p = Start-Process -FilePath "node_modules\electron\dist\electron.exe" -ArgumentList "." -PassThru
-          if (-not $p.WaitForExit(120000)) { Stop-Process -Id $p.Id -Force; Write-Host "::warning::Aplikasi tidak menutup sendiri (timeout)" } else { Write-Host "Aplikasi menutup normal, kode $($p.ExitCode)" }
+          Write-Host "PID utama: $($p.Id)"
+          $t = 0
+          while ($t -lt 120 -and (Get-Process -Id $p.Id -ErrorAction SilentlyContinue)) { Start-Sleep -Seconds 2; $t += 2 }
+          if (Get-Process -Id $p.Id -ErrorAction SilentlyContinue) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; Write-Host "::warning::Aplikasi tidak menutup sendiri (timeout)" } else { Write-Host "Aplikasi menutup normal setelah $t detik" }
           Get-Content "$env:KLM_SMOKE\smoke.log" -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 3
           $left = Get-Process -Name electron -ErrorAction SilentlyContinue
