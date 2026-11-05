@@ -78,15 +78,10 @@ function createMain() {
       type: 'question', buttons: ['Keluar', 'Batal'], defaultId: 1, cancelId: 1,
       title: 'KLM Mix', message: 'Tutup KLM Mix?', detail: 'Rekaman dan streaming yang berjalan akan dihentikan.'
     });
-    if (choice === 1) e.preventDefault();
+    if (choice === 1) return e.preventDefault();
+    e.preventDefault(); hardQuit('tutup jendela');
   });
-  mainWin.on('closed', () => {
-    mainWin = null;
-    try { utcOsr && utcOsr.stop(); } catch (e) {}
-    for (const w of browsers.values()) { try { w.destroy(); } catch (e) {} }
-    app.quit();
-    setTimeout(() => process.exit(0), 4000).unref(); // pastikan tidak tertinggal di latar belakang
-  });
+  mainWin.on('closed', () => { mainWin = null; hardQuit('closed'); });
 }
 
 function toRenderer(ch, data) { if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send(ch, data); }
@@ -178,18 +173,26 @@ app.whenReady().then(async () => {
   if (process.env.KLM_SMOKE) smokeTest();
 });
 app.on('second-instance', () => { if (mainWin) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.focus(); } });
-app.on('window-all-closed', () => app.quit());
+app.on('window-all-closed', () => hardQuit('window-all-closed'));
 app.on('before-quit', () => { try { server.hub.shutdown(); } catch (e) {} try { utcOsr && utcOsr.stop(); } catch (e) {} });
-// Windows: proses Chromium (GPU/renderer offscreen) kadang tertinggal setelah keluar → aplikasi tidak bisa dibuka lagi
-// (single instance). Tutup file rekaman dulu, lalu hentikan proses sepenuhnya.
-let finalQuit = false;
-app.on('will-quit', (e) => {
-  if (finalQuit) return;
-  e.preventDefault(); finalQuit = true;
-  const ends = [...writers.values()].map((w) => new Promise((r) => { try { w.end(r); } catch (x) { r(); } setTimeout(r, 2000); }));
+app.on('will-quit', (e) => { if (!quitting) { e.preventDefault(); hardQuit('will-quit'); } });
+
+// Keluar total. Di Windows, proses Chromium (GPU / renderer offscreen) bisa tertinggal setelah keluar biasa sehingga
+// KLM Mix tidak bisa dibuka lagi (single instance). Jadi: hentikan renderer UTC, server media & jendela browser,
+// tutup file rekaman yang masih terbuka, lalu akhiri proses sepenuhnya.
+let quitting = false;
+function hardQuit(why) {
+  if (quitting) return; quitting = true;
+  if (process.env.KLM_SMOKE) { try { fs.appendFileSync(path.join(process.env.KLM_SMOKE, 'smoke.log'), new Date().toISOString() + ' hardQuit ' + why + '\n'); } catch (e) {} }
+  try { utcOsr && utcOsr.stop(); } catch (e) {}
+  for (const w of browsers.values()) { try { w.destroy(); } catch (e) {} }
+  try { server.hub.shutdown(); } catch (e) {}
+  const ends = [...writers.values()].map((w) => new Promise((r) => { try { w.end(r); } catch (x) { r(); } setTimeout(r, 2500); }));
   writers.clear();
-  Promise.all(ends).then(() => { try { process.kill(process.pid, 'SIGKILL'); } catch (x) { process.exit(0); } });
-});
+  const kill = () => { try { process.kill(process.pid, 'SIGKILL'); } catch (x) { process.exit(0); } };
+  setTimeout(kill, 4000);
+  Promise.all(ends).then(() => setTimeout(kill, 100));
+}
 
 // ---------------- uji otomatis CI (KLM_SMOKE=folder) ----------------
 // Membuka aplikasi, memastikan panel UTC & lapisan UTC ON AIR benar-benar tampil di Program, lalu menyimpan screenshot.
@@ -234,9 +237,6 @@ function smokeTest() {
     log('keluar…');
     try { fs.writeFileSync(path.join(out, 'result.txt'), fail ? 'FAIL' : 'OK'); } catch (e) {}
     mainWin.removeAllListeners('close');
-    try { utcOsr && utcOsr.stop(); } catch (e) {}
-    try { server.hub.shutdown(); } catch (e) {}
-    try { fs.writeFileSync(path.join(out, 'exit.txt'), String(fail ? 1 : 0)); } catch (e) {}
-    app.quit();
+    hardQuit('smoke');
   })();
 }
