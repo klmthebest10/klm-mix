@@ -18,7 +18,7 @@ window.KMP = (function () {
     wsUrl() { const s = P.server(); return s.host ? (s.secure ? 'wss://' : 'ws://') + s.host + '/ws' : ''; },
     page(name) { // name: hp | cam | remote
       if (servedByPc) return '/' + name;
-      return { hp: 'index.html', cam: 'camera.html', remote: 'remote.html', call: 'call.html' }[name];
+      return { hp: 'index.html', cam: 'camera.html', remote: 'remote.html', call: 'call.html', utc: 'utc.html' }[name];
     },
     deviceName() {
       const ua = navigator.userAgent;

@@ -8,6 +8,7 @@ const fs = require('fs');
 
 process.env.KLM_CONFIG_DIR = path.join(app.getPath('userData'), 'config');
 const server = require('./server');
+const setupUtcOsr = require('./utc-osr');
 
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -56,6 +57,15 @@ function createMain() {
           width: full ? d.bounds.width : 960, height: full ? d.bounds.height : 540,
           frame: !full, fullscreen: full, backgroundColor: '#000000', autoHideMenuBar: true,
           title: 'KLM Mix - Output', webPreferences: { backgroundThrottling: false }
+        }
+      };
+    }
+    if (u.pathname === '/utc' || u.pathname.startsWith('/utc/')) { // panel UTC KLM Acara di jendela sendiri (mis. monitor ke-2)
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: 1440, height: 900, minWidth: 900, minHeight: 600, backgroundColor: '#0b0d12', autoHideMenuBar: true,
+          title: 'UTC KLM Acara • KLM Mix', icon: path.join(__dirname, '..', 'build', 'icon.png'), webPreferences: { backgroundThrottling: false }
         }
       };
     }
@@ -156,8 +166,54 @@ app.whenReady().then(async () => {
     desktopCapturer.getSources({ types: ['screen'] }).then((s) => cb({ video: s[0], audio: 'loopback' })).catch(() => cb({}));
   });
   netInfo = await server.start();
+  setupUtcOsr({ port: () => netInfo.ports.http });
   createMain();
+  if (process.env.KLM_SMOKE) smokeTest();
 });
 app.on('second-instance', () => { if (mainWin) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.focus(); } });
 app.on('window-all-closed', () => app.quit());
 app.on('before-quit', () => { try { server.hub.shutdown(); } catch (e) {} });
+
+// ---------------- uji otomatis CI (KLM_SMOKE=folder) ----------------
+// Membuka aplikasi, memastikan panel UTC & lapisan UTC ON AIR benar-benar tampil di Program, lalu menyimpan screenshot.
+function smokeTest() {
+  const out = process.env.KLM_SMOKE;
+  const log = (m) => { try { fs.appendFileSync(path.join(out, 'smoke.log'), new Date().toISOString() + ' ' + m + '\n'); } catch (e) {} console.log('[SMOKE] ' + m); };
+  try { fs.mkdirSync(out, { recursive: true }); } catch (e) {}
+  const http = require('http');
+  const post = (p, body) => new Promise((res) => {
+    const d = JSON.stringify(body);
+    const r = http.request({ host: '127.0.0.1', port: netInfo.ports.http, path: p, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(d) } }, (rs) => { let b = ''; rs.on('data', (c) => { b += c; }); rs.on('end', () => res(b)); });
+    r.on('error', (e) => res('ERR ' + e.message)); r.end(d);
+  });
+  const js = (code) => mainWin.webContents.executeJavaScript(code, true);
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  (async () => {
+    let fail = 0;
+    try {
+      await wait(6000);
+      log('versi ' + app.getVersion() + ', port ' + JSON.stringify(netInfo.ports));
+      log('cmd lt show: ' + await post('/utc/api/klm/cmd', { cmd: 'show', target: 'lt' }));
+      log('cmd ticker show: ' + await post('/utc/api/klm/cmd', { cmd: 'show', target: 'ticker' }));
+      log('cmd logo show: ' + await post('/utc/api/klm/cmd', { cmd: 'show', target: 'logo' }));
+      await wait(5000);
+      const st = await js('JSON.stringify({ avail: KM.utc.avail, on: KM.utc.onAir(), frames: KM.utc.frames, fps: KM.engine.fps, px: KM.utc.coverage() })');
+      log('status UTC: ' + st);
+      const s = JSON.parse(st);
+      if (!s.avail || !s.frames) { fail++; log('GAGAL: tidak ada frame overlay offscreen'); }
+      if (!(s.px > 0.002)) { fail++; log('GAGAL: lapisan UTC kosong di Program'); }
+      const png = await js('new Promise(r => KM.engine.prog.toBlob(b => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); }, "image/png"))');
+      fs.writeFileSync(path.join(out, 'program.png'), Buffer.from(png.split(',')[1], 'base64'));
+      const shot = await mainWin.webContents.capturePage();
+      fs.writeFileSync(path.join(out, 'window.png'), shot.toPNG());
+      await js('KM.ui.utcPanel(true)'); await wait(4000);
+      const ok = await js('(() => { try { const f = document.querySelector("#utcFrame"); return !!(f && f.contentDocument && f.contentDocument.querySelector("#panel, .tabs, header")); } catch (e) { return "err " + e.message; } })()');
+      log('panel UTC dimuat: ' + ok); if (ok !== true) fail++;
+      fs.writeFileSync(path.join(out, 'panel.png'), (await mainWin.webContents.capturePage()).toPNG());
+    } catch (e) { fail++; log('ERROR ' + (e && e.stack || e)); }
+    log(fail ? 'HASIL: GAGAL (' + fail + ')' : 'HASIL: OK');
+    try { fs.writeFileSync(path.join(out, 'result.txt'), fail ? 'FAIL' : 'OK'); } catch (e) {}
+    mainWin.removeAllListeners('close');
+    app.exit(fail ? 1 : 0);
+  })();
+}

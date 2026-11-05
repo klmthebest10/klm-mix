@@ -1,0 +1,32 @@
+/* Huruf lokal — UTC KLM Acara bisa 100% offline. Semua huruf berlisensi SIL Open Font License (lihat folder lisensi). */
+@font-face{font-family:'Montserrat';src:url('/utc/fonts/montserrat.woff') format('woff');font-weight:100 900;font-style:normal;font-display:block}
+@font-face{font-family:'Montserrat';src:url('/utc/fonts/montserrat-italic.woff') format('woff');font-weight:100 900;font-style:italic;font-display:block}
+@font-face{font-family:'Oswald';src:url('/utc/fonts/oswald.woff') format('woff');font-weight:200 700;font-style:normal;font-display:block}
+@font-face{font-family:'Bebas Neue';src:url('/utc/fonts/bebasneue.woff') format('woff');font-weight:400;font-style:normal;font-display:block}
+@font-face{font-family:'Playfair Display';src:url('/utc/fonts/playfair.woff') format('woff');font-weight:400 900;font-style:normal;font-display:block}
+@font-face{font-family:'Playfair Display';src:url('/utc/fonts/playfair-italic.woff') format('woff');font-weight:400 900;font-style:italic;font-display:block}
+@font-face{font-family:'Cinzel';src:url('/utc/fonts/cinzel.woff') format('woff');font-weight:400 900;font-style:normal;font-display:block}
+@font-face{font-family:'Lora';src:url('/utc/fonts/lora.woff') format('woff');font-weight:400 700;font-style:normal;font-display:block}
+@font-face{font-family:'Lora';src:url('/utc/fonts/lora-italic.woff') format('woff');font-weight:400 700;font-style:italic;font-display:block}
+@font-face{font-family:'Great Vibes';src:url('/utc/fonts/greatvibes.woff') format('woff');font-weight:400;font-style:normal;font-display:block}
+@font-face{font-family:'Cairo';src:url('/utc/fonts/cairo.woff') format('woff');font-weight:200 1000;font-style:normal;font-display:block}
+@font-face{font-family:'Amiri';src:url('/utc/fonts/amiri.woff') format('woff');font-weight:400;font-style:normal;font-display:block}
+@font-face{font-family:'Amiri';src:url('/utc/fonts/amiri-bold.woff') format('woff');font-weight:700;font-style:normal;font-display:block}
+@font-face{font-family:'Amiri';src:url('/utc/fonts/amiri-italic.woff') format('woff');font-weight:400;font-style:italic;font-display:block}
+@font-face{font-family:'Amiri';src:url('/utc/fonts/amiri-bolditalic.woff') format('woff');font-weight:700;font-style:italic;font-display:block}
+@font-face{font-family:'Reem Kufi';src:url('/utc/fonts/reemkufi.woff') format('woff');font-weight:400 700;font-style:normal;font-display:block}
+@font-face{font-family:'Plus Jakarta Sans';src:url('/utc/fonts/plusjakarta.woff') format('woff');font-weight:200 800;font-style:normal;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-300.woff') format('woff');font-weight:300;font-style:normal;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-300i.woff') format('woff');font-weight:300;font-style:italic;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-400.woff') format('woff');font-weight:400;font-style:normal;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-400i.woff') format('woff');font-weight:400;font-style:italic;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-500.woff') format('woff');font-weight:500;font-style:normal;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-500i.woff') format('woff');font-weight:500;font-style:italic;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-600.woff') format('woff');font-weight:600;font-style:normal;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-600i.woff') format('woff');font-weight:600;font-style:italic;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-700.woff') format('woff');font-weight:700;font-style:normal;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-700i.woff') format('woff');font-weight:700;font-style:italic;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-800.woff') format('woff');font-weight:800;font-style:normal;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-800i.woff') format('woff');font-weight:800;font-style:italic;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-900.woff') format('woff');font-weight:900;font-style:normal;font-display:block}
+@font-face{font-family:'Poppins';src:url('/utc/fonts/poppins-900i.woff') format('woff');font-weight:900;font-style:italic;font-display:block}

@@ -1,0 +1,1612 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>UTC KLM Acara — Panel Kontrol</title>
+<link rel="manifest" href="/utc/manifest.webmanifest">
+<meta name="theme-color" content="#0c0f15">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="KLM Acara">
+<link rel="apple-touch-icon" href="/utc/icons/apple-180.png">
+<link rel="icon" type="image/png" href="/utc/icons/favicon-64.png">
+<link href="/utc/fonts/fonts.css" rel="stylesheet">
+<style>
+:root{--bg:#0c0f15;--bg2:#121722;--card:#171d2a;--card2:#1d2434;--line:#273047;--tx:#e8ecf4;--mut:#8b95ab;--gold:#f2c45a;--red:#ff3b4f;--grn:#22c55e;--blu:#3b82f6;--r:12px}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 'Plus Jakarta Sans',system-ui,'Segoe UI',sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--card2);border-radius:10px;padding:8px 14px;font-weight:600;transition:.15s}
+button:hover{border-color:#3d4a68;background:#232c40}
+input,select,textarea{background:#0f1420;border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(242,196,90,.15)}
+input[type=color]{padding:2px;height:38px;cursor:pointer}
+input[type=checkbox]{width:18px;height:18px;accent-color:var(--gold)}
+input[type=range]{padding:0;accent-color:var(--gold);border:none;background:none}
+header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:10px 16px;background:rgba(12,15,21,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.5px;white-space:nowrap}
+.brand i{width:34px;height:34px;border-radius:10px;background:conic-gradient(from 210deg,#f2c45a,#ff8a3d,#c2408f,#3b82f6,#22c55e,#f2c45a);box-shadow:0 0 18px rgba(242,196,90,.45);display:grid;place-items:center;font-style:normal;color:#111;font-size:12px}
+.brand small{display:block;font-weight:600;color:var(--mut);font-size:11px;letter-spacing:2px}
+.evsel{max-width:300px;font-weight:700;background:#141b2a;border-color:#3a4766}
+.hsp{flex:1}
+.conn{font-size:12px;color:var(--mut);display:flex;align-items:center;gap:6px}
+.conn b{width:9px;height:9px;border-radius:50%;background:var(--red);display:inline-block}
+.conn.ok b{background:var(--grn);box-shadow:0 0 8px var(--grn)}
+.btn-red{background:#3a121a;border-color:#6b1f2c;color:#ffb3bd}
+.btn-red:hover{background:#561a26}
+main{display:grid;grid-template-columns:minmax(420px,44%) 1fr;gap:16px;padding:16px;align-items:start}
+.mon{position:sticky;top:72px;display:flex;flex-direction:column;gap:12px}
+.scr{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.scr-h{display:flex;align-items:center;justify-content:space-between;padding:7px 12px;font-size:12px;font-weight:800;letter-spacing:2px}
+.scr-h.pvw{background:#123321;color:#7ef0a8}.scr-h.pgm{background:#3a0f16;color:#ff95a3}
+.scr-h span{font-weight:600;letter-spacing:0;color:var(--mut);flex:1;text-align:right}
+.scr-h{gap:8px}
+.scr-h select.srcsel{width:auto;max-width:190px;padding:3px 6px;font-size:11px;background:rgba(0,0,0,.35);border-color:rgba(255,255,255,.18);letter-spacing:0;font-weight:600;color:#fff}
+.frame .feed{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:none;background:#000;z-index:0}
+.frame .feed.on{display:block}
+.frame iframe{z-index:1}
+.tagname{pointer-events:none;position:absolute;left:8px;top:8px;z-index:2;background:rgba(0,0,0,.65);padding:3px 9px;border-radius:7px;font-size:11.5px;font-weight:700;max-width:70%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tagname:empty{display:none}
+#scrPvw .tagname{border-left:3px solid #2fc272}#scrPgm .tagname{border-left:3px solid var(--red)}
+.swbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
+.swbar select{width:auto;flex:1;min-width:120px}
+.bigcut{background:#2a2f3d;font-weight:800;padding:11px 18px;letter-spacing:1px}
+.bigtake{background:linear-gradient(180deg,#c21d34,#8a0f22);border-color:#ff5a6e;color:#fff;font-weight:800;padding:11px 18px;letter-spacing:1px}
+.bigtake:hover{background:linear-gradient(180deg,#d8253e,#9b1327)}
+.istrip{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.istrip:empty{display:none}
+.istrip button{flex:none;min-width:86px;max-width:160px;padding:7px 10px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-width:2px;text-align:left}
+.istrip button .n{display:block;font-size:10px;color:var(--mut);font-weight:600}
+button.is-pgm,.inc.is-pgm{border-color:var(--red)!important;background:#3a0f16}
+button.is-pvw,.inc.is-pvw{border-color:#2fc272!important;background:#123321}
+.ingrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:10px}
+.inc{background:var(--card2);border:2px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer}
+.inc .th{position:relative;aspect-ratio:16/9;background:#05070b}
+.inc .th img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .3s}
+.inc .lb{position:absolute;right:6px;top:6px;font-size:10px;font-weight:800;letter-spacing:1px;padding:2px 6px;border-radius:5px}
+.inc.is-pgm .lb{background:var(--red)}.inc.is-pvw .lb{background:#1f9d57}
+.inc .nm2{padding:6px 8px;font-weight:700;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inc .bt{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:0 6px 6px}.inc .bt button{padding:6px 4px;font-size:11px}
+.durs{display:flex;gap:4px;flex-wrap:wrap}.durs button{padding:5px 9px;font-size:11.5px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;background:var(--red);flex:none}.dot.ok{background:var(--grn);box-shadow:0 0 8px var(--grn)}
+.installbtn{background:var(--gold);color:#1b1405;border-color:var(--gold);font-weight:800}
+.installbtn:hover{background:#ffd47a;color:#1b1405}
+.qrs{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+.qrs .q{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px}
+.qrs .qr{background:#fff;padding:8px;border-radius:10px;width:166px;height:166px}
+ol.steps{margin:6px 0 0;padding-left:20px;line-height:1.6}
+.frame{position:relative;width:100%;aspect-ratio:16/9;background:#000}
+.frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.air{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.ocair{display:grid;grid-template-columns:1fr 1fr auto;gap:8px}
+.ocair button,.ocbig button{padding:11px 10px;font-weight:800;letter-spacing:1px;font-size:12.5px}
+.ocair button.on,.ocbig button.on{background:linear-gradient(180deg,#7a3cff,#4b1fb3);border-color:#a98bff;color:#fff;box-shadow:0 0 18px rgba(140,90,255,.45)}
+.ocair .ocoff,.ocbig .ocoff{background:#2a2f3d}
+.ocbig{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}.ocbig button{padding:16px 10px;font-size:14px}
+.vidbox{display:grid;grid-template-columns:220px 1fr;gap:12px;align-items:center}
+.vidbox video{width:100%;border-radius:10px;background:#000;aspect-ratio:16/9}
+.up-prog{position:relative;height:30px;border-radius:8px;background:#0f1420;border:1px solid var(--line);overflow:hidden;align-items:center;justify-content:center;margin-top:8px;font-size:12px;font-weight:700}
+.up-prog i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#1f9d57,#2fc272);transition:width .2s}
+.up-prog span{position:relative}
+.air button{padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;letter-spacing:1px}
+.air button b{font-size:15px;letter-spacing:.5px}
+.air button.on{background:linear-gradient(180deg,#c21d34,#8a0f22);border-color:#ff5a6e;color:#fff;box-shadow:0 0 18px rgba(255,59,79,.35)}
+.hint{font-size:11.5px;color:var(--mut)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tabs button{border-radius:999px;padding:8px 16px;background:transparent}
+.tabs button.act{background:var(--gold);color:#1b1405;border-color:var(--gold)}
+.panel{display:flex;flex-direction:column;gap:14px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+.box h3{margin:0 0 10px;font-size:15px;display:flex;align-items:center;gap:8px}
+.box h4{margin:14px 0 8px;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mut)}
+.box h4:first-child{margin-top:0}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.mini{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mut)}
+.mini select{width:auto;padding:6px 8px}
+.list{display:flex;flex-direction:column;gap:10px}
+.item{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:10px;display:grid;grid-template-columns:1fr auto;gap:8px 10px;transition:.15s}
+.item.sel{border-color:#3fbf78;box-shadow:inset 0 0 0 1px #3fbf78}
+.item.onair{border-color:var(--red);box-shadow:0 0 0 1px var(--red),0 0 22px rgba(255,59,79,.2)}
+.ih{grid-column:1/-1;display:flex;align-items:center;gap:6px}
+.ih .num{min-width:26px;height:26px;border-radius:8px;background:#0f1420;display:grid;place-items:center;font-weight:800;font-size:12px;color:var(--gold)}
+.ih .lbl{font-weight:700;background:transparent;border-color:transparent;padding:5px 6px}
+.ih .lbl:hover{border-color:var(--line)}
+.ih .tag{display:none;font-size:10px;font-weight:800;letter-spacing:1.5px;background:var(--red);color:#fff;padding:3px 7px;border-radius:6px;white-space:nowrap;animation:blink 1.2s infinite}
+.item.onair .tag{display:inline-block}
+@keyframes blink{50%{opacity:.45}}
+.ic{padding:5px 9px;font-size:13px;background:transparent;border-color:transparent;color:var(--mut)}
+.ic:hover{color:#fff;border-color:var(--line)}
+.ig{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ig .full{grid-column:1/-1}
+.take{align-self:stretch;min-width:120px;background:linear-gradient(180deg,#1f9d57,#147a42);border-color:#2fc272;color:#fff;font-weight:800;letter-spacing:.5px}
+.take:hover{background:linear-gradient(180deg,#25b464,#178a4b)}
+.item.onair .take{background:linear-gradient(180deg,#c21d34,#8a0f22);border-color:#ff5a6e}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{padding:7px 12px;border-radius:999px;font-size:12.5px;font-weight:600;background:#121826}
+.chip.act{background:rgba(242,196,90,.16);border-color:var(--gold);color:var(--gold)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.fld{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--mut)}
+.rg span{display:flex;justify-content:space-between}
+.rg b{color:var(--tx)}
+.ck{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:#121826;padding:7px 12px;font-size:12.5px}
+.seg button.act{background:var(--gold);color:#1b1405}
+.pals{display:flex;gap:8px;flex-wrap:wrap}
+.pal{display:flex;align-items:center;gap:8px;padding:6px 10px 6px 6px}
+.pal i{display:flex;width:54px;height:22px;border-radius:6px;overflow:hidden}
+.pal i u{flex:1}
+.logos{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.lg{background:#0f1420 repeating-conic-gradient(#151a26 0 25%,#0f1420 0 50%) 0 0/18px 18px;border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.lg img{width:100%;height:80px;object-fit:contain}
+.lg .bar{justify-content:space-between}
+.lg.def{border-color:var(--gold)}
+.drop{border:2px dashed #3a4766;border-radius:12px;padding:18px;text-align:center;color:var(--mut);cursor:pointer}
+.drop:hover{border-color:var(--gold);color:var(--gold)}
+.pre{display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.pre .nm{flex:1;font-weight:700}
+.pre .ev{font-size:11px;color:var(--mut)}
+.url{display:flex;gap:6px;align-items:center}
+.url code{flex:1;background:#0f1420;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;overflow:auto;white-space:nowrap}
+.tk-it{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px}
+.tk-it textarea{min-height:40px;resize:vertical}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(30px);background:#1f2a3f;border:1px solid #3a4a6c;padding:10px 18px;border-radius:12px;opacity:0;transition:.25s;z-index:99;font-weight:600;pointer-events:none;max-width:90vw;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.mswitch{display:none}
+textarea{min-height:60px}
+.ipos{border-top:1px dashed var(--line);padding-top:8px}
+.ipos-h{font-size:12px;font-weight:700;color:#7ef0a8;margin-bottom:6px}
+.ipos .grid3{margin-top:8px}
+.bthumb{width:30px;height:30px;object-fit:contain;border-radius:7px;background:#0f1420;flex:none}
+.fw{display:flex;flex-direction:column;gap:3px;min-width:0}
+.fw.full{grid-column:1/-1}
+.fmt{display:flex;align-items:center;gap:3px;flex-wrap:wrap}
+.fmt button{padding:2px 8px;min-width:26px;height:24px;font-size:12px;line-height:1;border-radius:6px;background:#121826;color:var(--mut);font-weight:600}
+.fmt button.on{background:rgba(242,196,90,.18);border-color:var(--gold);color:var(--gold)}
+.fmt select{width:auto;height:24px;padding:0 4px;font-size:11.5px;border-radius:6px;background:#121826;color:var(--mut)}
+.fmt .sp{width:1px;height:16px;background:var(--line);margin:0 3px}
+.tk-it .fw textarea{min-height:40px}
+.mvhint{font-size:11.5px;color:#7ef0a8;margin:-4px 0 8px}
+canvas.feed{background:#000}
+/* ================= RESPONSIF ================= */
+:root{--hh:60px}
+.mons{display:flex;flex-direction:column;gap:12px}
+.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:2px 0 2px}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button{flex:none;white-space:nowrap}
+header{padding-top:max(10px,env(safe-area-inset-top));padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+main{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));padding-bottom:max(16px,env(safe-area-inset-bottom))}
+.panel,.mon{min-width:0}
+.mon>*{flex-shrink:0}
+@media (min-width:1024px) and (max-height:900px){
+  main{grid-template-columns:minmax(420px,52%) 1fr}
+  .mons{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .mon .scr{max-width:none!important}
+  .scr-h span{display:none}
+  .scr-h{letter-spacing:1px;padding:6px 8px}
+  .scr-h select.srcsel{margin-left:auto;max-width:150px}
+}
+@media (min-width:1024px){ .mon .scr{width:100%;max-width:max(220px,calc((100vh - var(--hh) - 440px) / 2 * 16 / 9));margin:0 auto} .mon{top:calc(var(--hh) + 12px);max-height:calc(100vh - var(--hh) - 24px);overflow-y:auto;scrollbar-width:thin;padding-right:2px} }
+main>section{min-width:0}
+.item .ih{min-width:0}.ih .lbl{min-width:0;flex:1}
+img,video,iframe{max-width:100%}
+
+/* PC besar */
+@media (min-width:1600px){
+  main{grid-template-columns:minmax(560px,40%) 1fr;gap:22px;padding:22px}
+  .list{display:grid;grid-template-columns:repeat(auto-fill,minmax(520px,1fr));gap:12px}
+}
+/* Laptop kecil 1024–1279 */
+@media (max-width:1279px){
+  main{grid-template-columns:minmax(340px,42%) 1fr;gap:14px;padding:12px}
+  .brand small{display:none}
+  .conn span{display:none}
+  header{flex-wrap:nowrap}
+  .evsel{min-width:0;flex:1;max-width:340px}
+  .scr-h span{display:none}
+  .scr-h select.srcsel{margin-left:auto}
+  .item{grid-template-columns:1fr}
+  .take{padding:11px}
+}
+/* Tablet portrait & di bawahnya: satu kolom */
+@media (max-width:1023px){
+  main{grid-template-columns:1fr}
+  .mon{position:static}
+  .mons{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .mon .scr.hid{display:block}
+  .air button b{font-size:14px}
+  section:last-child>.tabs{position:sticky;top:var(--hh);z-index:15;background:var(--bg);margin:0 -12px 12px;padding:8px 12px;border-bottom:1px solid var(--line)}
+  .grid3{grid-template-columns:1fr 1fr}
+}
+/* HP */
+@media (max-width:699px){
+  html,body{font-size:15px}
+  input,select,textarea{font-size:16px}          /* cegah zoom otomatis iOS */
+  header{gap:8px;padding-top:max(8px,env(safe-area-inset-top));padding-bottom:8px}
+  .brand>div{display:none}
+  .brand i{width:32px;height:32px}
+  .evsel{max-width:none;padding:7px 8px}
+  .btn-red.hdr .lbl{display:none}
+  .btn-red.hdr{padding:8px 11px}
+  main{padding:8px;gap:12px}
+  .mons{display:flex}
+  .mswitch{display:flex}.mswitch button{flex:1}
+  .mon .scr.hid{display:none}
+  .scr-h{padding:6px 10px;letter-spacing:1px}
+  .scr-h select.srcsel{max-width:150px}
+  .swbar{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:8px}
+  .swbar select{width:100%;min-width:0}
+  .swbar .mini input{width:74px!important}
+  .swbar .bigcut{grid-column:1/3}
+  .swbar .bigtake{grid-column:3/4}
+  .swbar .hint{grid-column:2/3}
+  .swbar>button[data-tab]{grid-column:3}
+  .bigcut,.bigtake{padding:12px 14px}
+  .air{gap:6px;grid-template-columns:repeat(3,1fr)}
+  .vidbox{grid-template-columns:1fr}
+  .ocbig button{padding:14px 4px;font-size:12.5px}
+  .air button{padding:10px 2px;font-size:10px;letter-spacing:.5px}
+  .air button b{font-size:12px;line-height:1.15;text-align:center}
+  .mon>.hint{display:none}
+  .box{padding:12px;border-radius:12px}
+  .ig,.grid2,.grid3{grid-template-columns:1fr}
+  .item{padding:9px}
+  .ih{flex-wrap:wrap}
+  .ih .lbl{order:1;flex-basis:calc(100% - 40px)}
+  .ih .num{order:0}
+  .ih .tag{order:2}
+  .ih .ic{order:3;padding:6px 10px}
+  .take{padding:13px}
+  .bar>button,.bar>.btn-red{flex:1 1 auto}
+  .chip{padding:8px 12px}
+  .seg{display:flex;flex-wrap:wrap}.seg button{flex:1}
+  .fmt button{height:28px;min-width:32px}
+  .fmt select{height:28px;font-size:13px}
+  .ingrid{grid-template-columns:1fr 1fr;gap:8px}
+  .logos{grid-template-columns:1fr 1fr}
+  .pre{flex-wrap:wrap}.pre .nm{flex-basis:100%}
+  .url{flex-wrap:wrap}.url code{flex-basis:100%}
+  .durs button{flex:1 1 22%}
+  .toast{bottom:max(18px,env(safe-area-inset-bottom))}
+}
+/* HP sangat kecil */
+@media (max-width:374px){
+  .air{grid-template-columns:1fr 1fr}
+  .ingrid{grid-template-columns:1fr}
+}
+/* HP / tablet landscape (layar pendek): dua kolom, monitor di kiri */
+@media (orientation:landscape) and (max-height:560px){
+  main{grid-template-columns:minmax(300px,44%) 1fr;gap:10px;padding:8px}
+  .mon{position:sticky;top:var(--hh);max-height:calc(100vh - var(--hh) - 12px);overflow-y:auto;scrollbar-width:thin}
+  .mons{display:flex}
+  .mswitch{display:flex}.mswitch button{flex:1}
+  .mon .scr.hid{display:none}
+  .mon>.hint{display:none}
+  .brand>div{display:none}
+  .btn-red.hdr .lbl{display:none}
+  header{padding-top:6px;padding-bottom:6px}
+  .grid3,.ig{grid-template-columns:1fr 1fr}
+  section:last-child>.tabs{position:sticky;top:var(--hh);z-index:15;background:var(--bg);margin:0 0 10px;padding:6px 0}
+  .air button{padding:8px 2px;font-size:10px}
+  .air button b{font-size:12px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><i>KLM</i><div>UTC KLM ACARA<small>KLM MIX • LOWER THIRD • TITLE • RUNNING TEXT</small></div></div>
+  <select class="evsel" id="evsel" title="Jenis acara"></select>
+  <div class="hsp"></div>
+  <div class="conn" id="conn"><b></b><span>Menghubungkan…</span></div>
+  <button class="btn-red hdr" data-act="hideAll" title="Sembunyikan semua grafis (Esc)">⏻ <span class="lbl">Sembunyikan Semua</span></button>
+</header>
+
+<main>
+  <section class="mon">
+    <div class="seg mswitch" id="mswitch"><button class="act" data-mon="pvw">Preview</button><button data-mon="pgm">Program (Live)</button></div>
+    <div class="mons">
+    <div class="scr" id="scrPvw">
+      <div class="scr-h pvw">PREVIEW <span id="pvwInfo">pratinjau gaya — belum tayang</span><select class="srcsel" data-mon-src="pvw" title="Sumber gambar monitor"></select></div>
+      <div class="frame"><canvas class="feed" id="feedPvw"></canvas><video class="feed" id="vidPvw" autoplay muted playsinline></video><iframe id="pvw" src="/utc/overlay?mode=pvw"></iframe><div class="tagname" id="pvwName"></div></div>
+    </div>
+    <div class="scr hid" id="scrPgm">
+      <div class="scr-h pgm">PROGRAM • LIVE <span id="pgmInfo">yang sedang tayang</span><select class="srcsel" data-mon-src="pgm" title="Sumber gambar monitor"></select></div>
+      <div class="frame"><canvas class="feed" id="feedPgm"></canvas><video class="feed" id="vidPgm" autoplay muted playsinline></video><iframe id="pgm" src="/utc/overlay?bg=1"></iframe><div class="tagname" id="pgmName"></div></div>
+    </div>
+    </div>
+    <div class="swbar" id="swbar"></div>
+    <div class="istrip" id="istrip"></div>
+    <div class="air" id="air"></div>
+    <div class="ocair" id="ocair"></div>
+    <div class="hint">Pintasan keyboard: <b>Spasi</b> TAKE • <b>C</b> CUT • <b>1–9</b> tampilkan LT ke-n • <b>← →</b> LT sebelumnya/berikutnya • <b>H</b> sembunyikan LT • <b>T</b> title • <b>R</b> running text • <b>L</b> logo • <b>G</b> lokasi • <b>S</b> sosmed • <b>O</b> opening • <b>Esc</b> sembunyikan semua</div>
+  </section>
+
+  <section>
+    <nav class="tabs" id="tabs"></nav>
+    <div class="panel" id="panel"></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+<input type="file" id="fileLogo" accept="image/*" multiple hidden>
+<input type="file" id="fileImport" accept=".json,application/json" hidden>
+<input type="file" id="fileVideo" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v" hidden>
+
+<script src="/utc/common.js"></script>
+<script>
+(function(){
+const K = window.KLM, esc = K.esc;
+const CID = 'c' + K.uid();
+const klmHost = () => { for (const w of [window.parent !== window ? window.parent : null, window.opener]) { try { if (w && w.KM && w.KM.engine) return w.KM; } catch(e) {} } return null; };
+const $ = s => document.querySelector(s);
+let S = null, INFO = { port: location.port, ips: [] };
+const ui = { tab: 'lt', sel: { lt: '', tt: '', loc: '', soc: '' }, ocKind: 'opening', n: 0, pending: false, bulk: false, presets: [] };
+const TABS = [['lt','Lower Third'],['tt','Title'],['tk','Running Text'],['loc','Lokasi'],['soc','Sosial Media'],['oc','Opening/Closing'],['logo','Logo'],['theme','Tema & Warna'],['preset','Preset'],['sw','Switcher & Transisi'],['out','Output & Install']];
+
+// ---------- tinggi header (untuk elemen sticky) ----------
+(function(){ const h = document.querySelector('header'); const set = () => document.documentElement.style.setProperty('--hh', h.offsetHeight + 'px');
+  set(); if (window.ResizeObserver) new ResizeObserver(set).observe(h); addEventListener('resize', set); })();
+// ---------- util ----------
+function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),2400); }
+function ensure(type){ if(!S.events[type]) S.events[type] = K.makeEventConfig(type); K.upgradeEvent(type, S.events[type]); return S.events[type]; }
+const cfg = () => ensure(S.eventType);
+function getP(o,p){ return p.split('.').reduce((a,k)=>a==null?a:a[k],o); }
+function setP(o,p,v){ const ks=p.split('.'); const last=ks.pop(); const t=ks.reduce((a,k)=>a[k],o); t[last]=v; }
+const clone = o => JSON.parse(JSON.stringify(o));
+
+let postT;
+function commit(rerender){
+  sendPvw();
+  clearTimeout(postT);
+  postT = setTimeout(()=>{
+    fetch('/utc/api/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:S,from:CID})})
+      .catch(()=>toast('Gagal menyimpan — server mati?'));
+  }, 90);
+  if (rerender) renderAll();
+}
+
+// ---------- preview ----------
+function pvwForce(){
+  const ev = cfg(), f = { n: ui.n };
+  const ltId = ui.sel.lt || ev.lt.activeId || (ev.lt.items[0]||{}).id;
+  const ttId = ui.sel.tt || ev.tt.activeId || (ev.tt.items[0]||{}).id;
+  if (ui.tab==='lt') f.lt = ltId;
+  else if (ui.tab==='tt') f.tt = ttId;
+  else if (ui.tab==='tk') f.tk = true;
+  else if (ui.tab==='logo'){ f.bug = true; f.bugSel = ui.sel.bug; }
+  else if (ui.tab==='loc') f.loc = ui.sel.loc || ev.loc.activeId || (ev.loc.items[0]||{}).id;
+  else if (ui.tab==='soc'){ f.soc = ui.sel.soc || ev.soc.activeId || (ev.soc.items[0]||{}).id; f.tk = !!ev.tk.visible; }
+  else if (ui.tab==='oc') f.oc = ui.ocKind;
+  else { f.lt = ltId; f.tk = true; f.bug = true; }
+  return f;
+}
+function sendPvw(){ try{ $('#pvw').contentWindow.postMessage({klm:1,state:S,force:ui.tab==='sw'?null:pvwForce()},'*'); }catch(e){} }
+addEventListener('message', e=>{ if(e.data && e.data.klmPvwReady && S) sendPvw(); });
+// ---- geser manual dari Preview → ubah pengaturan posisi yang sama dengan slider ----
+let dragSnap = null;
+function syncSliders(){
+  document.querySelectorAll('#panel input[type=range][data-k]').forEach(el=>{
+    const v = getP(cfg(), el.dataset.k); if (v == null) return;
+    el.value = v; const b = el.parentElement.querySelector('b'); if (b) b.textContent = v + (el.dataset.unit||'');
+  });
+  document.querySelectorAll('#panel input[type=range][data-ip]').forEach(el=>{
+    const t = ipTarget(el.dataset.ip, el.dataset.id); if (!t || t[el.dataset.pk] == null) return;
+    el.value = t[el.dataset.pk]; const b = el.parentElement.querySelector('b'); if (b) b.textContent = t[el.dataset.pk] + (el.dataset.unit||'');
+  });
+}
+addEventListener('message', e=>{
+  const d = e.data && e.data.klmDrag; if (!d || !S) return;
+  let c, kind = d.l;
+  if (d.l.indexOf('lt:')===0){ c = ipTarget('lt', d.l.slice(3)); kind = 'lt'; }
+  else if (d.l.indexOf('bug:')===0){ c = ipTarget('bug', d.l.slice(4)); kind = 'bug'; }
+  else c = cfg()[d.l];
+  if (!c) return;
+  if (d.phase==='start' || !dragSnap || dragSnap.l !== d.l) dragSnap = { l:d.l, side:+c.side||0, bottom:+c.bottom||0, x:+c.x||0, y:+c.y||0 };
+  const o = dragSnap, cl = (v,a,b) => Math.round(Math.max(a, Math.min(b, v))), dx = d.tx, dy = d.ty;
+  if (kind==='lt'){
+    if (c.pos==='left') c.side = cl(o.side + dx, -300, 1800);
+    else if (c.pos==='right') c.side = cl(o.side - dx, -300, 1800);
+    else c.x = cl(o.x + dx, -900, 900);
+    c.bottom = cl(o.bottom - dy, -200, 1100);
+  } else if (kind==='tt'){ c.x = cl(o.x + dx, -960, 960); c.y = cl(o.y + dy, -600, 600); }
+  else if (kind==='tk'){ c.x = cl(o.x + dx, -900, 900); c.y = cl(o.y + (c.pos==='top' ? dy : -dy), -100, 1050); }
+  else if (kind==='loc'){ const p = c.pos||'tr'; c.x = cl(o.x + (p[1]==='r' ? -dx : dx), p[1]==='c' ? -960 : -100, 1800); c.y = cl(o.y + (p[0]==='t' ? dy : -dy), -100, 1000); }
+  else if (kind==='soc'){ const p = c.pos||'br'; c.x = cl(o.x + (p[1]==='r' ? -dx : dx), p[1]==='c' ? -960 : -100, 1800); c.y = cl(o.y + (p[0]==='t' ? dy : -dy), -100, 1000); }
+  else if (kind==='bug'){ const cr = c.corner||'tr'; c.x = cl(o.x + (cr[1]==='l' ? dx : -dx), -100, 1800); c.y = cl(o.y + (cr[0]==='t' ? dy : -dy), -100, 1000); }
+  commit(false); syncSliders();
+  if (d.phase==='end') dragSnap = null;
+});
+
+// ---------- render ----------
+function renderAll(){
+  if (!S) return;
+  const sel = $('#evsel');
+  sel.innerHTML = K.EVENTS.map(e=>`<option value="${e.id}" ${e.id===S.eventType?'selected':''}>${esc(e.n)}</option>`).join('');
+  $('#tabs').innerHTML = TABS.map(t=>`<button class="${ui.tab===t[0]?'act':''}" data-tab="${t[0]}">${t[1]}</button>`).join('');
+  renderAir();
+  const P = { lt:pLT, tt:pTT, tk:pTK, loc:pLoc, soc:pSoc, oc:pOC, logo:pLogo, theme:pTheme, preset:pPreset, sw:pSW, out:pOut }[ui.tab];
+  $('#panel').innerHTML = P();
+  if (ui.tab==='sw') refreshThumbs();
+  if (ui.tab==='out') drawQR();
+  const info = { lt:'Lower third terpilih', tt:'Title terpilih', tk:'Running text', loc:'Title lokasi terpilih', soc:'Sosial media terpilih', oc:(ui.ocKind==='opening'?'Opening':'Closing'), logo:'Logo pojok', sw:'grafis yang sedang tayang' }[ui.tab] || 'Semua elemen';
+  $('#pvwInfo').textContent = ui.tab==='sw' ? info : info + ' — belum tayang';
+  renderSw(true);
+  sendPvw();
+}
+function renderAir(){
+  const ev = cfg();
+  const B = (k,label,on,sub) => `<button class="${on?'on':''}" data-act="toggle" data-l="${k}"><b>${label}</b>${on?'● TAYANG':(sub||'OFF')}</button>`;
+  const ltA = ev.lt.items.find(x=>x.id===ev.lt.activeId);
+  $('#air').innerHTML = B('lt','LOWER THIRD', ev.lt.visible && (ev.lt.multi ? ev.lt.items.some(x=>x.on) : ltA)) + B('tt','TITLE', ev.tt.visible && ev.tt.items.some(x=>x.id===ev.tt.activeId)) + B('tk','RUNNING', ev.tk.visible) + B('bug','LOGO', ev.bug.visible && (ev.bug.items||[]).some(x=>x.on!==false)) + B('loc','LOKASI', ev.loc.visible && ev.loc.items.some(x=>x.id===ev.loc.activeId)) + B('soc','SOSMED', ev.soc.visible && (ev.soc.mode!=='single' ? ev.soc.items.some(x=>x.on!==false) : ev.soc.items.some(x=>x.id===ev.soc.activeId)));
+  const oc = ev.oc;
+  $('#ocair').innerHTML = `<button class="${oc.active==='opening'?'on':''}" data-act="ocGo" data-v="opening" title="Pintasan: O">${oc.active==='opening'?(oc.done?'● OPENING SELESAI':'● OPENING TAYANG'):'▶ OPENING'}</button><button class="${oc.active==='closing'?'on':''}" data-act="ocGo" data-v="closing">${oc.active==='closing'?(oc.done?'● LAYAR HITAM':'● CLOSING TAYANG'):'▶ CLOSING'}</button><button class="ocoff" data-act="ocOff">■ OFF</button>`;
+}
+
+const opt = (list,cur) => list.map(o=>`<option value="${o.id}" ${o.id===cur?'selected':''}>${esc(o.n)}</option>`).join('');
+const chips = (k,list,cur) => `<div class="chips">${list.map(o=>`<button class="chip ${o.id===cur?'act':''}" data-set="${k}" data-v="${o.id}">${esc(o.n)}</button>`).join('')}</div>`;
+const seg = (k,list,cur,num) => `<div class="seg">${list.map(o=>`<button class="${String(o[0])===String(cur)?'act':''}" data-set="${k}" data-v="${o[0]}" ${num?'data-num':''}>${o[1]}</button>`).join('')}</div>`;
+const rng = (k,label,min,max,step,val,unit='') => `<label class="fld rg"><span>${label} <b>${val}${unit}</b></span><input type="range" data-k="${k}" data-num data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${val}"></label>`;
+const ck = (k,label,val) => `<label class="ck"><input type="checkbox" data-k="${k}" ${val?'checked':''}> ${label}</label>`;
+const logoOpts = (cur, withNone) => `${withNone?'':''}<option value="">— Logo utama (default) —</option>` + (S.logos||[]).map(l=>`<option value="${l.id}" ${l.id===cur?'selected':''}>${esc(l.name)}</option>`).join('');
+
+// ---- baris format tulisan (B / I / U / ukuran) ----
+const FDEF = { name:{ b:true }, title:{ b:true }, place:{ b:true }, handle:{ b:true } };
+const FSIZES = [50,60,70,80,90,100,110,120,130,140,150,175,200];
+function fmtRow(L, it, f){
+  const m = (it.fmt && it.fmt[f]) || {}, d = FDEF[f] || {};
+  const b = m.b != null ? m.b : !!d.b, sz = Number(m.s) || 100;
+  const changed = m.b != null || m.i || m.u || (m.s && Number(m.s) !== 100);
+  return `<div class="fmt" data-fl="${L}" data-id="${it.id}" data-ff="${f}">
+    <button class="${b?'on':''}" data-fmt="b" title="Tebal"><b>B</b></button><button class="${m.i?'on':''}" data-fmt="i" title="Miring"><i>I</i></button><button class="${m.u?'on':''}" data-fmt="u" title="Garis bawah"><u>U</u></button><span class="sp"></span><button data-fmt="s-" title="Perkecil tulisan">A−</button><select data-fmt="s" title="Ukuran tulisan">${FSIZES.map(v=>`<option value="${v}" ${v===sz?'selected':''}>${v}%</option>`).join('')}</select><button data-fmt="s+" title="Perbesar tulisan">A+</button>${changed?'<button data-fmt="r" title="Kembalikan format bawaan">↺</button>':''}
+  </div>`;
+}
+const FW = (L, it, f, inner, full) => `<div class="fw ${full?'full':''}">${inner}${fmtRow(L, it, f)}</div>`;
+function applyFmt(row, k, val){
+  if (!row) return;
+  const L = row.dataset.fl, id = row.dataset.id, f = row.dataset.ff;
+  const it = L==='oc' ? cfg().oc[id] : (cfg()[L].items||[]).find(x=>x.id===id); if (!it) return;
+  it.fmt = it.fmt || {}; const m = it.fmt[f] = it.fmt[f] || {}, d = FDEF[f] || {};
+  if (k==='b') m.b = !(m.b != null ? m.b : !!d.b);
+  else if (k==='i') m.i = !m.i;
+  else if (k==='u') m.u = !m.u;
+  else if (k==='s') m.s = Number(val);
+  else if (k==='s-' || k==='s+'){ let i = FSIZES.indexOf(Number(m.s)||100); if (i<0) i = 5; i = Math.max(0, Math.min(FSIZES.length-1, i + (k==='s+'?1:-1))); m.s = FSIZES[i]; }
+  else if (k==='r') delete it.fmt[f];
+  if (L==='lt' || L==='tt' || L==='loc') ui.sel[L] = id;
+  row.outerHTML = fmtRow(L, it, f);
+  commit(false);
+}
+const MVH = '<div class="mvhint">✥ Bisa juga digeser langsung dengan mouse / jari di monitor Preview</div>';
+
+function animBlock(L, c){
+  return `<h4>Animasi masuk & keluar</h4>
+  <div class="grid3">
+    <label class="fld">Masuk<select data-k="${L}.animIn">${opt(K.ANIMS,c.animIn)}</select></label>
+    <label class="fld">Keluar<select data-k="${L}.animOut">${opt(K.ANIMS,c.animOut)}</select></label>
+    ${rng(L+'.dur','Durasi',300,2500,50,c.dur,' ms')}
+  </div>
+  <div class="bar" style="margin-top:10px"><button data-act="replay">▶ Uji animasi di Preview</button></div>`;
+}
+
+// ---- kontrol posisi milik satu item (lower third / logo pojok) ----
+const irng = (kind,id,pk,label,min,max,step,val,unit='') => `<label class="fld rg"><span>${label} <b>${val}${unit}</b></span><input type="range" data-ip="${kind}" data-id="${id}" data-pk="${pk}" data-unit="${unit}" min="${min}" max="${max}" step="${step}" value="${val}"></label>`;
+const iseg = (kind,id,pk,list,cur) => `<div class="seg">${list.map(o=>`<button class="${String(o[0])===String(cur)?'act':''}" data-act="ipSet" data-ip="${kind}" data-id="${id}" data-pk="${pk}" data-v="${o[0]}">${o[1]}</button>`).join('')}</div>`;
+function ipTarget(kind, id){
+  const ev = cfg();
+  if (kind==='lt'){ const i = ev.lt.items.findIndex(x=>x.id===id); if (i<0) return null; const it = ev.lt.items[i]; if (!it.p) it.p = K.ltPos(i); return it.p; }
+  if (kind==='bug') return (ev.bug.items||[]).find(x=>x.id===id) || null;
+  return null;
+}
+function onLtMulti(){
+  const c = cfg().lt;
+  if (!c.multi) return;
+  c.items.forEach((it,i)=>{ if (it.on === undefined) it.on = false; if (!it.p) it.p = K.ltPos(i); });
+  if (c.visible){ const a = c.items.find(x=>x.id===c.activeId); if (a) a.on = true; }
+}
+
+// ---- Lower Third ----
+function pLT(){
+  const ev = cfg(), c = ev.lt, E = K.ev(S.eventType);
+  const items = c.items.map((it,i)=>{
+    const on = c.visible && (c.multi ? !!it.on : c.activeId===it.id), sel = (ui.sel.lt||c.activeId)===it.id;
+    const P = Object.assign(K.ltPos(i), it.p||{});
+    const posBox = c.multi ? `<div class="ipos full"><div class="ipos-h">📍 Posisi lower third ini</div>
+        ${iseg('lt',it.id,'pos',[['left','Kiri'],['center','Tengah'],['right','Kanan']],P.pos)}
+        <div class="grid3">${irng('lt',it.id,'bottom','Jarak bawah',-200,1100,2,P.bottom,' px')}${P.pos==='center'?irng('lt',it.id,'x','Geser horizontal',-900,900,2,P.x,' px'):irng('lt',it.id,'side','Jarak samping',-300,1800,2,P.side,' px')}${irng('lt',it.id,'scale','Skala',0.5,1.8,0.05,P.scale,'×')}</div></div>` : '';
+    return `<div class="item ${on?'onair':''} ${sel?'sel':''}" data-act="pick" data-l="lt" data-id="${it.id}">
+      <div class="ih"><span class="num">${i+1}</span>
+        <input class="lbl" data-it="lt" data-id="${it.id}" data-f="label" value="${esc(it.label)}" placeholder="Nama lowerthird (mis. Penceramah)">
+        <span class="tag">ON AIR</span>
+        <button class="ic" data-act="up" data-l="lt" data-id="${it.id}" title="Naik">↑</button>
+        <button class="ic" data-act="down" data-l="lt" data-id="${it.id}" title="Turun">↓</button>
+        <button class="ic" data-act="dup" data-l="lt" data-id="${it.id}" title="Duplikat">⧉</button>
+        <button class="ic" data-act="del" data-l="lt" data-id="${it.id}" title="Hapus">✕</button>
+      </div>
+      <div class="ig">
+        ${FW('lt', it, 'name', `<input data-it="lt" data-id="${it.id}" data-f="name" value="${esc(it.name)}" placeholder="Nama orang">`)}
+        ${FW('lt', it, 'role', `<input data-it="lt" data-id="${it.id}" data-f="role" value="${esc(it.role)}" list="roles" placeholder="Jabatan / keterangan">`)}
+        ${FW('lt', it, 'extra', `<input data-it="lt" data-id="${it.id}" data-f="extra" value="${esc(it.extra)}" placeholder="Baris tambahan (opsional, mis. asal instansi)">`, true)}
+        ${posBox}
+      </div>
+      <button class="take" data-act="take" data-l="lt" data-id="${it.id}">${on?'■ SEMBUNYIKAN':'▶ TAMPILKAN'}</button>
+    </div>`;
+  }).join('') || '<div class="hint">Belum ada lower third. Tambahkan di bawah.</div>';
+  return `
+  <div class="box">
+    <h3>Daftar Lower Third <span class="hint">(${c.items.length})</span></h3>
+    <h4>Cara tampil</h4>
+    <div class="bar" style="margin-bottom:8px">${seg('lt.multi',[[0,'Satu per satu (switch)'],[1,'Banyak sekaligus']],c.multi?1:0,true)}</div>
+    ${c.multi?'<div class="hint" style="margin-bottom:10px">Tiap lower third punya tombol TAMPILKAN & posisi sendiri, jadi bisa tampil bersamaan di tempat berbeda. Bisa juga digeser langsung di Preview.</div>':''}
+    <div class="bar" style="margin-bottom:10px">
+      ${c.multi?'':`<button data-act="prev" data-l="lt">◀ Sebelumnya</button>
+      <button data-act="next" data-l="lt">Berikutnya ▶</button>`}
+      <button class="btn-red" data-act="hide" data-l="lt">Sembunyikan LT</button>
+      <label class="mini">Auto-hide <select data-k="lt.autoHide" data-num>${[0,5,8,10,15,20,30,60].map(v=>`<option value="${v}" ${Number(c.autoHide)===v?'selected':''}>${v?v+' detik':'Mati'}</option>`).join('')}</select></label>
+    </div>
+    <div class="list">${items}</div>
+    <div class="bar" style="margin-top:10px">
+      <button data-act="add" data-l="lt">+ Tambah Lower Third</button>
+      <button data-act="bulk">${ui.bulk?'Tutup':'+ Tambah banyak sekaligus'}</button>
+    </div>
+    ${ui.bulk?`<div style="margin-top:10px"><textarea id="bulkTxt" rows="5" placeholder="Satu orang per baris, format:  Nama | Jabatan | Baris tambahan&#10;Contoh:&#10;Ustadz Hasan | Penceramah&#10;H. Ali | Ketua Panitia | Takmir Masjid"></textarea>
+      <div class="bar" style="margin-top:8px"><button data-act="bulkAdd">Tambahkan semua</button></div></div>`:''}
+    <datalist id="roles">${E.roles.map(r=>`<option value="${esc(r)}">`).join('')}</datalist>
+  </div>
+  <div class="box">
+    <h3>Gaya Lower Third — ${esc(E.n)}</h3>
+    <h4>Model layout (3D modern)</h4>${chips('lt.layout',K.LT_LAYOUTS,c.layout)}
+    <h4>Aksen cahaya</h4>${chips('lt.light',K.LIGHTS,c.light)}
+    ${animBlock('lt',c)}
+    <h4>Posisi & ukuran${c.multi?' (mode satu per satu)':''}</h4>${c.multi?'':MVH}
+    <div class="bar" style="margin-bottom:10px">${seg('lt.pos',[['left','Kiri'],['center','Tengah'],['right','Kanan']],c.pos)}</div>
+    <div class="grid3">
+      ${rng('lt.bottom','Jarak bawah',-200,1100,2,c.bottom,' px')}
+      ${rng('lt.side','Jarak samping',-300,1800,2,c.side,' px')}
+      ${rng('lt.scale','Skala',0.5,1.8,0.05,c.scale,'×')}
+      ${rng('lt.x','Geser horizontal (posisi Tengah)',-900,900,2,c.x||0,' px')}
+    </div>
+    <h4>Logo & ornamen</h4>
+    <div class="grid2">
+      <label class="fld">Posisi logo<select data-k="lt.logo"><option value="none" ${c.logo==='none'?'selected':''}>Tanpa logo</option><option value="left" ${c.logo==='left'?'selected':''}>Logo di kiri</option><option value="right" ${c.logo==='right'?'selected':''}>Logo di kanan</option></select></label>
+      <label class="fld">Logo yang dipakai<select data-k="lt.logoId">${logoOpts(c.logoId)}</select></label>
+    </div>
+    <div class="bar" style="margin-top:10px;gap:18px">
+      ${ck('lt.orn','Ornamen di baris jabatan',c.orn)}
+      ${ck('lt.upper','Nama huruf KAPITAL',c.upper)}
+      ${ck('lt.raise','Naik otomatis saat running text tampil',c.raise)}
+    </div>
+  </div>`;
+}
+
+// ---- Title ----
+function pTT(){
+  const ev = cfg(), c = ev.tt, E = K.ev(S.eventType);
+  const items = c.items.map((it,i)=>{
+    const on = c.visible && c.activeId===it.id, sel = (ui.sel.tt||c.activeId)===it.id;
+    const F = (f,ph,full,extra='') => FW('tt', it, f, `<input ${extra} data-it="tt" data-id="${it.id}" data-f="${f}" value="${esc(it[f])}" placeholder="${ph}">`, full);
+    return `<div class="item ${on?'onair':''} ${sel?'sel':''}" data-act="pick" data-l="tt" data-id="${it.id}">
+      <div class="ih"><span class="num">${i+1}</span>
+        <input class="lbl" data-it="tt" data-id="${it.id}" data-f="label" value="${esc(it.label)}" placeholder="Nama title">
+        <span class="tag">ON AIR</span>
+        <button class="ic" data-act="up" data-l="tt" data-id="${it.id}">↑</button>
+        <button class="ic" data-act="down" data-l="tt" data-id="${it.id}">↓</button>
+        <button class="ic" data-act="dup" data-l="tt" data-id="${it.id}">⧉</button>
+        <button class="ic" data-act="del" data-l="tt" data-id="${it.id}">✕</button>
+      </div>
+      <div class="ig">
+        ${F('ar','Teks Arab (opsional) — mis. بِسْمِ اللّٰهِ',true,'dir="rtl"')}
+        ${F('eb','Teks kecil di atas (mis. The Wedding of)')}
+        ${F('sub','Sub judul')}
+        ${FW('tt', it, 'title', `<textarea data-it="tt" data-id="${it.id}" data-f="title" rows="2" placeholder="Judul utama (Enter = baris baru)">${esc(it.title)}</textarea>`, true)}
+        ${F('info','Tanggal • tempat (opsional)',true)}
+      </div>
+      <button class="take" data-act="take" data-l="tt" data-id="${it.id}">${on?'■ SEMBUNYIKAN':'▶ TAMPILKAN'}</button>
+    </div>`;
+  }).join('') || '<div class="hint">Belum ada title.</div>';
+  return `
+  <div class="box">
+    <h3>Daftar Title <span class="hint">(${c.items.length})</span></h3>
+    <div class="bar" style="margin-bottom:10px">
+      <button data-act="prev" data-l="tt">◀ Sebelumnya</button><button data-act="next" data-l="tt">Berikutnya ▶</button>
+      <button class="btn-red" data-act="hide" data-l="tt">Sembunyikan Title</button>
+    </div>
+    <div class="list">${items}</div>
+    <div class="bar" style="margin-top:10px"><button data-act="add" data-l="tt">+ Tambah Title</button></div>
+  </div>
+  <div class="box">
+    <h3>Gaya Title — ${esc(E.n)}</h3>
+    <h4>Model layout</h4>${chips('tt.layout',K.TT_LAYOUTS,c.layout)}
+    <h4>Aksen cahaya</h4>${chips('tt.light',K.LIGHTS,c.light)}
+    ${animBlock('tt',c)}
+    <h4>Posisi & ukuran</h4>${MVH}
+    <div class="bar" style="margin-bottom:10px">${seg('tt.pos',[['top','Atas'],['center','Tengah'],['bottom','Bawah']],c.pos)}</div>
+    <div class="grid3">${rng('tt.y','Geser vertikal',-600,600,2,c.y,' px')}${rng('tt.x','Geser horizontal',-960,960,2,c.x||0,' px')}${rng('tt.scale','Skala',0.4,1.6,0.05,c.scale,'×')}</div>
+    <h4>Logo & ornamen</h4>
+    <div class="grid2">
+      <label class="fld">Logo di atas judul<select data-k="tt.logoId">${logoOpts(c.logoId)}</select></label>
+      <div class="bar" style="gap:18px">${ck('tt.logo','Tampilkan logo',c.logo)}${ck('tt.orn','Ornamen (jika tanpa logo)',c.orn)}</div>
+    </div>
+  </div>`;
+}
+
+// ---- Title Lokasi ----
+function pLoc(){
+  const ev = cfg(), c = ev.loc;
+  const items = c.items.map((it,i)=>{
+    const on = c.visible && c.activeId===it.id, sel = (ui.sel.loc||c.activeId)===it.id;
+    return `<div class="item ${on?'onair':''} ${sel?'sel':''}" data-act="pick" data-l="loc" data-id="${it.id}">
+      <div class="ih"><span class="num">${i+1}</span>
+        <input class="lbl" data-it="loc" data-id="${it.id}" data-f="label" value="${esc(it.label)}" placeholder="Nama title lokasi (mis. Lokasi akad)">
+        <span class="tag">ON AIR</span>
+        <button class="ic" data-act="up" data-l="loc" data-id="${it.id}" title="Naik">↑</button>
+        <button class="ic" data-act="down" data-l="loc" data-id="${it.id}" title="Turun">↓</button>
+        <button class="ic" data-act="dup" data-l="loc" data-id="${it.id}" title="Duplikat">⧉</button>
+        <button class="ic" data-act="del" data-l="loc" data-id="${it.id}" title="Hapus">✕</button>
+      </div>
+      <div class="ig">
+        ${FW('loc', it, 'cap', `<input data-it="loc" data-id="${it.id}" data-f="cap" value="${esc(it.cap)}" list="loccaps" placeholder="Teks kecil (mis. LOKASI / LIVE DARI)">`)}
+        ${FW('loc', it, 'place', `<input data-it="loc" data-id="${it.id}" data-f="place" value="${esc(it.place)}" placeholder="Nama tempat">`)}
+        ${FW('loc', it, 'addr', `<input data-it="loc" data-id="${it.id}" data-f="addr" value="${esc(it.addr)}" placeholder="Alamat / kota (opsional)">`, true)}
+      </div>
+      <button class="take" data-act="take" data-l="loc" data-id="${it.id}">${on?'■ SEMBUNYIKAN':'▶ TAMPILKAN'}</button>
+    </div>`;
+  }).join('') || '<div class="hint">Belum ada title lokasi.</div>';
+  const posX = (c.pos||'tr')[1]==='c';
+  return `
+  <div class="box">
+    <h3>Daftar Title Lokasi <span class="hint">(${c.items.length})</span></h3>
+    <div class="bar" style="margin-bottom:10px">
+      <button data-act="prev" data-l="loc">◀ Sebelumnya</button><button data-act="next" data-l="loc">Berikutnya ▶</button>
+      <button class="btn-red" data-act="hide" data-l="loc">Sembunyikan Lokasi</button>
+      <label class="mini">Auto-hide <select data-k="loc.autoHide" data-num>${[0,5,8,10,15,20,30,60].map(v=>`<option value="${v}" ${Number(c.autoHide)===v?'selected':''}>${v?v+' detik':'Mati'}</option>`).join('')}</select></label>
+    </div>
+    <div class="list">${items}</div>
+    <div class="bar" style="margin-top:10px"><button data-act="add" data-l="loc">+ Tambah Title Lokasi</button></div>
+    <datalist id="loccaps">${['LOKASI','LIVE DARI','TEMPAT ACARA','BERTEMPAT DI','LANGSUNG DARI','VENUE'].map(r=>`<option value="${r}">`).join('')}</datalist>
+  </div>
+  <div class="box">
+    <h3>Gaya Title Lokasi</h3>
+    <h4>Model layout 3D khusus lokasi</h4>${chips('loc.layout',K.LOC_LAYOUTS,c.layout)}
+    <h4>Aksen cahaya</h4>${chips('loc.light',K.LIGHTS,c.light)}
+    ${animBlock('loc',c)}
+    <h4>Ikon</h4>
+    <div class="grid2">
+      <div class="bar">${seg('loc.icon',[['pin','📍 Pin / kompas'],['logo','Logo'],['none','Tanpa ikon']],c.icon)}</div>
+      <label class="fld">Logo (jika ikon = Logo)<select data-k="loc.logoId">${logoOpts(c.logoId)}</select></label>
+    </div>
+    <div class="bar" style="margin-top:10px">${ck('loc.upper','Nama tempat huruf KAPITAL',c.upper)}</div>
+    <h4>Posisi & ukuran</h4>${MVH}
+    <div class="bar" style="margin-bottom:10px">${seg('loc.pos',K.LOC_POS,c.pos)}</div>
+    <div class="grid3">
+      ${rng('loc.x', posX ? 'Geser horizontal' : 'Jarak samping', posX ? -960 : -100, posX ? 960 : 1800, 2, c.x, ' px')}
+      ${rng('loc.y','Jarak atas / bawah',-100,1000,2,c.y,' px')}
+      ${rng('loc.scale','Skala',0.5,1.8,0.05,c.scale,'×')}
+    </div>
+  </div>`;
+}
+
+// ---- Lower Third Sosial Media ----
+function pSoc(){
+  const ev = cfg(), c = ev.soc, single = c.mode === 'single';
+  const platOpts = cur => Object.entries(K.SOC_PLAT).map(([k,v])=>`<option value="${k}" ${k===cur?'selected':''}>${esc(v.n)}</option>`).join('');
+  const iconOpts = cur => `<option value="">Ikon bawaan 3D</option>` + (S.logos||[]).map(l=>`<option value="${l.id}" ${l.id===cur?'selected':''}>Logo: ${esc(l.name)}</option>`).join('');
+  const items = c.items.map((it,i)=>{
+    const on = c.visible && (single ? c.activeId===it.id : it.on !== false), sel = (ui.sel.soc||c.activeId)===it.id;
+    return `<div class="item ${on?'onair':''} ${sel?'sel':''}" data-act="pick" data-l="soc" data-id="${it.id}">
+      <div class="ih"><span class="num">${i+1}</span>
+        <input class="lbl" data-it="soc" data-id="${it.id}" data-f="label" value="${esc(it.label)}" placeholder="Nama (mis. YouTube Masjid)">
+        <span class="tag">ON AIR</span>
+        <button class="ic" data-act="up" data-l="soc" data-id="${it.id}" title="Naik">↑</button>
+        <button class="ic" data-act="down" data-l="soc" data-id="${it.id}" title="Turun">↓</button>
+        <button class="ic" data-act="dup" data-l="soc" data-id="${it.id}" title="Duplikat">⧉</button>
+        <button class="ic" data-act="del" data-l="soc" data-id="${it.id}" title="Hapus">✕</button>
+      </div>
+      <div class="ig">
+        <label class="fld">Platform<select data-it="soc" data-id="${it.id}" data-f="plat">${platOpts(it.plat)}</select></label>
+        <label class="fld">Ikon / logo<select data-it="soc" data-id="${it.id}" data-f="logoId">${iconOpts(it.logoId)}</select></label>
+        ${FW('soc', it, 'cap', `<input data-it="soc" data-id="${it.id}" data-f="cap" value="${esc(it.cap)}" placeholder="Teks kecil (mis. YouTube / Ikuti kami)">`)}
+        ${FW('soc', it, 'handle', `<input data-it="soc" data-id="${it.id}" data-f="handle" value="${esc(it.handle)}" placeholder="Nama akun / @username / alamat">`)}
+        ${FW('soc', it, 'extra', `<input data-it="soc" data-id="${it.id}" data-f="extra" value="${esc(it.extra)}" placeholder="Ajakan (opsional, mis. Subscribe & like)">`, true)}
+        ${single ? '' : `<label class="ck full"><input type="checkbox" data-it="soc" data-id="${it.id}" data-f="on" ${it.on!==false?'checked':''}> Ikut ditampilkan (mode berderet / bergantian)</label>`}
+      </div>
+      <button class="take" data-act="take" data-l="soc" data-id="${it.id}">${single ? (on?'■ SEMBUNYIKAN':'▶ TAMPILKAN') : (c.visible?'■ SEMBUNYIKAN SEMUA':'▶ TAMPILKAN SEMUA')}</button>
+    </div>`;
+  }).join('') || '<div class="hint">Belum ada akun sosial media.</div>';
+  const posX = (c.pos||'br')[1]==='c';
+  return `
+  <div class="box">
+    <h3>Daftar Akun Sosial Media <span class="hint">(${c.items.length})</span></h3>
+    <h4>Cara tampil</h4>
+    <div class="bar" style="margin-bottom:8px">${seg('soc.mode',[['single','Satu akun (switch)'],['row','Semua sekaligus'],['cycle','Bergantian otomatis']],c.mode)}</div>
+    ${c.mode==='row' ? `<div class="bar" style="margin-bottom:8px">${seg('soc.dir',[['row','Berderet mendatar'],['col','Bersusun ke bawah']],c.dir)}</div>` : ''}
+    ${c.mode==='cycle' ? `<div style="max-width:360px;margin-bottom:8px">${rng('soc.cycle','Ganti akun tiap',2,20,1,c.cycle,' detik')}</div>` : ''}
+    <div class="bar" style="margin:6px 0 10px">
+      ${single ? `<button data-act="prev" data-l="soc">◀ Sebelumnya</button><button data-act="next" data-l="soc">Berikutnya ▶</button>` : ''}
+      <button class="btn-red" data-act="hide" data-l="soc">Sembunyikan Sosmed</button>
+      <label class="mini">Auto-hide <select data-k="soc.autoHide" data-num>${[0,5,8,10,15,20,30,60].map(v=>`<option value="${v}" ${Number(c.autoHide)===v?'selected':''}>${v?v+' detik':'Mati'}</option>`).join('')}</select></label>
+    </div>
+    <div class="list">${items}</div>
+    <div class="bar" style="margin-top:10px"><button data-act="add" data-l="soc">+ Tambah Akun</button><button data-act="upload">⬆ Upload logo platform</button></div>
+    <div class="hint" style="margin-top:8px">Ikon bawaan adalah ikon 3D generik per jenis platform. Untuk memakai logo resmi platform, upload file logonya lalu pilih di kolom "Ikon / logo" tiap akun.</div>
+  </div>
+  <div class="box">
+    <h3>Gaya Lower Third Sosial Media</h3>
+    <h4>Model layout 3D</h4>${chips('soc.layout',K.SOC_LAYOUTS,c.layout)}
+    <h4>Aksen cahaya</h4>${chips('soc.light',K.LIGHTS,c.light)}
+    ${animBlock('soc',c)}
+    <h4>Ikon</h4>
+    <div class="bar" style="gap:10px">${seg('soc.color',[['tema','Warna tema'],['pelangi','Warna-warni']],c.color)}${seg('soc.iconPos',[['left','Ikon di kiri'],['right','Ikon di kanan']],c.iconPos)}</div>
+    <div class="bar" style="margin-top:10px;gap:18px">${ck('soc.upper','Nama akun huruf KAPITAL',c.upper)}${ck('soc.raise','Naik otomatis saat running text tampil',c.raise!==false)}</div>
+    <h4>Posisi & ukuran</h4>${MVH}
+    <div class="bar" style="margin-bottom:10px">${seg('soc.pos',K.LOC_POS,c.pos)}</div>
+    <div class="grid3">
+      ${rng('soc.x', posX ? 'Geser horizontal' : 'Jarak samping', posX ? -960 : -100, posX ? 960 : 1800, 2, c.x, ' px')}
+      ${rng('soc.y','Jarak atas / bawah',-100,1000,2,c.y,' px')}
+      ${rng('soc.scale','Skala',0.4,1.8,0.05,c.scale,'×')}
+    </div>
+  </div>`;
+}
+
+// ---- Opening / Closing ----
+function ocStatus(){
+  const oc = cfg().oc;
+  if (!oc.active) return '<span class="dot"></span> Tidak tayang';
+  const nm = oc.active==='opening' ? 'OPENING' : 'CLOSING';
+  if (!oc.done) return `<span class="dot ok"></span> <b>${nm}</b> sedang diputar…`;
+  return oc.active==='closing' ? `<span class="dot ok"></span> <b>CLOSING</b> selesai — layar hitam. Tekan <b>OFF</b> untuk menampilkan kembali.` : `<span class="dot ok"></span> <b>OPENING</b> selesai — menunggu <b>OFF</b> manual.`;
+}
+function pOC(){
+  const oc = cfg().oc, k = ui.ocKind, c = oc[k], P = 'oc.' + k + '.';
+  const isV = c.type === 'video';
+  const vInfo = c.video && c.video.url ? `<div class="vidbox"><video src="${esc(c.video.url)}" muted controls playsinline preload="metadata"></video>
+      <div><b>${esc(c.video.name||c.video.file)}</b><div class="hint">${c.video.size?(c.video.size/1048576).toFixed(1)+' MB':''}</div>
+      <div class="bar" style="margin-top:8px"><button data-act="ocVid">Ganti video</button><button class="btn-red" data-act="ocVidDel">Hapus</button></div></div></div>`
+    : `<div class="drop" data-act="ocVid">⬆ Klik untuk upload video ${k} (MP4 H.264 disarankan, juga WEBM / MOV)</div>`;
+  const gfx = `
+    <h4>Struktur tata letak logo & tulisan</h4>${chips(P+'layout',K.OC_LAYOUTS,c.layout)}
+    <h4>Logo</h4>
+    <div class="grid2"><label class="fld">Logo yang dipakai<select data-k="${P}logoId">${logoOpts(c.logoId)}</select></label>${rng(P+'logoSize','Ukuran logo',80,700,5,c.logoSize,' px')}</div>
+    <h4>Tulisan</h4>
+    <div class="ig">
+      ${FW('oc', c, 'eb', `<input data-k="${P}eb" value="${esc(c.eb)}" placeholder="Teks kecil di atas (opsional)">`)}
+      ${FW('oc', c, 'sub', `<input data-k="${P}sub" value="${esc(c.sub)}" placeholder="Sub judul (opsional)">`)}
+      ${FW('oc', c, 'title', `<textarea data-k="${P}title" rows="2" placeholder="Judul utama (Enter = baris baru)">${esc(c.title)}</textarea>`, true)}
+    </div>
+    <h4>Latar</h4>${chips(P+'bg',K.OC_BGS,c.bg)}
+    <h4>Aksen cahaya</h4>${chips(P+'light',K.OC_LIGHTS,c.light)}
+    <h4>Animasi masuk (3D)</h4>${chips(P+'animIn',K.OC_ANIMS,c.animIn)}
+    <h4>Animasi keluar (3D)</h4>${chips(P+'animOut',K.OC_ANIMS,c.animOut)}
+    <h4>Durasi</h4>
+    <div class="grid3">${rng(P+'inDur','Animasi masuk',400,6000,100,c.inDur,' ms')}${rng(P+'hold','Lama tampil',0,60,1,c.hold,' detik')}${rng(P+'outDur','Animasi keluar',300,5000,100,c.outDur,' ms')}</div>
+    <h4>Posisi & ukuran</h4>
+    <div class="grid2">${rng(P+'scale','Skala keseluruhan',0.4,1.6,0.05,c.scale,'×')}${rng(P+'y','Geser vertikal',-450,450,2,c.y,' px')}</div>`;
+  const vid = `
+    <h4>Video ${k}</h4>${vInfo}
+    <div class="up-prog" id="ocProg" style="display:none"><i></i><span></span></div>
+    <h4>Suara & tampilan</h4>
+    <div class="grid2">
+      <div class="bar" style="gap:18px">${ck(P+'sound','Putar suara video di OBS / vMix',c.sound)}</div>
+      ${rng(P+'volume','Volume',0,100,1,c.volume,'%')}
+    </div>
+    <div class="bar" style="margin-top:10px">${seg(P+'fit',[['cover','Penuhi layar'],['contain','Utuh (ada garis hitam)']],c.fit)}</div>`;
+  return `
+  <div class="box">
+    <h3>Tayangkan Opening / Closing</h3>
+    <div class="ocbig">
+      <button class="${oc.active==='opening'?'on':''}" data-act="ocGo" data-v="opening">▶ OPENING</button>
+      <button class="${oc.active==='closing'?'on':''}" data-act="ocGo" data-v="closing">▶ CLOSING</button>
+      <button class="ocoff" data-act="ocOff">■ OFF</button>
+    </div>
+    <div class="hint" style="margin-top:10px;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--tx)">${ocStatus()}</div>
+    <div class="hint" style="margin-top:6px">Saat opening / closing tampil, lower third, title, running text, logo & lokasi yang sedang tampil tertutup sementara (status ON-nya tetap tersimpan).</div>
+  </div>
+  <div class="box">
+    <h3>Pengaturan</h3>
+    <div class="seg" style="margin-bottom:12px"><button class="${k==='opening'?'act':''}" data-act="ocKind" data-v="opening">OPENING</button><button class="${k==='closing'?'act':''}" data-act="ocKind" data-v="closing">CLOSING</button></div>
+    <h4>Jenis</h4>
+    <div class="bar">${seg(P+'type',[['gfx','✨ Logo & tulisan beranimasi'],['video','🎬 Video jadi (upload)']],c.type)}</div>
+    ${isV ? vid : gfx}
+    <h4>Setelah selesai</h4>
+    ${k==='opening' ? `<div class="bar">${ck(P+'autoOff','Otomatis OFF — grafis yang sedang hidup tampil kembali',c.autoOff!==false)}</div>
+      <div class="hint" style="margin-top:4px">Jika tidak dicentang: opening tetap di layar sampai ditekan <b>OFF</b>.</div>`
+      : `<div class="hint" style="font-size:13px;color:var(--tx)">Closing selesai → layar <b>hitam</b> sampai ditekan <b>OFF</b>.</div>`}
+    <div class="bar" style="margin-top:14px"><button data-act="replay">▶ Uji ${k} di Preview</button></div>
+  </div>`;
+}
+function ocGo(kind){
+  const oc = cfg().oc, c = oc[kind];
+  if (c.type === 'video' && !(c.video && c.video.url)){ toast('Upload video ' + kind + ' dulu'); ui.tab='oc'; ui.ocKind=kind; renderAll(); return; }
+  oc.active = kind; oc.run = K.uid(); oc.done = false;
+  commit(true);
+}
+function ocOff(){ const oc = cfg().oc; oc.active = null; oc.done = false; commit(true); }
+function uploadVideo(file){
+  const kind = ui.ocKind, et = S.eventType;
+  const xhr = new XMLHttpRequest();
+  const prog = () => $('#ocProg');
+  xhr.open('POST', '/utc/api/upload-video?name=' + encodeURIComponent(file.name));
+  xhr.upload.onprogress = e => { const p = prog(); if (!p || !e.lengthComputable) return; p.style.display='flex'; const pc = Math.round(e.loaded/e.total*100); p.querySelector('i').style.width = pc+'%'; p.querySelector('span').textContent = 'Mengunggah… ' + pc + '%'; };
+  xhr.onload = () => {
+    let r = {}; try { r = JSON.parse(xhr.responseText); } catch(e){}
+    if (xhr.status !== 200 || !r.url){ toast(r.error || 'Upload video gagal'); const p = prog(); if (p) p.style.display='none'; return; }
+    const c = S.events[et].oc[kind];
+    c.video = { url:r.url, file:r.file, name:file.name, size:r.size }; c.type = 'video';
+    commit(true); toast('Video ' + kind + ' terupload');
+  };
+  xhr.onerror = () => toast('Upload video gagal — server tidak terjangkau');
+  const p = prog(); if (p){ p.style.display='flex'; p.querySelector('span').textContent = 'Mengunggah…'; }
+  xhr.send(file);
+}
+
+// ---- Running text ----
+function pTK(){
+  const ev = cfg(), c = ev.tk;
+  const items = c.items.map((it,i)=>`<div class="tk-it">
+      <input type="checkbox" data-it="tk" data-id="${it.id}" data-f="on" ${it.on?'checked':''} title="Aktif">
+      ${FW('tk', it, 'text', `<textarea data-it="tk" data-id="${it.id}" data-f="text" rows="1" placeholder="Teks berjalan">${esc(it.text)}</textarea>`)}
+      <div class="bar" style="gap:2px"><button class="ic" data-act="up" data-l="tk" data-id="${it.id}">↑</button><button class="ic" data-act="down" data-l="tk" data-id="${it.id}">↓</button><button class="ic" data-act="del" data-l="tk" data-id="${it.id}">✕</button></div>
+    </div>`).join('');
+  return `
+  <div class="box">
+    <h3>Running Text</h3>
+    <div class="bar" style="margin-bottom:12px">
+      <button class="take" style="min-width:200px;padding:12px" data-act="toggle" data-l="tk">${c.visible?'■ SEMBUNYIKAN RUNNING TEXT':'▶ TAMPILKAN RUNNING TEXT'}</button>
+      <span class="hint">Centang = pesan ikut berjalan. Bisa diedit saat tayang.</span>
+    </div>
+    <div class="list">${items}</div>
+    <div class="bar" style="margin-top:10px"><button data-act="add" data-l="tk">+ Tambah pesan</button></div>
+  </div>
+  <div class="box">
+    <h3>Gaya Running Text</h3>
+    <h4>Model layout</h4>${chips('tk.layout',K.TK_LAYOUTS,c.layout)}
+    <h4>Aksen cahaya</h4>${chips('tk.light',K.LIGHTS,c.light)}
+    <h4>Label & logo</h4>
+    <div class="grid3">
+      <label class="fld">Label kiri<input data-k="tk.badge" value="${esc(c.badge)}" placeholder="INFO"></label>
+      <label class="fld">Logo di label<select data-k="tk.logoId">${logoOpts(c.logoId)}</select></label>
+      <label class="fld">Pemisah<select data-k="tk.sep">${K.SEPS.map(s=>`<option ${s===c.sep?'selected':''}>${s}</option>`).join('')}</select></label>
+    </div>
+    <div class="bar" style="margin-top:10px;gap:18px">${ck('tk.logo','Tampilkan logo',c.logo)}${ck('tk.clock','Jam di kanan',c.clock)}</div>
+    <h4>Kecepatan, posisi & ukuran</h4>${MVH}
+    <div class="bar" style="margin-bottom:10px">${seg('tk.pos',[['bottom','Bawah'],['top','Atas']],c.pos)}</div>
+    <div class="grid3">
+      ${rng('tk.speed','Kecepatan',30,400,5,c.speed,' px/dtk')}
+      ${rng('tk.y','Jarak tepi',-100,1050,2,c.y,' px')}
+      ${rng('tk.margin','Jarak samping',0,400,2,c.margin,' px')}
+      ${rng('tk.x','Geser horizontal',-900,900,2,c.x||0,' px')}
+      ${rng('tk.height','Tinggi bar',40,120,2,c.height,' px')}
+      ${rng('tk.fsize','Ukuran huruf',18,56,1,c.fsize,' px')}
+    </div>
+    ${animBlock('tk',c)}
+  </div>`;
+}
+
+// ---- Logo ----
+function pLogo(){
+  const ev = cfg(), c = ev.bug;
+  const slots = (c.items||[]).map((it,i)=>{
+    const on = c.visible && it.on!==false, sel = ui.sel.bug===it.id;
+    const lg = (S.logos||[]).find(l=>l.id===it.logoId) || (S.logos||[]).find(l=>l.id===S.defaultLogo) || (S.logos||[])[0];
+    return `<div class="item ${on?'onair':''} ${sel?'sel':''}" data-act="pick" data-l="bug" data-id="${it.id}">
+      <div class="ih"><span class="num">${i+1}</span>${lg?`<img class="bthumb" src="${esc(lg.url)}" alt="">`:''}<b style="flex:1">Logo pojok ${i+1}</b><span class="tag">ON AIR</span>
+        <button class="ic" data-act="up" data-l="bug" data-id="${it.id}" title="Naik">↑</button>
+        <button class="ic" data-act="down" data-l="bug" data-id="${it.id}" title="Turun">↓</button>
+        <button class="ic" data-act="dup" data-l="bug" data-id="${it.id}" title="Duplikat">⧉</button>
+        <button class="ic" data-act="del" data-l="bug" data-id="${it.id}" title="Hapus">✕</button></div>
+      <div class="ig">
+        <label class="fld">Logo<select data-ip="bug" data-id="${it.id}" data-pk="logoId">${logoOpts(it.logoId)}</select></label>
+        <label class="fld">Efek cahaya<select data-ip="bug" data-id="${it.id}" data-pk="fx">${opt(K.BUG_FX,it.fx)}</select></label>
+        <div class="full">${iseg('bug',it.id,'corner',[['tl','↖ Kiri atas'],['tr','↗ Kanan atas'],['bl','↙ Kiri bawah'],['br','↘ Kanan bawah']],it.corner)}</div>
+        <div class="full grid2">${irng('bug',it.id,'size','Ukuran',40,500,2,it.size,' px')}${irng('bug',it.id,'opacity','Transparansi',0.2,1,0.05,it.opacity,'')}${irng('bug',it.id,'x','Jarak samping',-100,1800,2,it.x,' px')}${irng('bug',it.id,'y','Jarak atas/bawah',-100,1000,2,it.y,' px')}</div>
+      </div>
+      <button class="take" data-act="take" data-l="bug" data-id="${it.id}">${on?'■ SEMBUNYIKAN':'▶ TAMPILKAN'}</button>
+    </div>`;
+  }).join('');
+  const L = (S.logos||[]).map(l=>`<div class="lg ${l.id===S.defaultLogo?'def':''}">
+      <img src="${esc(l.url)}"><input data-logo="${l.id}" value="${esc(l.name)}">
+      <div class="bar"><button class="ic" data-act="defLogo" data-id="${l.id}">${l.id===S.defaultLogo?'★ Utama':'☆ Jadikan utama'}</button><button class="ic" data-act="delLogo" data-id="${l.id}">✕</button></div>
+    </div>`).join('');
+  return `
+  <div class="box">
+    <h3>Upload Logo</h3>
+    <div class="drop" data-act="upload">⬆ Klik untuk upload logo (PNG transparan disarankan) — bisa banyak sekaligus</div>
+    <div class="logos" style="margin-top:12px">${L || '<div class="hint">Belum ada logo.</div>'}</div>
+    <div class="hint" style="margin-top:8px">Logo ★ utama dipakai otomatis di lower third, title & running text. Logo lain bisa dipilih per elemen.</div>
+  </div>
+  <div class="box">
+    <h3>Logo Pojok <span class="hint">(${(c.items||[]).length})</span></h3>
+    <div class="bar" style="margin-bottom:8px"><button class="take" style="min-width:200px;padding:12px" data-act="toggle" data-l="bug">${c.visible?'■ SEMBUNYIKAN SEMUA LOGO':'▶ TAMPILKAN LOGO POJOK'}</button></div>
+    <div class="hint" style="margin-bottom:10px">Bisa lebih dari satu logo sekaligus, masing-masing dengan logo, posisi, ukuran & efek sendiri. ✥ Bisa juga digeser langsung di Preview.</div>
+    <div class="list">${slots || '<div class="hint">Belum ada logo pojok.</div>'}</div>
+    <div class="bar" style="margin-top:10px"><button data-act="add" data-l="bug">+ Tambah Logo Pojok</button></div>
+    ${animBlock('bug',c)}
+  </div>`;
+}
+
+// ---- Tema ----
+function pTheme(){
+  const ev = cfg(), th = ev.theme, E = K.ev(S.eventType);
+  const pals = E.pals.map((p,i)=>`<button class="pal" data-act="pal" data-i="${i}"><i><u style="background:${p.p}"></u><u style="background:${p.s}"></u><u style="background:${p.a}"></u></i>${esc(p.n)}</button>`).join('');
+  const C = (k,l) => `<label class="fld">${l}<input type="color" data-k="theme.${k}" value="${th[k]}"></label>`;
+  const F = (k,l) => `<label class="fld">${l}<select data-k="theme.${k}">${K.FONTS.map(f=>`<option ${f===th[k]?'selected':''}>${f}</option>`).join('')}</select></label>`;
+  return `
+  <div class="box">
+    <h3>Palet warna — ${esc(E.n)}</h3>
+    <div class="pals">${pals}</div>
+    <h4>Warna kustom</h4>
+    <div class="grid3">${C('p','Warna utama')}${C('s','Warna gelap / kedua')}${C('a','Aksen cahaya')}${C('t','Teks nama/judul')}${C('st','Teks jabatan/sub')}</div>
+  </div>
+  <div class="box">
+    <h3>Huruf & ornamen</h3>
+    <div class="grid2">${F('fn','Huruf nama')}${F('fr','Huruf jabatan / running text')}${F('ft','Huruf judul (Title)')}${F('far','Huruf Arab')}</div>
+    <label class="fld" style="margin-top:10px">Ornamen<select data-k="theme.orn">${Object.entries(K.ORN).map(([k,v])=>`<option value="${k}" ${k===th.orn?'selected':''}>${esc(v.n)}</option>`).join('')}</select></label>
+    <div class="hint" style="margin-top:8px">Huruf diambil dari Google Fonts (butuh internet saat pertama dibuka). Jika offline, memakai huruf bawaan Windows.</div>
+  </div>
+  <div class="box">
+    <h3>Atur ulang</h3>
+    <div class="bar"><button class="btn-red" data-act="resetEv">Kembalikan "${esc(E.n)}" ke bawaan</button></div>
+    <div class="hint" style="margin-top:6px">Setiap jenis acara menyimpan daftar & gayanya sendiri. Simpan dulu sebagai preset jika ingin menyimpan versi sekarang.</div>
+  </div>`;
+}
+
+// ---- Preset ----
+function pPreset(){
+  const evName = id => (K.EVENTS.find(e=>e.id===id)||{}).n || id;
+  const L = ui.presets.map(p=>`<div class="pre"><div class="nm">${esc(p.name)}<div class="ev">${esc(evName(p.eventType))} • ${new Date(p.mtime).toLocaleString('id-ID')}</div></div>
+      <button data-act="loadPre" data-n="${esc(p.name)}">Muat</button>
+      <button class="ic" data-act="savePre" data-n="${esc(p.name)}" title="Timpa dengan pengaturan sekarang">⟳ Timpa</button>
+      <button class="ic" data-act="dlPre" data-n="${esc(p.name)}" title="Unduh">⬇</button>
+      <button class="ic" data-act="delPre" data-n="${esc(p.name)}" title="Hapus">✕</button></div>`).join('') || '<div class="hint">Belum ada preset.</div>';
+  return `
+  <div class="box">
+    <h3>Simpan preset</h3>
+    <div class="hint" style="margin-bottom:8px">Menyimpan semua pengaturan jenis acara aktif (<b>${esc(evName(S.eventType))}</b>): daftar lower third, title, running text, gaya, warna, posisi, logo pojok.</div>
+    <div class="bar"><input id="preName" placeholder="Nama preset, mis. Nikahan Rizky Aisyah" style="flex:1;min-width:200px"><button data-act="savePre">💾 Simpan</button></div>
+  </div>
+  <div class="box">
+    <h3>Daftar preset</h3>
+    <div class="list">${L}</div>
+    <div class="bar" style="margin-top:10px"><button data-act="importPre">⬆ Impor file preset (.json)</button><button data-act="refreshPre">↻ Muat ulang</button></div>
+  </div>`;
+}
+
+// ---- Output & Install ----
+function pOut(){
+  const host = location.hostname, port = INFO.port || location.port;
+  const base = `${location.protocol}//${host}:${port}`;
+  const U = (l,q) => `<div class="fld">${l}<div class="url"><code>${base}/utc/overlay${q}</code><button data-act="copy" data-v="${base}/utc/overlay${q}">Salin</button></div></div>`;
+  const ips = INFO.ips || [];
+  const KH = klmHost();
+  const onAir = KH && KH.utc ? KH.utc.onAir() : null;
+  const live = KH && KH.utc ? KH.utc.liveInfo() : '';
+  return `
+  <div class="box">
+    <h3>Tayang di KLM Mix</h3>
+    <div class="hint" style="font-size:13px;color:var(--tx)">Semua grafis UTC KLM Acara (lower third, title, running text, logo, lokasi, sosial media, opening/closing) <b>otomatis tampil di Program KLM Mix</b> — ikut terekam, distreaming, keluar ke monitor/proyektor & NDI. Tidak perlu Browser Source.</div>
+    ${KH ? `<div class="bar" style="margin-top:12px">
+      <button class="${onAir ? 'installbtn' : ''}" data-act="klmAir" style="padding:10px 16px">${onAir ? '● UTC ON AIR di Program' : '○ UTC tidak tampil di Program — klik untuk menayangkan'}</button>
+      <button data-act="klmInput">＋ Jadikan input KLM Mix (untuk Overlay 1–4 / Multiview)</button></div>
+      <div class="hint" style="margin-top:8px">${live}</div>` : `<div class="hint" style="margin-top:8px">Panel ini dibuka dari HP/peramban — grafis tetap tampil di Program KLM Mix di PC.</div>`}
+  </div>
+  <div class="box">
+    <h3>Buka panel dari HP / tablet</h3>
+    <ol class="steps hint" style="color:var(--tx);font-size:13px">
+      <li>HP & PC di <b>Wi-Fi / router yang sama</b> (tidak perlu internet).</li>
+      <li>Aplikasi <b>KLM Mix (APK)</b> → menu <b>🎬 UTC KLM Acara</b>, atau pindai QR di bawah dengan kamera HP.</li>
+      <li>iPhone/iPad: buka di Safari → Bagikan → <b>Tambahkan ke Layar Utama</b>.</li>
+    </ol>
+    <div class="qrs">${ips.length ? ips.map(ip=>`<div class="q"><div class="qr" data-qr="http://${ip}:${port}/utc"></div><b>Panel UTC</b><code>http://${ip}:${port}/utc</code></div>`).join('') : '<div class="hint">Alamat jaringan PC belum terdeteksi.</div>'}</div>
+  </div>
+  <div class="box">
+    <h3>Alamat overlay untuk OBS / vMix lain (opsional)</h3>
+    <div class="list">
+      ${U('Semua grafis','')}
+      ${U('Hanya Lower Third','?only=lt')}
+      ${U('Hanya Title','?only=title')}
+      ${U('Hanya Running Text','?only=ticker')}
+      ${U('Hanya Logo pojok','?only=logo')}
+      ${U('Hanya Title Lokasi','?only=loc')}
+      ${U('Hanya Sosial Media','?only=soc')}
+      ${U('Hanya Opening / Closing','?only=oc')}
+    </div>
+    <div class="hint" style="font-size:13px;color:var(--tx);margin-top:12px">Hanya diperlukan bila grafis juga dipakai di PC/aplikasi lain. <b>OBS:</b> Browser Source 1920×1080. <b>vMix:</b> Add Input → Web Browser → jadikan Overlay.</div>
+  </div>
+  <div class="box">
+    <h3>Data</h3>
+    <div class="hint" style="font-size:13px;color:var(--tx)">Preset, logo & video tersimpan di: <code>${esc(INFO.dataDir||'-')}</code>${INFO.imported && INFO.imported.length ? `<br>Data dari UTC KLM Acara lama sudah dipindahkan: ${INFO.imported.map(esc).join(', ')}` : ''}</div>
+    <div class="bar" style="margin-top:10px"><button data-act="klmImport">⤵ Impor ulang preset & logo dari UTC KLM Acara lama</button></div>
+  </div>`;
+}
+function drawQR(){
+  const els = document.querySelectorAll('[data-qr]'); if (!els.length) return;
+  const go = () => els.forEach(el => { if (el.dataset.done) return; el.dataset.done = 1; try { new QRCode(el, { text: el.dataset.qr, width: 150, height: 150, correctLevel: QRCode.CorrectLevel.M }); } catch (e) {} });
+  if (window.QRCode) return go();
+  if (document.getElementById('qrlib')) return;
+  const sc = document.createElement('script'); sc.id = 'qrlib';
+  sc.src = '/utc/vendor/qrcode.min.js';
+  sc.onload = () => { document.querySelectorAll('[data-qr]').forEach(e => delete e.dataset.done); drawQR(); };
+  sc.onerror = () => document.querySelectorAll('[data-qr]').forEach(e => { e.style.display = 'none'; });
+  document.head.appendChild(sc);
+}
+
+// ---------- aksi ----------
+const timers = {};
+function autoHide(L='lt'){
+  const c = cfg()[L]; clearTimeout(timers[L]);
+  if (Number(c.autoHide) > 0 && c.visible){ const id = c.activeId, et = S.eventType;
+    timers[L] = setTimeout(()=>{ const x = S.events[et][L]; if (x.visible && (x.activeId===id || (L==='soc' && x.mode!=='single'))){ x.visible=false; commit(true); } }, c.autoHide*1000); }
+}
+function takeLayer(L, id){
+  const c = cfg()[L];
+  if (L==='lt' && c.multi){
+    const it = c.items.find(x=>x.id===id); if (!it) return;
+    const was = c.visible && it.on; it.on = !was;
+    if (it.on) c.visible = true; else if (!c.items.some(x=>x.on)) c.visible = false;
+    ui.sel.lt = id; autoHide('lt'); commit(true); return;
+  }
+  if (L==='bug'){
+    const it = (c.items||[]).find(x=>x.id===id); if (!it) return;
+    if (!(S.logos||[]).length){ toast('Upload logo dulu di tab Logo'); return; }
+    const was = c.visible && it.on!==false; it.on = !was;
+    if (it.on) c.visible = true; else if (!c.items.some(x=>x.on!==false)) c.visible = false;
+    ui.sel.bug = id; commit(true); return;
+  }
+  if (L==='soc' && c.mode!=='single'){ c.visible = !c.visible; if (!c.activeId) c.activeId = id; ui.sel.soc = id; autoHide(L); commit(true); return; }
+  if (c.visible && c.activeId === id){ c.visible = false; }
+  else { c.activeId = id; c.visible = true; ui.sel[L] = id; }
+  if (L==='lt' || L==='loc' || L==='soc') autoHide(L);
+  commit(true);
+}
+function step(L, d){
+  const c = cfg()[L]; if (!c.items.length) return;
+  let i = c.items.findIndex(x=>x.id===c.activeId);
+  i = i < 0 ? 0 : (i + d + c.items.length) % c.items.length;
+  c.activeId = c.items[i].id; c.visible = true; ui.sel[L] = c.activeId;
+  if (L==='lt' || L==='loc' || L==='soc') autoHide(L);
+  commit(true);
+}
+function toggle(L){
+  const c = cfg()[L];
+  if (L==='lt'||L==='tt'||L==='loc'||L==='soc'){
+    if (c.visible) c.visible = false;
+    else { if (!c.items.find(x=>x.id===c.activeId)) c.activeId = ui.sel[L] || (c.items[0]||{}).id || ''; c.visible = !!c.activeId; }
+    if (L==='lt' && c.multi && c.visible && !c.items.some(x=>x.on)){ const f = c.items.find(x=>x.id===(ui.sel.lt||c.activeId)) || c.items[0]; if (f) f.on = true; }
+    if (L==='lt' || L==='loc' || L==='soc') autoHide(L);
+  } else {
+    c.visible = !c.visible;
+    if (L==='bug' && c.visible && !(S.logos||[]).length){ c.visible=false; toast('Upload logo dulu di tab Logo'); }
+    if (L==='bug' && c.visible && (c.items||[]).length && !c.items.some(x=>x.on!==false)) c.items[0].on = true;
+  }
+  commit(true);
+}
+function newItem(L){
+  if (L==='lt') return { id:K.uid(), label:'Lower third baru', name:'Nama', role:'Jabatan', extra:'' };
+  if (L==='tt') return { id:K.uid(), label:'Title baru', ar:'', eb:'', title:'Judul', sub:'', info:'' };
+  if (L==='bug') return K.makeBugItem((cfg().bug.items||[]).length);
+  if (L==='loc') return { id:K.uid(), label:'Lokasi baru', cap:'LOKASI', place:'Nama tempat', addr:'Alamat / kota' };
+  if (L==='soc'){ const P = K.SOC_PLAT.website; return { id:K.uid(), label:P.n, plat:'website', cap:P.n, handle:P.h, extra:'', logoId:'', on:true }; }
+  return { id:K.uid(), text:'Pesan baru', on:true };
+}
+async function loadPresets(){ try{ ui.presets = await (await fetch('/utc/api/presets')).json(); }catch(e){ ui.presets=[]; } if(ui.tab==='preset') renderAll(); }
+async function savePreset(name){
+  name = (name||'').replace(/[^a-zA-Z0-9_\- ]/g,'').trim();
+  if (!name){ toast('Isi nama preset (huruf/angka)'); return; }
+  const body = { eventType:S.eventType, config:clone(cfg()), savedAt:Date.now(), app:'UTC KLM Acara' };
+  await fetch('/utc/api/presets/'+encodeURIComponent(name),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  toast('Preset "'+name+'" tersimpan'); loadPresets();
+}
+async function loadPreset(name){
+  let raw;
+  try {
+    const r = await fetch('/utc/api/presets/'+encodeURIComponent(name), { cache:'no-store' });
+    if (!r.ok) throw new Error(r.status === 404 ? 'file preset tidak ditemukan' : 'server menjawab '+r.status);
+    raw = JSON.parse((await r.text()).replace(/^\uFEFF/, ''));
+  } catch(e) { console.error('Preset', name, e); toast('Preset "'+name+'" tidak bisa dibaca: '+(e.message||e)); return; }
+  const p = K.readPreset(clone(raw));
+  if (!p) { toast('Preset "'+name+'" tidak berisi pengaturan acara'); return; }
+  const backup = clone(S), backupSel = clone(ui.sel);
+  try {
+    const c = p.config;
+    // dimuat dalam keadaan tidak tayang
+    for (const k of ['lt','tt','tk','bug','loc','soc']) if (c[k]) c[k].visible = false;
+    c.oc.active = null; c.oc.done = false;
+    S.eventType = p.eventType; S.events[p.eventType] = c;
+    ui.sel = { lt:'', tt:'', loc:'', soc:'' };
+    renderAll();                                   // uji tampilkan dulu; bila gagal → kembalikan seperti semula
+    commit(true);
+    // simpan ulang dalam format terbaru agar pembaruan berikutnya tidak perlu konversi lagi
+    if (JSON.stringify(raw.config) !== JSON.stringify(c) || raw.eventType !== p.eventType)
+      fetch('/utc/api/presets/'+encodeURIComponent(name),{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ eventType:p.eventType, config:c, savedAt:raw.savedAt||Date.now(), app:'UTC KLM Acara', upgradedAt:Date.now() })}).catch(()=>{});
+    toast('Preset "'+name+'" dimuat — tekan TAMPILKAN untuk menayangkan');
+  } catch(e) {
+    console.error('Preset', name, e);
+    S = backup; ui.sel = backupSel; try { renderAll(); } catch(_) {}
+    toast('Preset "'+name+'" gagal dimuat ('+(e.message||e)+'). Pengaturan sekarang tidak diubah.');
+  }
+}
+function readImage(file){
+  return new Promise((ok,fail)=>{
+    const fr = new FileReader();
+    fr.onload = () => {
+      const url = fr.result;
+      if (/svg|gif/.test(file.type)) return ok(url);
+      const im = new Image();
+      im.onload = () => {
+        const max = 1200, s = Math.min(1, max/Math.max(im.width, im.height));
+        if (s === 1 && file.size < 1.5e6) return ok(url);
+        const cv = document.createElement('canvas'); cv.width = Math.round(im.width*s); cv.height = Math.round(im.height*s);
+        cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height); ok(cv.toDataURL('image/png'));
+      };
+      im.onerror = fail; im.src = url;
+    };
+    fr.onerror = fail; fr.readAsDataURL(file);
+  });
+}
+$('#fileLogo').addEventListener('change', async e=>{
+  const files = [...e.target.files]; e.target.value='';
+  for (const f of files){
+    try{
+      const data = await readImage(f);
+      const r = await (await fetch('/utc/api/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:f.name,data})})).json();
+      if (r.error) { toast(r.error); continue; }
+      const id = K.uid(); S.logos = S.logos || [];
+      S.logos.push({ id, url:r.url, file:r.file, name:f.name.replace(/\.[^.]+$/,'') });
+      if (!S.defaultLogo) S.defaultLogo = id;
+    }catch(err){ toast('Gagal upload '+f.name); }
+  }
+  commit(true); toast('Logo terupload');
+});
+$('#fileVideo').addEventListener('change', e=>{ const f = e.target.files[0]; e.target.value=''; if (f) uploadVideo(f); });
+$('#fileImport').addEventListener('change', async e=>{
+  const f = e.target.files[0]; e.target.value=''; if(!f) return;
+  try{
+    const p0 = JSON.parse((await f.text()).replace(/^\uFEFF/, '')); const p = K.readPreset(p0); if(!p) throw 0;
+    p.savedAt = p0.savedAt || Date.now(); p.app = 'UTC KLM Acara';
+    const name = f.name.replace(/\.json$/i,'').replace(/[^a-zA-Z0-9_\- ]/g,'').trim() || 'Impor';
+    await fetch('/utc/api/presets/'+encodeURIComponent(name),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+    toast('Preset diimpor: '+name); loadPresets();
+  }catch(err){ toast('File preset tidak valid'); }
+});
+
+document.addEventListener('click', async e=>{
+  const fb = e.target.closest('.fmt button[data-fmt]');
+  if (fb){ applyFmt(fb.closest('.fmt'), fb.dataset.fmt); return; }
+  const tb = e.target.closest('[data-tab]');
+  if (tb){ ui.tab = tb.dataset.tab; ui.bulk=false; if(ui.tab==='preset') loadPresets(); renderAll(); return; }
+  const mn = e.target.closest('[data-mon]');
+  if (mn){ document.querySelectorAll('[data-mon]').forEach(b=>b.classList.toggle('act',b===mn));
+    $('#scrPvw').classList.toggle('hid', mn.dataset.mon!=='pvw'); $('#scrPgm').classList.toggle('hid', mn.dataset.mon!=='pgm'); return; }
+  const st = e.target.closest('[data-set]');
+  if (st){ const v = st.hasAttribute('data-num') ? Number(st.dataset.v) : st.dataset.v; setP(cfg(), st.dataset.set, v);
+    if (st.dataset.set==='lt.multi') onLtMulti();
+    if (st.dataset.set.endsWith('.layout') || st.dataset.set.endsWith('.light')) ui.n++;
+    commit(true); return; }
+  const din = e.target.closest('[data-in]');
+  if (din && !e.target.closest('[data-act]')){ swCmd({ act:'preview', id: din.dataset.in }); return; }
+  const a = e.target.closest('[data-act]'); if (!a || !S) return;
+  const act = a.dataset.act, L = a.dataset.l, id = a.dataset.id, ev = cfg();
+  const list = L && ev[L] && ev[L].items;
+  const idx = list ? list.findIndex(x=>x.id===id) : -1;
+  switch (act){
+    case 'pick':
+      if (ui.sel[L] !== id){ ui.sel[L] = id; document.querySelectorAll(`.item[data-l="${L}"]`).forEach(x=>x.classList.toggle('sel', x.dataset.id===id)); sendPvw(); }
+      return;
+    case 'take': takeLayer(L, id); break;
+    case 'hide': ev[L].visible = false; commit(true); break;
+    case 'toggle': toggle(L); break;
+    case 'next': step(L, 1); break;
+    case 'prev': step(L, -1); break;
+    case 'hideAll': ['lt','tt','tk','bug','loc','soc'].forEach(k=>ev[k].visible=false); ev.oc.active=null; ev.oc.done=false; commit(true); toast('Semua grafis disembunyikan'); break;
+    case 'ocGo': { const oc = ev.oc; if (oc.active === a.dataset.v) ocOff(); else ocGo(a.dataset.v); break; }
+    case 'ocOff': ocOff(); break;
+    case 'ocKind': ui.ocKind = a.dataset.v; renderAll(); break;
+    case 'ocVid': $('#fileVideo').click(); break;
+    case 'ocVidDel': { if (!confirm('Hapus video ini?')) return; const c = ev.oc[ui.ocKind]; if (c.video && c.video.file) fetch('/utc/api/uploads/'+encodeURIComponent(c.video.file),{method:'DELETE'}); c.video = null; c.type = 'gfx'; commit(true); break; }
+    case 'add': { const it = newItem(L); list.push(it); if (L!=='tk') ui.sel[L]=it.id; commit(true); break; }
+    case 'dup': { const it = Object.assign(clone(list[idx]), { id:K.uid() }); it.label = (it.label||'')+' (salinan)'; list.splice(idx+1,0,it); commit(true); break; }
+    case 'del': { if (!confirm('Hapus item ini?')) return; list.splice(idx,1); if (ev[L].activeId===id) ev[L].visible=false; if (ui.sel[L]===id) ui.sel[L]=''; commit(true); break; }
+    case 'up': if (idx>0){ [list[idx-1],list[idx]]=[list[idx],list[idx-1]]; commit(true);} break;
+    case 'down': if (idx>=0 && idx<list.length-1){ [list[idx+1],list[idx]]=[list[idx],list[idx+1]]; commit(true);} break;
+    case 'bulk': ui.bulk = !ui.bulk; renderAll(); break;
+    case 'bulkAdd': {
+      const lines = ($('#bulkTxt').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
+      lines.forEach(l=>{ const [n,r='',x=''] = l.split('|').map(s=>s.trim()); ev.lt.items.push({ id:K.uid(), label:r||n, name:n, role:r, extra:x }); });
+      ui.bulk=false; commit(true); toast(lines.length+' lower third ditambahkan'); break; }
+    case 'replay': ui.n++; sendPvw(); break;
+    case 'pal': { const p = K.ev(S.eventType).pals[Number(a.dataset.i)]; Object.assign(ev.theme,{pal:Number(a.dataset.i),p:p.p,s:p.s,a:p.a,t:p.t,st:p.st}); commit(true); break; }
+    case 'resetEv': if (confirm('Kembalikan semua pengaturan jenis acara ini ke bawaan?')){ S.events[S.eventType] = K.makeEventConfig(S.eventType); ui.sel={lt:'',tt:''}; commit(true);} break;
+    case 'upload': $('#fileLogo').click(); break;
+    case 'defLogo': S.defaultLogo = id; commit(true); break;
+    case 'delLogo': {
+      if (!confirm('Hapus logo ini?')) return;
+      const l = S.logos.find(x=>x.id===id); S.logos = S.logos.filter(x=>x.id!==id);
+      if (S.defaultLogo===id) S.defaultLogo = (S.logos[0]||{}).id || '';
+      if (l && l.file) fetch('/utc/api/uploads/'+encodeURIComponent(l.file),{method:'DELETE'});
+      commit(true); break; }
+    case 'savePre': savePreset(a.dataset.n || ($('#preName')||{}).value); break;
+    case 'loadPre': loadPreset(a.dataset.n); break;
+    case 'delPre': if (confirm('Hapus preset "'+a.dataset.n+'"?')){ await fetch('/utc/api/presets/'+encodeURIComponent(a.dataset.n),{method:'DELETE'}); loadPresets(); } break;
+    case 'dlPre': { const p = await (await fetch('/utc/api/presets/'+encodeURIComponent(a.dataset.n))).text();
+      const u = URL.createObjectURL(new Blob([p],{type:'application/json'})); const x = document.createElement('a'); x.href=u; x.download=a.dataset.n+'.json'; x.click(); setTimeout(()=>URL.revokeObjectURL(u),1000); break; }
+    case 'importPre': $('#fileImport').click(); break;
+    case 'refreshPre': loadPresets(); break;
+    case 'ipSet': { const t = ipTarget(a.dataset.ip, a.dataset.id); if (t){ t[a.dataset.pk] = a.dataset.v; commit(true); } break; }
+    case 'swCut': swCmd({ act:'cut' }); break;
+    case 'swTake': swCmd({ act:'take' }); break;
+    case 'swPvw': swCmd({ act:'preview', id }); break;
+    case 'swPgm': swCmd({ act:'program', id }); break;
+    case 'swFtb': swCmd({ act:'ftb' }); break;
+    case 'swStudio': swCmd({ act:'studio', on: !SWS.studio }); break;
+    case 'swQ': SWC.quality = a.dataset.v; await swPostCfg({ quality: a.dataset.v }); renderAll(); break;
+    case 'swTr': swSet({ trans: a.dataset.v }, true); renderSw(true); break;
+    case 'swDurQ': swSet({ dur: Number(a.dataset.v) }, true); renderSw(true); break;
+    case 'swType': SWC = Object.assign(SWC||{}, { type: a.dataset.v }); await swPostCfg({ type: a.dataset.v }); renderAll(); break;
+    case 'swSave': {
+      const o = { reconnect: true };
+      if (SWC.type==='obs') o.obs = { host: $('#obsHost').value.trim(), port: Number($('#obsPort').value), password: $('#obsPass').value };
+      if (SWC.type==='vmix') o.vmix = { host: $('#vmHost').value.trim(), port: Number($('#vmPort').value) };
+      await swPostCfg(o); toast('Menghubungkan…'); renderAll(); break; }
+    case 'install':
+      if (deferredPrompt){ deferredPrompt.prompt(); deferredPrompt.userChoice.finally(()=>{ deferredPrompt=null; renderAll(); }); }
+      break;
+    case 'klmAir': { const KH = klmHost(); if (KH && KH.utc) KH.utc.setOnAir(!KH.utc.onAir()); renderAll(); break; }
+    case 'klmInput': { const KH = klmHost(); if (KH && KH.utc) { KH.utc.addInput(); toast('Input "Grafis UTC KLM Acara" ditambahkan di KLM Mix'); } break; }
+    case 'klmImport': { try { const r = await (await fetch('/utc/api/klm/import', { method:'POST' })).json(); toast(r.msg || 'Selesai'); INFO = await (await fetch('/utc/api/info')).json(); loadPresets(); renderAll(); } catch(err) { toast('Impor gagal'); } break; }
+    case 'copy': try{ await navigator.clipboard.writeText(a.dataset.v); toast('URL disalin'); }catch(err){ prompt('Salin URL ini:', a.dataset.v); } break;
+  }
+});
+
+function onField(e){
+  const el = e.target; if (!S) return;
+  if (el.dataset.ip){
+    const t = ipTarget(el.dataset.ip, el.dataset.id); if (!t) return;
+    t[el.dataset.pk] = el.type==='range' ? Number(el.value) : el.value;
+    if (el.type==='range'){ const b = el.parentElement.querySelector('b'); if (b) b.textContent = el.value + (el.dataset.unit||''); }
+    commit(el.tagName==='SELECT'); return;
+  }
+  if (el.dataset.fmt === 's'){ applyFmt(el.closest('.fmt'), 's', el.value); return; }
+  if (el.dataset.monSrc){ setMonSrc(el.dataset.monSrc, el.value); return; }
+  if (el.dataset.sw){
+    const k = el.dataset.sw, v = k==='trans' ? el.value : Number(el.value);
+    if (el.type==='range'){ const b = el.parentElement.querySelector('b'); if (b) b.textContent = el.value + (k==='fps'?' fps':' ms'); }
+    swSet({ [k]: v }, el.tagName==='SELECT'); return;
+  }
+  if (el.id === 'evsel'){ S.eventType = el.value; ensure(el.value); ui.sel={lt:'',tt:''}; ui.bulk=false; commit(true); return; }
+  const val = el.type==='checkbox' ? el.checked : (el.hasAttribute('data-num') ? Number(el.value) : el.value);
+  if (el.dataset.k){
+    setP(cfg(), el.dataset.k, val);
+    if (el.type==='range'){ const b = el.parentElement.querySelector('b'); if (b) b.textContent = el.value + (el.dataset.unit||''); }
+    if (el.dataset.k==='theme.p'||el.dataset.k==='theme.a'||el.dataset.k==='theme.s') cfg().theme.pal = -1;
+    commit(false); if (el.dataset.k==='lt.autoHide') autoHide(); return;
+  }
+  if (el.dataset.it){
+    const it = cfg()[el.dataset.it].items.find(x=>x.id===el.dataset.id);
+    if (it && el.dataset.f==='plat'){
+      const O = K.SOC_PLAT[it.plat] || {}, N = K.SOC_PLAT[val] || K.SOC_PLAT.other;
+      if (!it.cap || it.cap===O.n) it.cap = N.n;
+      if (!it.label || it.label===O.n) it.label = N.n;
+      if (!it.handle || it.handle===O.h) it.handle = N.h;
+      if (!it.extra || it.extra===O.x) it.extra = N.x;
+      it.plat = val; ui.sel.soc = it.id; commit(true); return;
+    }
+    if (it && el.dataset.f==='logoId'){ it.logoId = val; commit(false); return; }
+    if (it){ it[el.dataset.f] = val; if (el.dataset.it!=='tk') ui.sel[el.dataset.it] = it.id; commit(false); }
+    return;
+  }
+  if (el.dataset.logo){ const l = S.logos.find(x=>x.id===el.dataset.logo); if (l){ l.name = val; commit(false); } }
+}
+document.addEventListener('input', onField);
+document.addEventListener('focusout', ()=>{ setTimeout(()=>{ if (ui.pending && !isTyping()){ ui.pending=false; renderAll(); } }, 50); });
+
+function isTyping(){ const a = document.activeElement; return a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.type!=='range' && a.type!=='checkbox'; }
+document.addEventListener('keydown', e=>{
+  if (!S || isTyping() || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key;
+  if (k==='Escape'){ ['lt','tt','tk','bug','loc','soc'].forEach(x=>cfg()[x].visible=false); cfg().oc.active=null; cfg().oc.done=false; commit(true); }
+  else if (k==='g'||k==='G') toggle('loc');
+  else if (k==='s'||k==='S') toggle('soc');
+  else if (k==='o'||k==='O'){ if (cfg().oc.active==='opening') ocOff(); else ocGo('opening'); }
+  else if (k===' ' && SWS.connected) swCmd({ act:'take' });
+  else if ((k==='c'||k==='C') && SWS.connected) swCmd({ act:'cut' });
+  else if (k==='ArrowRight'){ if (!cfg().lt.multi) step('lt',1); }
+  else if (k==='ArrowLeft'){ if (!cfg().lt.multi) step('lt',-1); }
+  else if (k==='h'||k==='H'){ cfg().lt.visible=false; commit(true); }
+  else if (k==='t'||k==='T') toggle('tt');
+  else if (k==='r'||k==='R') toggle('tk');
+  else if (k==='l'||k==='L') toggle('bug');
+  else if (/^[1-9]$/.test(k) && cfg().lt.multi){ const it = cfg().lt.items[Number(k)-1]; if (it) takeLayer('lt', it.id); }
+  else if (/^[1-9]$/.test(k)){ const it = cfg().lt.items[Number(k)-1]; if (it){ const c = cfg().lt; c.activeId=it.id; c.visible=true; ui.sel.lt=it.id; autoHide(); commit(true);} }
+  else return;
+  e.preventDefault();
+});
+
+// ---------- sinkron server ----------
+function fixState(st){
+  if (!st || !st.events) st = Object.assign(K.defaultState(), st && st.logos ? { logos: st.logos, defaultLogo: st.defaultLogo || '' } : {});
+  st.logos = st.logos || []; if (!K.EVENTS.some(e=>e.id===st.eventType)) st.eventType='pengajian';
+  for (const id in st.events) { try { K.normalizeEvent(id, st.events[id]); } catch(e) { console.error('normalize', id, e); } }
+  return st;
+}
+async function init(){
+  try{ INFO = await (await fetch('/utc/api/info')).json(); }catch(e){}
+  try{
+    const r = await (await fetch('/utc/api/state')).json();
+    if (!r.state){ S = K.defaultState(); commit(false); } else { const old = Object.values(r.state.events||{}).some(e=>!e.loc||!e.oc); S = fixState(r.state); if (old) commit(false); }
+  }catch(e){ S = K.defaultState(); }
+  ensure(S.eventType);
+  renderAll();
+  const conn = $('#conn');
+  const connect = () => {
+    const es = new EventSource('/utc/events');
+    es.onopen = () => { conn.classList.add('ok'); conn.querySelector('span').textContent = 'Server aktif • port ' + (INFO.port||location.port); };
+    es.onmessage = ev => {
+      const d = JSON.parse(ev.data);
+      if (d.from === CID || !d.state) return;
+      if (S && JSON.stringify(d.state) === JSON.stringify(S)) return;
+      S = fixState(d.state); ensure(S.eventType);
+      if (isTyping()) { ui.pending = true; renderAir(); sendPvw(); } else renderAll();
+    };
+    es.onerror = () => { conn.classList.remove('ok'); conn.querySelector('span').textContent = 'Terputus — mencoba lagi…'; es.close(); setTimeout(connect, 1500); };
+  };
+  connect();
+}
+// ---------- PWA ----------
+let deferredPrompt = null;
+function isStandalone(){ return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; if (ui.tab==='out') renderAll(); });
+addEventListener('appinstalled', () => { deferredPrompt = null; toast('Aplikasi terpasang ✓'); });
+if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(()=>{});   // KLM Mix: tanpa service worker
+
+// ---------- Switcher OBS / vMix ----------
+let SWS = { type:'none', connected:false, error:'', inputs:[], transitions:[], trans:'Fade', dur:500 }, SWC = { type:'none', obs:{}, vmix:{}, fps:6 };
+const MON = Object.assign({ pvw:'auto', pgm:'auto', stack:false, cam:{ pvw:'', pgm:'' } }, (()=>{ try{ return JSON.parse(localStorage.getItem('klmMon')||'{}'); }catch(e){ return {}; } })());
+MON.pvw = 'gfx'; MON.pgm = 'gfx';      // saat aplikasi dibuka, monitor selalu mulai dari "Grafis saja"
+if (klmHost()) { MON.pvw = 'auto'; MON.pgm = 'auto'; }   // di dalam KLM Mix: langsung tampilkan Preview/Program asli KLM Mix
+const saveMon = () => { try{ localStorage.setItem('klmMon', JSON.stringify(MON)); }catch(e){} };
+const canCap = !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+const media = { pvw:null, pgm:null };
+let camList = [];
+const CAP = { pvw:'Pvw', pgm:'Pgm' };
+
+async function swCmd(c){
+  if (!SWS.connected){ toast(SWS.error || 'Switcher belum terhubung'); return; }
+  try{
+    const r = await (await fetch('/utc/api/sw/cmd',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({ trans:SWS.trans, dur:SWS.dur }, c))})).json();
+    if (!r.ok) toast(r.error || 'Perintah gagal');
+  }catch(e){ toast('Server tidak terjangkau'); }
+}
+async function swPostCfg(o){
+  try{ SWC = await (await fetch('/utc/api/sw/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)})).json(); }catch(e){ toast('Gagal menyimpan pengaturan switcher'); }
+}
+let swPend = {}, swT;
+function swSet(o, now){
+  Object.assign(SWS, o); if (o.fps) SWC.fps = o.fps; Object.assign(swPend, o);
+  clearTimeout(swT); swT = setTimeout(()=>{ const x = swPend; swPend = {}; swPostCfg(x); }, now ? 0 : 300);
+}
+const inLabel = i => i ? ((SWS.type==='vmix' || SWS.type==='klm') ? i.num + '. ' : '') + i.name : '';
+const inById = id => SWS.inputs.find(x=>x.id===id);
+
+// ----- monitor -----
+function srcOpts(ch){
+  const o = [['auto', SWS.type==='klm' ? '🎥 Video asli KLM Mix' : '🎥 Video asli OBS/vMix'],['gfx','✨ Grafis saja']];
+  if (canCap){
+    if (camList.length) camList.forEach((d,i)=>o.push(['cam:'+d.deviceId, '📷 '+(d.label||'Kamera '+(i+1))]));
+    else o.push(['cam','📷 Kamera / capture card…']);
+    o.push(['screen','🖥 Tangkap layar / jendela…']);
+  }
+  const cur = MON[ch]==='cam' ? (camList.length ? 'cam:'+MON.cam[ch] : 'cam') : MON[ch];
+  return o.map(x=>`<option value="${esc(x[0])}" ${x[0]===cur?'selected':''}>${esc(x[1])}</option>`).join('')
+    + (ch==='pgm' ? `<option value="stack" >${MON.stack?'☑':'☐'} Tumpuk grafis di atas video</option>` : '');
+}
+function renderMonHead(){
+  document.querySelectorAll('[data-mon-src]').forEach(el=>{ el.innerHTML = srcOpts(el.dataset.monSrc); });
+  $('#pvwName').textContent = SWS.connected ? inLabel(inById(SWS.preview)) : '';
+  $('#pgmName').textContent = SWS.connected ? inLabel(inById(SWS.program)) : '';
+}
+function stopMedia(ch){ if (media[ch]){ media[ch].getTracks().forEach(t=>t.stop()); media[ch] = null; } }
+async function startMedia(ch, mode){
+  stopMedia(ch);
+  try{
+    let s;
+    // resolusi monitor cukup 960×540 / 720p — jauh lebih ringan dari 1080p, tetap tajam di panel
+    if (mode==='screen') s = await navigator.mediaDevices.getDisplayMedia({ video:{ frameRate:{ ideal:15, max:20 }, width:{ max:1280 }, height:{ max:720 } }, audio:false });
+    else s = await navigator.mediaDevices.getUserMedia({ video: Object.assign({ width:{ideal:960}, height:{ideal:540}, frameRate:{ ideal:30, max:30 } }, MON.cam[ch] ? { deviceId:{ exact: MON.cam[ch] } } : {}), audio:false });
+    media[ch] = s;
+    const v = $('#vid'+CAP[ch]); v.srcObject = s; v.play().catch(()=>{});
+    s.getVideoTracks()[0].addEventListener('ended', ()=>{ media[ch]=null; MON[ch]='auto'; saveMon(); renderMonHead(); applyMon(ch); });
+    if (mode!=='screen'){
+      camList = (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
+      if (!MON.cam[ch]) MON.cam[ch] = (s.getVideoTracks()[0].getSettings()||{}).deviceId || '';
+    }
+  }catch(e){ toast(mode==='screen' ? 'Tangkap layar dibatalkan' : 'Akses kamera ditolak / tidak ada'); MON[ch]='auto'; }
+  saveMon(); renderMonHead(); applyMon(ch);
+}
+function setMonSrc(ch, v){
+  if (v==='stack'){ MON.stack = !MON.stack; saveMon(); renderMonHead(); applyMon(ch); return; }
+  if (v.startsWith('cam')){ MON[ch]='cam'; if (v.length>4) MON.cam[ch] = v.slice(4); saveMon(); startMedia(ch,'cam'); return; }
+  if (v==='screen'){ MON[ch]='screen'; saveMon(); startMedia(ch,'screen'); return; }
+  MON[ch] = v; saveMon(); stopMedia(ch); renderMonHead(); applyMon(ch);
+}
+// ---- gambar asli OBS/vMix: mode tarik (pull) ----
+// Frame berikutnya baru diminta setelah frame sebelumnya selesai digambar, didekode di luar
+// thread utama (createImageBitmap) dan langsung diperkecil seukuran monitor. Tidak ada antrean
+// yang menumpuk, berhenti otomatis saat monitor/tab tidak terlihat.
+const feeds = { pvw:{ tok:0, on:false }, pgm:{ tok:0, on:false } };
+const sleep = ms => new Promise(r=>setTimeout(r, ms));
+async function decodeFrame(blob, W){
+  if (window.createImageBitmap){
+    try { return await createImageBitmap(blob, { resizeWidth: W, resizeQuality: 'medium' }); } catch(e){}
+    try { return await createImageBitmap(blob); } catch(e){}
+  }
+  return await new Promise((ok, fail) => { const u = URL.createObjectURL(blob), im = new Image(); im.onload = () => { URL.revokeObjectURL(u); ok(im); }; im.onerror = () => { URL.revokeObjectURL(u); fail(); }; im.src = u; });
+}
+function startFeed(ch){
+  const f = feeds[ch]; if (f.on) return; f.on = true;
+  const my = ++f.tok, cv = $('#feed'+CAP[ch]), ctx = cv.getContext('2d');
+  const KH = klmHost();
+  if (KH && SWS.type === 'klm'){
+    const src = ch === 'pgm' ? KH.engine.prog : KH.engine.prev;
+    let last = 0;
+    const draw = t => {
+      if (f.tok !== my) return; requestAnimationFrame(draw);
+      if (document.hidden || !cv.offsetParent || t - last < 1000 / Math.max(5, Math.min(30, (SWC && SWC.fps) || 25))) return; last = t;
+      const W = Math.max(160, Math.round(cv.clientWidth * Math.min(2, window.devicePixelRatio || 1))), H = Math.round(W * src.height / src.width);
+      if (cv.width !== W || cv.height !== H){ cv.width = W; cv.height = H; }
+      try { ctx.drawImage(src, 0, 0, W, H); } catch(e) {}
+    };
+    requestAnimationFrame(draw);
+    return;
+  }
+  let seq = 0, fails = 0;
+  (async () => {
+    while (f.tok === my){
+      if (document.hidden || !cv.offsetParent){ await sleep(400); continue; }
+      try{
+        const r = await fetch(`/utc/api/sw/frame/${ch}?since=${seq}`, { cache:'no-store' });
+        if (f.tok !== my) break;
+        if (r.status === 204) continue;
+        if (!r.ok) throw new Error(r.status);
+        seq = Number(r.headers.get('X-Seq')) || seq + 1;
+        const W = Math.max(160, Math.round(cv.clientWidth * Math.min(2, window.devicePixelRatio || 1)));
+        const bmp = await decodeFrame(await r.blob(), W);
+        if (f.tok !== my){ bmp.close && bmp.close(); break; }
+        const w = bmp.width || bmp.naturalWidth, h = bmp.height || bmp.naturalHeight;
+        if (cv.width !== w || cv.height !== h){ cv.width = w; cv.height = h; }
+        ctx.drawImage(bmp, 0, 0); bmp.close && bmp.close();
+        fails = 0;
+      }catch(e){ fails++; await sleep(Math.min(3000, 300 * fails)); }
+    }
+  })();
+}
+function stopFeed(ch){ const f = feeds[ch]; f.tok++; f.on = false; }
+function applyMon(ch){
+  const img = $('#feed'+CAP[ch]), vid = $('#vid'+CAP[ch]);
+  const wantImg = MON[ch]==='auto' && SWS.connected && (SWS.type==='obs' || SWS.snap);
+  if (wantImg) startFeed(ch); else stopFeed(ch);
+  img.classList.toggle('on', !!wantImg);
+  if (MON[ch]!=='cam' && MON[ch]!=='screen') stopMedia(ch);
+  vid.classList.toggle('on', !!media[ch]);
+  const feed = !!wantImg || !!media[ch];
+  try{ $('#'+ch).contentWindow.postMessage({ klmBg: !feed }, '*'); }catch(e){}
+  if (ch==='pgm') $('#pgm').style.visibility = (!feed || MON.stack) ? 'visible' : 'hidden';
+  $(ch==='pgm' ? '#pgmInfo' : '#pvwInfo').style.display = '';
+}
+['pvw','pgm'].forEach(ch => $('#'+ch).addEventListener('load', () => setTimeout(()=>applyMon(ch), 200)));
+
+// ----- bar switcher & strip input -----
+function renderSw(force){
+  renderMonHead();
+  const bar = $('#swbar'), strip = $('#istrip');
+  if (!bar.contains(document.activeElement) || force){
+    if (!SWS.connected){
+      bar.innerHTML = `<span class="dot"></span><span class="hint" style="flex:1">${SWS.type==='none' ? 'Switcher OBS/vMix belum diatur — monitor menampilkan grafis saja.' : esc(SWS.error || 'Belum terhubung')}</span><button data-tab="sw">⚙ Atur Switcher</button>`;
+    } else {
+      bar.innerHTML = `<span class="dot ok" title="${esc(SWS.version)}"></span>
+        <select data-sw="trans" title="Jenis transisi">${SWS.transitions.map(t=>`<option ${t===SWS.trans?'selected':''}>${esc(t)}</option>`).join('')}</select>
+        <label class="mini"><input type="number" data-sw="dur" min="0" max="20000" step="50" value="${SWS.dur}" style="width:84px"> ms</label>
+        <button class="bigcut" data-act="swCut" title="Pintasan: C">CUT</button>
+        <button class="bigtake" data-act="swTake" title="Pintasan: Spasi">TAKE ▶</button>`;
+    }
+  }
+  strip.innerHTML = SWS.connected ? SWS.inputs.map(i=>`<button class="${i.id===SWS.program?'is-pgm':i.id===SWS.preview?'is-pvw':''}" data-in="${esc(i.id)}" title="Klik = Preview • Klik 2x = langsung Program"><span class="n">${SWS.type==='obs'?'SCENE '+i.num:'INPUT '+i.num}</span>${esc(i.name)}</button>`).join('') : '';
+  if (ui.tab==='sw' && !isTyping()) {
+    const pnl = $('#panel'); if (pnl) { pnl.innerHTML = pSW(); refreshThumbs(); }
+  }
+}
+document.addEventListener('dblclick', e => { const d = e.target.closest('[data-in]'); if (d && !e.target.closest('[data-act]')) swCmd({ act:'program', id: d.dataset.in }); });
+
+const thumbCache = {};     // id -> { v, url } — hanya unduh thumbnail yang berubah
+let thumbBusy = false;
+async function refreshThumbs(){
+  if (ui.tab!=='sw' || !SWS.connected || thumbBusy || document.hidden) return;
+  thumbBusy = true;
+  try{
+    for (const im of [...document.querySelectorAll('img[data-thumb]')]){
+      const id = im.dataset.thumb, c = thumbCache[id];
+      if (c && im.src !== c.url){ im.src = c.url; im.style.opacity = 1; }
+      const r = await fetch('/utc/api/sw/thumb?id=' + encodeURIComponent(id) + '&v=' + (c ? c.v : ''), { cache:'no-store' });
+      if (r.status !== 200) continue;
+      const url = URL.createObjectURL(await r.blob());
+      if (c) URL.revokeObjectURL(c.url);
+      thumbCache[id] = { v: r.headers.get('X-V'), url };
+      document.querySelectorAll('img[data-thumb]').forEach(x => { if (x.dataset.thumb === id){ x.src = url; x.style.opacity = 1; } });
+    }
+  }catch(e){}
+  thumbBusy = false;
+}
+setInterval(refreshThumbs, 2500);
+
+// ----- tab Switcher -----
+function pSW(){
+  const c = SWC || { type:'none', obs:{}, vmix:{} }, t = c.type;
+  const stat = t==='none' ? 'Tidak memakai switcher' : SWS.connected ? `<span class="dot ok"></span> Terhubung • ${esc(SWS.version)} • ${SWS.inputs.length} ${t==='obs'?'scene':'input'}${t==='vmix' && !SWS.snap ? ' • gambar monitor: vMix di PC lain' : ''}` : `<span class="dot"></span> ${esc(SWS.error || 'Belum terhubung')}`;
+  const conn = `<div class="box"><h3>Koneksi Switcher</h3>
+    <div class="chips" style="margin-bottom:12px">${[['klm','KLM Mix (aplikasi ini)'],['obs','OBS Studio'],['vmix','vMix'],['none','Tidak dipakai']].map(x=>`<button class="chip ${t===x[0]?'act':''}" data-act="swType" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>
+    ${t==='klm' ? `<div class="hint" style="font-size:13px;color:var(--tx)">Switcher memakai <b>KLM Mix</b> langsung: daftar input, Preview, Program, transisi & durasi KLM Mix. Grafis UTC KLM Acara otomatis tampil di Program KLM Mix (lapisan <b>UTC ON AIR</b>) — tidak perlu Browser Source.</div>` : ''}
+    ${t==='obs' ? `<div class="grid3">
+        <label class="fld">IP / host PC OBS<input id="obsHost" value="${esc(c.obs.host||'127.0.0.1')}"></label>
+        <label class="fld">Port<input id="obsPort" type="number" value="${c.obs.port||4455}"></label>
+        <label class="fld">Password WebSocket<input id="obsPass" type="password" autocomplete="off" placeholder="${c.obs.hasPass?'•••••• (tersimpan)':'kosongkan jika tanpa password'}"></label></div>
+      <div class="hint" style="margin-top:8px">Di OBS: <b>Tools → WebSocket Server Settings</b> → centang <i>Enable WebSocket server</i> → <i>Show Connect Info</i> untuk melihat port & password. OBS di PC yang sama = <code>127.0.0.1</code>.</div>` : ''}
+    ${t==='vmix' ? `<div class="grid2">
+        <label class="fld">IP / host PC vMix<input id="vmHost" value="${esc(c.vmix.host||'127.0.0.1')}"></label>
+        <label class="fld">Port Web Controller<input id="vmPort" type="number" value="${c.vmix.port||8088}"></label></div>
+      <div class="hint" style="margin-top:8px">Di vMix: <b>Settings → Web Controller</b> → centang <i>Enable</i> (port 8088). Gambar asli Preview/Program diambil otomatis bila vMix berjalan di PC yang sama dengan server ini (host <code>127.0.0.1</code>). Jika vMix di PC lain, kontrol input & transisi tetap jalan — untuk gambar monitor pilih sumber "Kamera / capture card" atau "Tangkap layar" di kepala monitor.</div>` : ''}
+    ${t!=='none' ? `<h4>Kualitas gambar monitor</h4>
+      <div class="chips">${[['hemat','Hemat (paling ringan)'],['normal','Normal'],['tajam','Tajam']].map(x=>`<button class="chip ${(c.quality||'normal')===x[0]?'act':''}" data-act="swQ" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>
+      <div class="hint" style="margin-top:6px">Gambar dikompres otomatis sesuai pilihan ini, hanya dikirim saat monitor terlihat, dan frame yang tidak berubah tidak dikirim ulang. ${t==='obs'?'':'Gambar paling mulus di PC: tekan <b>External</b> di vMix (atau <b>Start Virtual Camera</b> di OBS), lalu pilih sumber monitor "📷 Kamera" → <i>vMix Video</i> / <i>OBS Virtual Camera</i>.'}</div>
+      <label class="fld rg" style="margin-top:12px;max-width:360px"><span>Kelancaran gambar monitor <b>${c.fps||6} fps</b></span><input type="range" data-sw="fps" min="1" max="${t==='vmix'?8:25}" step="1" value="${c.fps||6}"></label>
+      <div class="bar" style="margin-top:12px"><button class="installbtn" data-act="swSave">Simpan & Hubungkan</button></div>` : ''}
+    <div class="hint" style="margin-top:10px;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--tx)">${stat}</div></div>`;
+  if (t==='none' || !SWS.connected) return conn;
+  const durs = [0,250,500,800,1000,1500,2000,3000];
+  const trans = `<div class="box"><h3>Transisi antar input</h3>
+    <h4>Jenis transisi</h4><div class="chips">${SWS.transitions.map(x=>`<button class="chip ${x===SWS.trans?'act':''}" data-act="swTr" data-v="${esc(x)}">${esc(x)}</button>`).join('')}</div>
+    ${t==='obs' ? '<div class="hint" style="margin-top:6px">Tambah transisi lain (Swipe, Slide, Stinger, Luma Wipe, Fade to Color) di dock <b>Scene Transitions</b> OBS (tombol +) — otomatis muncul di sini.</div>' : ''}
+    <h4>Durasi transisi</h4>
+    <div class="grid2"><label class="fld rg"><span>Durasi <b>${SWS.dur} ms</b></span><input type="range" data-sw="dur" min="0" max="5000" step="50" value="${SWS.dur}"></label>
+      <div class="durs">${durs.map(d=>`<button class="${d===Number(SWS.dur)?'installbtn':''}" data-act="swDurQ" data-v="${d}">${d} ms</button>`).join('')}</div></div>
+    <div class="bar" style="margin-top:14px">
+      <button class="bigcut" data-act="swCut">CUT</button>
+      <button class="bigtake" data-act="swTake">TAKE ▶ ${esc(SWS.trans)} • ${SWS.dur} ms</button>
+      ${t==='obs' ? `<button data-act="swStudio">${SWS.studio?'Matikan':'Aktifkan'} Studio Mode OBS</button>` : ''}
+      ${t==='vmix' || t==='klm' ? '<button data-act="swFtb">Fade to Black</button>' : ''}
+    </div>
+    ${t==='obs' && !SWS.studio ? '<div class="hint" style="margin-top:8px">Studio Mode OBS mati: Preview dikelola oleh aplikasi ini (pilih scene → TAKE).</div>' : ''}
+  </div>`;
+  const grid = `<div class="box"><h3>${t==='obs'?'Scene':'Input'} (${SWS.inputs.length})</h3>
+    <div class="hint" style="margin-bottom:10px">Klik kartu = kirim ke <b style="color:#7ef0a8">Preview</b> • <b>PROGRAM ▶</b> / klik 2x = langsung tayang dengan transisi terpilih</div>
+    <div class="ingrid">${SWS.inputs.map(i=>{ const cl = i.id===SWS.program?'is-pgm':i.id===SWS.preview?'is-pvw':''; return `<div class="inc ${cl}" data-in="${esc(i.id)}">
+      <div class="th"><img data-thumb="${esc(i.id)}" alt="" ${thumbCache[i.id]?`src="${thumbCache[i.id].url}"`:'style="opacity:0"'}><span class="lb">${cl==='is-pgm'?'PGM':cl==='is-pvw'?'PVW':''}</span></div>
+      <div class="nm2">${t!=='obs'?i.num+'. ':''}${esc(i.name)}</div>
+      <div class="bt"><button data-act="swPvw" data-id="${esc(i.id)}">PREVIEW</button><button data-act="swPgm" data-id="${esc(i.id)}">PROGRAM ▶</button></div></div>`; }).join('')}</div></div>`;
+  return trans + grid + conn;
+}
+
+async function initSw(){
+  try{ const r = await (await fetch('/utc/api/sw')).json(); SWC = r.config; SWS = r.status; }catch(e){}
+  renderSw(true); applyMon('pvw'); applyMon('pgm');
+  let wasConn = SWS.connected;
+  const go = () => {
+    const es = new EventSource('/utc/api/sw/events');
+    es.onmessage = ev => {
+      const d = JSON.parse(ev.data);
+      const conn = d.connected, keep = { trans: SWS.trans, dur: SWS.dur };
+      SWS = d; if (Object.keys(swPend).length) Object.assign(SWS, keep);
+      if (SWC) SWC.type = d.type;
+      if (conn !== wasConn){ wasConn = conn; ['pvw','pgm'].forEach(ch=>{ stopFeed(ch); applyMon(ch); }); }
+      renderSw();
+    };
+    es.onerror = () => { es.close(); setTimeout(go, 2000); };
+  };
+  go();
+}
+initSw();
+init();
+})();
+</script>
+</body>
+</html>

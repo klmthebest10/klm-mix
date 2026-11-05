@@ -194,8 +194,25 @@
     SetPerformanceMode: (p) => { KM.perf.apply(String(p.Value || 'seimbang').toLowerCase()); return true; },
     DuckingOn: () => { (KM.settings.duck = KM.settings.duck || {}).on = true; KM.saveSettings(); return true; },
     DuckingOff: () => { (KM.settings.duck = KM.settings.duck || {}).on = false; KM.saveSettings(); return true; },
-    SetReverb: (p) => KM.audio.set(need(inp(p)), 'rv', KM.clamp(num(p.Value, 0) / 100, 0, 1))
+    SetReverb: (p) => KM.audio.set(need(inp(p)), 'rv', KM.clamp(num(p.Value, 0) / 100, 0, 1)),
+
+    // ---- UTC KLM Acara (grafis acara asli: lower third, title, running text, logo, lokasi, sosmed, opening/closing) ----
+    // Value = lt | title | ticker | logo | loc | soc
+    UTCShow: (p) => utc('show', p.Value), UTCHide: (p) => utc('hide', p.Value), UTCToggle: (p) => utc('toggle', p.Value),
+    UTCNext: (p) => utc('next', p.Value || 'lt', { show: bool(p.Show == null ? 'true' : p.Show) }),
+    UTCPrevious: (p) => utc('prev', p.Value || 'lt', { show: bool(p.Show == null ? 'true' : p.Show) }),
+    UTCSelect: (p) => utc('select', p.Value || 'lt', { name: p.Name != null ? p.Name : p.SelectedIndex }),   // Name = nomor urut / nama / label
+    UTCSetText: (p) => utc('settext', p.Target || p.Input || 'lt', { field: p.SelectedName || 'name', text: p.Value || '' }),
+    UTCHideAll: () => utc('hideall'), UTCOpening: () => utc('opening'), UTCClosing: () => utc('closing'), UTCOpeningClosingOff: () => utc('ocoff'),
+    UTCEvent: (p) => utc('event', '', { name: p.Value }), UTCPreset: (p) => utc('preset', '', { name: p.Value }),
+    UTCOnAir: () => { KM.utc.setOnAir(); return true; }, UTCOnAirOn: () => { KM.utc.setOnAir(true); return true; }, UTCOnAirOff: () => { KM.utc.setOnAir(false); return true; },
+    UTCReload: () => { KM.utc.reload(); return true; }
   };
+  async function utc(cmd, target, extra) {
+    const r = await KM.utc.cmd(cmd, target, extra);
+    if (!r || !r.ok) throw new Error((r && r.msg) || 'Perintah UTC gagal');
+    return true;
+  }
   function ptzSpd(p) { return p.Value != null ? { speed: num(p.Value, 8) } : {}; }
   // OverlayInput1..4 (+In/Out/Off)
   for (let n = 1; n <= 4; n++) {
@@ -229,7 +246,7 @@
     },
     xml() {
       const x = (s) => KM.esc(s);
-      const TN = { video: 'Video', image: 'Image', colour: 'Colour', camera: 'Capture', klmcam: 'Capture', screen: 'DesktopCapture', title: 'GT', audio: 'AudioFile', audiofile: 'AudioFile', list: 'VideoList', browser: 'Browser', replay: 'Replay', virtualset: 'VirtualSet', bars: 'Colour', urlvideo: 'Video', stream: 'Stream', call: 'VideoCall' };
+      const TN = { utc: 'Browser', video: 'Video', image: 'Image', colour: 'Colour', camera: 'Capture', klmcam: 'Capture', screen: 'DesktopCapture', title: 'GT', audio: 'AudioFile', audiofile: 'AudioFile', list: 'VideoList', browser: 'Browser', replay: 'Replay', virtualset: 'VirtualSet', bars: 'Colour', urlvideo: 'Video', stream: 'Stream', call: 'VideoCall' };
       let s = '<vmix><version>27.0.0.0</version><edition>KLM Mix ' + KM.version + '</edition><preset></preset><inputs>';
       S.inputs.forEach((i, n) => {
         const m = KM.inputs.media(i);

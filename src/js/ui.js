@@ -75,8 +75,32 @@
     playlist: () => { UI.dockTab('playlist'); KM.playlist.running ? KM.playlist.stop() : KM.playlist.start(); },
     'replay-toggle': () => { UI.dockTab('replay'); KM.replay.setEnabled(); },
     'ovl-off': () => KM.engine.overlayAllOff(),
-    ndi: async () => { if (S.ndiOut) return KM.rec.stopNdi(); const r = await KM.rec.startNdi(); if (!r) KM.dialogs.settings('ndi'); }
+    ndi: async () => { if (S.ndiOut) return KM.rec.stopNdi(); const r = await KM.rec.startNdi(); if (!r) KM.dialogs.settings('ndi'); },
+    'utc-panel': () => UI.utcPanel(), 'utc-close': () => UI.utcPanel(false),
+    'utc-air': () => KM.utc.setOnAir(), 'utc-reload': () => { KM.utc.reload(); KM.toast('Renderer grafis UTC dimuat ulang'); },
+    'utc-window': () => { UI.utcPanel(false); const w = window.open('/utc', 'klm_utc_panel'); if (!w) KM.toast('Jendela diblokir', 'warn'); }
   };
+
+  // ---------- workspace UTC KLM Acara (panel asli, lengkap) ----------
+  UI.utcPanel = function (show) {
+    const ws = $('#utcWs'); show = show == null ? ws.hidden : !!show;
+    if (show && !ws._frame) {
+      const f = document.createElement('iframe'); f.id = 'utcFrame'; f.src = '/utc'; f.allow = 'camera; microphone; display-capture; clipboard-write; fullscreen';
+      f.addEventListener('load', () => {
+        try { f.contentWindow.addEventListener('keydown', (e) => { if (e.key === 'F9') { e.preventDefault(); UI.utcPanel(false); } }); } catch (e) {}
+      });
+      ws.querySelector('.utc-body').appendChild(f); ws._frame = f; // dibiarkan hidup: state panel tidak hilang saat ditutup
+    }
+    ws.hidden = !show;
+    if (show) { try { ws._frame.contentWindow.focus(); } catch (e) {} }
+    updateUtc();
+  };
+  function updateUtc() {
+    const on = KM.utc.onAir();
+    ['#bb-utc', '#ws-utc-air'].forEach((s) => { const b = $(s); if (b) b.classList.toggle('on', on); });
+    const l = $('#utcLive'); if (l) l.innerHTML = KM.utc.liveInfo();
+  }
+  KM.on('change', (w) => { if (w === 'utc') updateUtc(); });
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-act]');
     if (b && ACT[b.dataset.act]) { e.preventDefault(); ACT[b.dataset.act](); b.closest('.dd') && b.closest('.dd').classList.remove('open'); }
@@ -231,6 +255,7 @@
     $('#st-res').textContent = KM.settings.width + '×' + KM.settings.height + ' ' + KM.settings.fps + 'p';
     $('#st-perf').textContent = KM.perf.label();
     $('#bb-ndi').classList.toggle('on', !!S.ndiOut);
+    updateUtc();
   }
   function tickStatus() {
     const d = new Date();
@@ -268,6 +293,8 @@
       if (e.ctrlKey && k.toLowerCase() === 'r') { e.preventDefault(); return KM.rec.toggleRecording(); }
       if (e.ctrlKey && k.toLowerCase() === 'l') { e.preventDefault(); return KM.rec.toggleStreaming(); }
       if (e.ctrlKey || e.altKey || e.metaKey) return;
+      if (k === 'F9') { e.preventDefault(); return UI.utcPanel(); }
+      if (k === 'Escape' && !$('#utcWs').hidden) return UI.utcPanel(false);
       if (/^F[1-4]$/.test(k)) { e.preventDefault(); const n = +k[1] - 1, ch = S.overlays[n]; const on = ch.phase === 'in' || ch.phase === 'on'; return KM.engine.overlay(n, on ? null : S.previewId, on ? 'out' : 'in'); }
       if (/^[0-9]$/.test(e.code.replace('Digit', '')) && e.code.startsWith('Digit')) {
         const n = e.code === 'Digit0' ? 10 : +e.code.slice(5);

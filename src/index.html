@@ -33,6 +33,7 @@
           <button data-act="open-rec-folder">Buka folder rekaman</button>
         </div>
       </div>
+      <button class="mbtn utcbtn" data-act="utc-panel" title="Panel lengkap UTC KLM Acara: lower third, title, running text, logo, lokasi, sosmed, opening/closing, preset (F9)">🎬 UTC KLM Acara</button>
       <button class="mbtn" data-act="settings">⚙ Pengaturan</button>
       <button class="mbtn" data-act="phone">📱 HP & Jaringan</button>
       <button class="mbtn" data-act="help">❔ Bantuan</button>
@@ -86,7 +87,8 @@
     <aside id="dock">
       <div class="dtabs">
         <button data-tab="audio" class="on">🎚 Audio</button>
-        <button data-tab="title">🅃 Title UTC</button>
+        <button data-tab="utc">🎬 UTC Acara</button>
+        <button data-tab="title">🅃 Title Cepat</button>
         <button data-tab="replay">⏪ Replay</button>
         <button data-tab="phone">📱 KLMCAM</button>
         <button data-tab="playlist">📃 Playlist</button>
@@ -94,6 +96,7 @@
         <button data-tab="script">⚡ Skrip</button>
       </div>
       <div class="dbody" id="dock-audio"></div>
+      <div class="dbody" id="dock-utc" hidden></div>
       <div class="dbody" id="dock-title" hidden></div>
       <div class="dbody" id="dock-replay" hidden></div>
       <div class="dbody" id="dock-phone" hidden></div>
@@ -114,6 +117,8 @@
     <button class="bb" data-act="replay-toggle" id="bb-rp"><i class="dot"></i>Replay</button>
     <button class="bb" data-act="ndi" id="bb-ndi" title="Output NDI (juga virtual camera via NDI Webcam)"><i class="dot"></i>NDI / VCam</button>
     <span class="sep"></span>
+    <button class="bb utc" data-act="utc-air" id="bb-utc" title="Tampilkan / sembunyikan grafis UTC KLM Acara di Program (lapisan di atas Overlay 1–4)"><i class="dot"></i>UTC ON AIR</button>
+    <span class="sep"></span>
     <span class="ovl-lbl">Overlay</span>
     <button class="bb ov" data-ov="0" id="bb-ov0">1</button>
     <button class="bb ov" data-ov="1" id="bb-ov1">2</button>
@@ -124,6 +129,17 @@
     <button class="bb" data-act="snapshot">📸 Snapshot</button>
     <button class="bb" data-act="settings-stream">⚙ Stream</button>
   </footer>
+</div>
+<div id="utcWs" hidden>
+  <div class="utc-head">
+    <b>🎬 UTC KLM Acara</b><span class="muted" id="utcLive"></span>
+    <span class="grow"></span>
+    <button class="bb utc" data-act="utc-air" id="ws-utc-air"><i class="dot"></i>UTC ON AIR</button>
+    <button class="bb" data-act="utc-window" title="Buka panel di jendela sendiri (mis. di monitor ke-2)">⧉ Jendela terpisah</button>
+    <button class="bb" data-act="utc-reload" title="Muat ulang renderer grafis">⟳</button>
+    <button class="bb add" data-act="utc-close" title="Kembali ke mixer (Esc / F9)">✕ Kembali ke Mixer</button>
+  </div>
+  <div class="utc-body"></div>
 </div>
 <div id="modal-root"></div>
 
@@ -139,6 +155,7 @@
 <script src="/src/js/replay.js"></script>
 <script src="/src/js/api.js"></script>
 <script src="/src/js/link.js"></script>
+<script src="/src/js/utc.js"></script>
 <script src="/src/js/ptz.js"></script>
 <script src="/src/js/script.js"></script>
 <script src="/src/js/designer.js"></script>

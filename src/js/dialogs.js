@@ -42,7 +42,7 @@
   D.qr = (text) => h('div.qr', { html: window.KMQR ? KMQR.svg(text, { border: 2 }) : '' });
 
   // =================== TAMBAH INPUT ===================
-  const ORDER = ['video', 'image', 'list', 'camera', 'klmcam', 'stream', 'call', 'screen', 'title', 'audio', 'audiofile', 'colour', 'bars', 'browser', 'virtualset', 'replay', 'urlvideo'];
+  const ORDER = ['video', 'image', 'list', 'camera', 'klmcam', 'stream', 'call', 'screen', 'utc', 'title', 'audio', 'audiofile', 'colour', 'bars', 'browser', 'virtualset', 'replay', 'urlvideo'];
   D.addInput = function (preset) {
     const form = h('div', { style: { marginTop: '12px' } });
     let current = null, creator = null;
@@ -65,6 +65,11 @@
   };
 
   const FORMS = {
+    utc(form) {
+      form.append(h('div.sec', h('p', 'Grafis asli UTC KLM Acara (lower third, title, running text, logo, lokasi, sosmed, opening/closing) sebagai input transparan — pakai untuk Overlay 1–4, layer PiP, atau multiview.'),
+        h('p.muted', 'Tanpa input ini pun grafis UTC sudah tampil di Program lewat lapisan UTC ON AIR. Atur isinya di 🎬 UTC KLM Acara (F9).')));
+      return () => { KM.utc.addInput(); };
+    },
     stream(form) {
       const o = { source: 'listen-rtmp', url: '', mode: 'copy', latency: 120, maxLag: 0.6, ndiName: '', ndiLow: false, key: 'klm' + Math.floor(Math.random() * 900 + 100) };
       const urls = phoneUrls(), ip = urls[0] ? urls[0].ip : '127.0.0.1';

@@ -201,3 +201,24 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
 .ctx button:hover { background: var(--acc); }
 
 @media (max-width: 1300px) { #lower { --dockw: 400px; } #stage { grid-template-columns: 1fr 128px 1fr; } }
+
+/* ---------- UTC KLM Acara (menyatu) ---------- */
+.mbtn.utcbtn { background: linear-gradient(135deg, #b45309, #d97706); color: #fff; font-weight: 600; }
+.mbtn.utcbtn:hover { background: linear-gradient(135deg, #c2410c, #f59e0b); }
+.bb.utc.on { background: #b45309; border-color: #f59e0b; color: #fff; }
+.bb.utc.on .dot { background: #fde68a; box-shadow: 0 0 6px #fbbf24; }
+#utcWs { position: fixed; left: 0; right: 0; top: 40px; bottom: 0; z-index: 50; display: flex; flex-direction: column; background: #0b0d12; }
+#utcWs[hidden] { display: none; }
+#utcWs .utc-head { display: flex; align-items: center; gap: 8px; padding: 5px 8px; background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
+#utcWs .utc-head .muted { font-size: 12px; margin-left: 8px; }
+#utcWs .utc-body { flex: 1; min-height: 0; position: relative; }
+#utcWs iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #0b0d12; }
+.utcq .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.utcq .tg { padding: 9px 4px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--tx); font-weight: 600; font-size: 12px; }
+.utcq .tg.on { background: #b45309; border-color: #f59e0b; color: #fff; box-shadow: 0 0 0 1px #f59e0b inset; }
+.utcq .items { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.utcq .items button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.utcq .items button.act { border-color: #f59e0b; color: #fde68a; }
+.utcq .live { font-size: 12px; color: var(--tx2); margin: 6px 0; }
+.utcq .live b { color: var(--tx); }
+.utcq .air { width: 100%; padding: 10px; font-weight: 700; font-size: 14px; }

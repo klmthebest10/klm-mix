@@ -63,7 +63,7 @@
     $('ftb').classList.toggle('red', !!S.ftb);
     if (tab === 'input') renderInputs();
     if (tab === 'overlay') renderOverlays();
-    if (tab === 'title') renderTitle(force);
+    if (tab === 'title') { renderUtc(); renderTitle(force); }
     if (tab === 'audio') renderAudio(force);
     if (tab === 'more') renderMore();
   }
@@ -88,10 +88,26 @@
       if (o.on) fn('OverlayInput' + (n + 1) + 'Out'); else if (sel) fn('OverlayInput' + (n + 1) + 'In', { Input: sel }); else KMP.toast('Pilih input');
     });
   }
+  // ---------- UTC KLM Acara (grafis acara asli) ----------
+  function renderUtc() {
+    const box = $('utcBox'), u = S.utc;
+    const sig = JSON.stringify(u);
+    if (box._sig === sig) return; box._sig = sig;
+    const vis = (u && u.visible) || {};
+    const names = [['lt', 'Lower Third'], ['tt', 'Title'], ['tk', 'Running Text'], ['bug', 'Logo'], ['loc', 'Lokasi'], ['soc', 'Sosmed']];
+    const url = KMP.page('utc');
+    box.innerHTML = `<div class="card"><div class="row" style="align-items:center"><b style="flex:1">🎬 UTC KLM Acara</b><span class="pill ${u && u.onAir ? 'ok' : 'warn'}" style="flex:none">${u && u.onAir ? 'ON AIR' : 'OFF'}</span></div>
+      <p class="muted" style="margin:6px 0 8px">${u ? esc(u.eventName || '') : 'Menunggu PC…'}</p>
+      <div class="row" style="flex-wrap:wrap;gap:6px">${names.map(([k, l]) => `<button data-utc="${k}" class="${vis[k] ? 'pri' : ''}" style="flex:1 1 30%">${vis[k] ? '● ' : ''}${l}</button>`).join('')}</div>
+      <div class="row" style="margin-top:6px"><button data-uf="UTCPrevious">◀ LT</button><button data-uf="UTCNext">LT ▶</button><button data-uf="UTCOpening">Opening</button><button data-uf="UTCClosing">Closing</button><button data-uf="UTCHideAll">⛔ OFF</button></div>
+      <a href="${url}" style="display:block;margin-top:10px"><button class="pri" style="width:100%">Buka Panel Lengkap UTC KLM Acara</button></a></div>`;
+    box.querySelectorAll('[data-utc]').forEach((b) => { b.onclick = () => fn('UTCToggle', { Value: b.dataset.utc }); });
+    box.querySelectorAll('[data-uf]').forEach((b) => { b.onclick = () => fn(b.dataset.uf, { Value: 'lt' }); });
+  }
   function renderTitle(force) {
     const box = $('titleBox');
     const titles = S.inputs.filter((i) => i.title_);
-    if (!titles.length) { box.innerHTML = '<div class="card"><p>Belum ada input Title di PC.</p><button class="pri" id="addT" style="width:100%">＋ Tambah Lower Third</button></div>'; $('addT').onclick = () => fn('AddInput', { Value: 'title|lt-klasik' }); return; }
+    if (!titles.length) { box.innerHTML = '<div class="card"><p class="muted">Title Cepat (kanvas): belum ada.</p><button id="addT" style="width:100%">＋ Tambah Title Cepat</button></div>'; $('addT').onclick = () => fn('AddInput', { Value: 'title|lt-klasik' }); return; }
     let t = titles.find((x) => x.id === titleId) || titles[0]; titleId = t.id;
     const active = document.activeElement && box.contains(document.activeElement) && document.activeElement.dataset.k;
     const sig = t.id + t.title_.template + titles.length;

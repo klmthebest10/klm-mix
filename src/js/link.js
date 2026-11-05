@@ -11,7 +11,7 @@
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(proto + '//' + location.host + '/ws');
     L.ws = ws;
-    ws.onopen = () => { L.connected = true; send({ t: 'hello', role: 'mixer', name: 'KLM Mix' }); KM.changed('link'); };
+    ws.onopen = () => { L.connected = true; send({ t: 'hello', role: 'mixer', name: 'KLM Mix' }); setTimeout(() => pushState(true), 300); KM.changed('link'); };
     ws.onclose = () => { L.connected = false; KM.changed('link'); setTimeout(L.connect, 1500); };
     ws.onerror = () => {};
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (_) { return; } onMsg(m); };
@@ -62,6 +62,17 @@
       case 'get-state': pushState(true, m.from); break;
       case 'sub': { const p = L.peers.get(m.from); if (p) p.sub = { mon: !!m.mon, inputs: !!m.inputs, rate: m.rate || 400 }; break; }
       case 'snap-input': sendInputThumbs(m.from); break;
+      case 'utc-status': KM.utc && KM.utc.onStatus(m.status); break;
+      case 'utc-shot': { // gambar untuk switcher panel UTC (dibuka dari HP/peramban)
+        let data = '';
+        try {
+          const inp = m.id ? KM.getInput(m.id) : null;
+          const src = inp ? inp.rt.thumb : (m.ch === 'pgm' ? KM.engine.prog : KM.engine.prev);
+          if (src && src.width) { const w = Math.min(m.w || 854, src.width * 2), h = Math.round(w * src.height / src.width); data = shot(src, w, h, m.q || 0.65).split(',')[1]; }
+        } catch (e) {}
+        send({ t: 'utc-res', reqId: m.reqId, ok: !!data, data });
+        break;
+      }
     }
   }
 
@@ -182,12 +193,15 @@
       transitions: KM.settings.transitions, tbar: S.tbar,
       master: A.master ? { vol: A.master.vol, mute: A.master.muted } : null,
       replay: { enabled: KM.replay.enabled, events: KM.replay.events.map((e) => ({ id: e.id, name: e.name, sec: e.sec })), playing: KM.replay.playing, speed: KM.replay.speed },
-      playlist: { running: KM.playlist.running, idx: KM.playlist.idx, len: KM.playlist.items.length }
+      playlist: { running: KM.playlist.running, idx: KM.playlist.idx, len: KM.playlist.items.length },
+      utc: KM.utc && KM.utc.status ? { onAir: KM.utc.onAir(), eventName: KM.utc.status.eventName, visible: KM.utc.status.visible, oc: KM.utc.status.oc ? KM.utc.status.oc.kind : null } : null
     };
   }
   L.snapState = snapState;
   function pushState(force, to) {
-    if (!force && !hasRemote()) return;
+    // selalu ke server: switcher panel UTC KLM Acara memakai daftar input & preview/program KLM Mix
+    if (!force && !hasRemote() && Date.now() - (pushState.t || 0) < 250) { clearTimeout(pushState.tm); pushState.tm = setTimeout(() => pushState(false), 260); return; }
+    pushState.t = Date.now();
     const msg = { t: 'state', state: snapState() };
     if (to) msg.to = to; else msg.bcast = 'remote';
     send(msg);

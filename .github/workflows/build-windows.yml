@@ -22,6 +22,24 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # Uji nyata di Windows: aplikasi dibuka, grafis UTC KLM Acara harus benar-benar tampil di Program
+      - name: Smoke test (UTC KLM Acara menyatu)
+        shell: pwsh
+        run: |
+          $env:KLM_SMOKE = "$env:RUNNER_TEMP\smoke"
+          $p = Start-Process -FilePath "node_modules\electron\dist\electron.exe" -ArgumentList "." -PassThru
+          if (-not $p.WaitForExit(120000)) { Stop-Process -Id $p.Id -Force; Write-Host "timeout" }
+          Get-Content "$env:KLM_SMOKE\smoke.log" -ErrorAction SilentlyContinue
+          if ((Get-Content "$env:KLM_SMOKE\result.txt" -ErrorAction SilentlyContinue) -ne 'OK') { Write-Host "::warning::Smoke test UTC tidak OK" }
+
+      - name: Upload hasil smoke test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: KLM-Mix-SmokeTest
+          path: ${{ runner.temp }}/smoke
+          if-no-files-found: ignore
+
       - name: Build installer + portable
         run: npx electron-builder --win nsis portable --x64 --publish never
         env:

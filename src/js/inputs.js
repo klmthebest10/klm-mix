@@ -254,7 +254,7 @@
   };
 
   T.title = {
-    label: 'Title UTC KLM Acara', icon: '🅃',
+    label: 'Title Cepat (Kanvas)', icon: '🅃',
     create(inp) { KM.titles.init(inp); inp.rt.ready = true; },
     source: (inp) => ({ src: inp.rt.canvas, w: inp.rt.canvas.width, h: inp.rt.canvas.height }),
     tick: (inp, t) => KM.titles.render(inp, t)

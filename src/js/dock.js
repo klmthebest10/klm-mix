@@ -52,6 +52,11 @@
         gear: h('button.cb', { style: { width: '100%' }, title: 'EQ, kompresor, gate, delay', onclick: () => KM.dialogs.inputSettings(inp, 'audio') }, '⚙ EQ/FX')
       }));
     });
+    const ua = KM.utc && KM.utc.audioStrip(), ust = ua && A.strips.get(ua.id);
+    if (ust) mx.append(strip('🎬 UTC Opening/Closing', {
+      vol: ua.audio.vol, meter: ust.meter, onVol: (v) => { ua.audio.vol = v; KM.audio.apply(ua); },
+      buttons: [cb('🔇', ua.audio.mute, 'mute', 'Mute suara video opening/closing', () => { ua.audio.mute = !ua.audio.mute; KM.audio.apply(ua); renderAudio(); }), h('span'), h('span')]
+    }));
     if (!A.strips.size) mx.append(h('div.muted', { style: { alignSelf: 'center', padding: '10px' } }, 'Tambahkan input video/kamera/mic/KLMCAM untuk memunculkan channel audio.'));
     box.replaceChildren(mx);
   }
@@ -119,7 +124,7 @@
     const quick = h('div.row', h('span.muted', 'Cepat:'), ...[['lt-klasik', 'Lower third'], ['running', 'Running text'], ['logo', 'Logo'], ['jam', 'Jam'], ['pengantin', 'Pengantin'], ['pengajian', 'Pengajian'], ['countdown', 'Countdown']].map(([k, l]) => h('button.btn.sm', { onclick: () => add(k) }, '＋ ' + l)),
       h('button.btn.sm', { onclick: () => { KM.designer.open(); } }, '🎨 Desain sendiri'),
       h('button.btn.sm.pri', { onclick: () => KM.dialogs.addInput('title') }, 'Semua template…'));
-    if (!titles.length) { box.replaceChildren(h('div.sec', h('h4', 'Title UTC KLM Acara'), h('p.muted', 'Belum ada title. Tambahkan:'), quick)); return; }
+    if (!titles.length) { box.replaceChildren(h('div.sec', h('h4', 'Title Cepat (kanvas)'), h('p.muted', 'Grafis acara lengkap ada di tab 🎬 UTC Acara. Title cepat berbasis kanvas — tambahkan:'), quick)); return; }
     let inp = KM.getInput(DK.titleId); if (!inp || inp.type !== 'title') { inp = titles[0]; DK.titleId = inp.id; }
     const { sel } = H();
     const pv = h('canvas', { width: 384, height: 216, style: { width: '100%', background: 'repeating-conic-gradient(#333 0 25%, #222 0 50%) 0 0/20px 20px', borderRadius: '6px', display: 'block' } });
@@ -238,7 +243,43 @@
   }
   KM.on('script-log', () => { if (DK.cur === 'script') renderScripts(); });
 
-  const R = { ptz: () => KM.ptz.render(KM.$('#dock-ptz')), script: renderScripts, audio: renderAudio, title: renderTitle, replay: renderReplay, phone: renderPhone, playlist: renderPlaylist };
+  // =================== UTC KLM ACARA (kontrol cepat) ===================
+  let utcPresets = null;
+  function renderUtc() {
+    const box = KM.$('#dock-utc'), U = KM.utc, st = U.status || {}, vis = st.visible || {};
+    const run = async (cmd, target, extra) => { const r = await U.cmd(cmd, target, extra); if (!r.ok) KM.toast(r.msg || 'Gagal', 'warn'); };
+    const tg = (k, label) => h('button.tg' + (vis[k] ? '.on' : ''), { title: (vis[k] ? 'Sembunyikan ' : 'Tampilkan ') + label, onclick: () => run('toggle', k) }, (vis[k] ? '● ' : '') + label);
+    const items = (k, list, actId, lbl) => list && list.length ? h('div.sec', h('h4', lbl),
+      h('div.row', h('button.btn.sm', { title: 'Sebelumnya', onclick: () => run('prev', k, { show: true }) }, '◀'), h('button.btn.sm', { title: 'Berikutnya', onclick: () => run('next', k, { show: true }) }, '▶'),
+        h('span.grow'), h('span.muted', { style: { fontSize: '11px' } }, 'klik = pilih & tampilkan')),
+      h('div.items', list.map((x, i) => h('button.btn.sm' + (x.id === actId ? '.act' : ''), { title: [x.label, x.name || x.title, x.role].filter(Boolean).join(' • '), onclick: () => run('select', k, { name: String(i + 1) }) }, (i + 1) + '. ' + (x.name || x.title || x.label || '—'))))) : null;
+    const presetSel = h('select', { style: { flex: 1 } }, h('option', { value: '' }, utcPresets ? (utcPresets.length ? '— pilih preset —' : '(belum ada preset)') : 'memuat…'),
+      (utcPresets || []).map((p) => h('option', { value: p.name }, p.name)));
+    if (!utcPresets) fetch('/utc/api/presets').then((r) => r.json()).then((l) => { utcPresets = l; if (DK.cur === 'utc') renderUtc(); }).catch(() => { utcPresets = []; });
+    box.replaceChildren(h('div.utcq',
+      h('div.sec',
+        h('button.btn.air' + (U.onAir() ? '.pri' : ''), { style: U.onAir() ? { background: '#b45309', borderColor: '#f59e0b' } : {}, onclick: () => U.setOnAir() }, U.onAir() ? '● UTC ON AIR di Program' : '○ UTC tidak tampil — klik untuk tayang'),
+        h('div.live', { innerHTML: U.liveInfo() }),
+        h('div.row', h('button.btn.sm.pri', { style: { flex: 1 }, onclick: () => KM.ui.utcPanel(true) }, '🎬 Buka Panel Lengkap (F9)'),
+          h('button.btn.sm', { title: 'Jadikan input KLM Mix (Overlay 1–4, layer, multiview)', onclick: () => { U.addInput(); KM.toast('Input "Grafis UTC KLM Acara" siap', 'ok'); } }, '＋ Input'))),
+      h('div.sec', h('h4', 'Tampilkan / sembunyikan'),
+        h('div.grid', tg('lt', 'Lower Third'), tg('tt', 'Title'), tg('tk', 'Running Text'), tg('bug', 'Logo'), tg('loc', 'Lokasi'), tg('soc', 'Sosmed')),
+        h('div.row', { style: { marginTop: '6px' } },
+          h('button.btn.sm' + (st.oc && st.oc.kind === 'opening' ? '.pri' : ''), { onclick: () => run('opening') }, '🎬 Opening'),
+          h('button.btn.sm' + (st.oc && st.oc.kind === 'closing' ? '.pri' : ''), { onclick: () => run('closing') }, '🌙 Closing'),
+          st.oc ? h('button.btn.sm', { onclick: () => run('ocoff') }, '✕ Opening/Closing') : null,
+          h('span.grow'), h('button.btn.sm', { title: 'Sembunyikan semua grafis', onclick: () => run('hideall') }, '⛔ Semua OFF'))),
+      items('lt', st.lists && st.lists.lt, st.activeId && st.activeId.lt, 'Lower Third'),
+      items('tt', st.lists && st.lists.tt, st.activeId && st.activeId.tt, 'Title'),
+      h('div.sec', h('h4', 'Preset acara'),
+        h('div.row', presetSel, h('button.btn.sm', { onclick: async () => { if (!presetSel.value) return; await run('preset', '', { name: presetSel.value }); KM.toast('Preset dimuat: ' + presetSel.value, 'ok'); } }, 'Muat'),
+          h('button.btn.sm', { title: 'Muat ulang daftar', onclick: () => { utcPresets = null; renderUtc(); } }, '⟳')),
+        h('p.muted', { style: { fontSize: '11px', marginTop: '6px' } }, 'Ubah teks, tema, animasi, posisi, logo, video opening/closing & simpan preset di Panel Lengkap. Bisa juga dari HP: ' + (KM.link.ips[0] ? 'http://' + KM.link.ips[0].address + ':' + (KM.link.ports.http || 8620) + '/utc' : '/utc'))))
+    );
+  }
+  KM.on('change', (w) => { if (w === 'utc' && DK.cur === 'utc') { clearTimeout(renderUtc.t); renderUtc.t = setTimeout(renderUtc, 60); } });
+
+  const R = { utc: renderUtc, ptz: () => KM.ptz.render(KM.$('#dock-ptz')), script: renderScripts, audio: renderAudio, title: renderTitle, replay: renderReplay, phone: renderPhone, playlist: renderPlaylist };
   DK.render = function (tab) { DK.cur = tab; try { R[tab](); } catch (e) { console.error('dock', e); } };
   let t;
   KM.on('change', (w) => {

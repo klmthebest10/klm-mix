@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<title>UTC KLM Acara • KLM Mix HP</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0d12; color: #e6e9f2; font: 14px system-ui, sans-serif; overflow: hidden; }
+  iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: #0b0d12; }
+  #back { position: fixed; left: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 9; width: 40px; height: 40px; border-radius: 20px; border: 1px solid #333a4d; background: rgba(20,23,31,.85); color: #fff; font-size: 18px; }
+  #msg { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; color: #8b93a8; }
+</style>
+</head>
+<body>
+<div id="msg">Menghubungkan ke KLM Mix di PC…</div>
+<iframe id="f" allow="camera; microphone; clipboard-write; fullscreen"></iframe>
+<button id="back" title="Kembali ke menu">⬅</button>
+<script src="common.js"></script>
+<script>
+  // Panel asli UTC KLM Acara dari PC (lengkap: lower third, title, running text, logo, lokasi, sosmed, opening/closing, preset, switcher)
+  const s = KMP.server(), f = document.getElementById('f'), msg = document.getElementById('msg');
+  if (!s.host) { msg.textContent = 'Isi IP PC dulu di menu utama.'; f.style.display = 'none'; }
+  else {
+    f.style.visibility = 'hidden';
+    f.onload = () => { f.style.visibility = 'visible'; msg.style.display = 'none'; };
+    f.src = 'http://' + s.host + '/utc';
+    setTimeout(() => { if (f.style.visibility === 'hidden') msg.innerHTML = 'PC tidak menjawab. Pastikan HP & PC di Wi-Fi yang sama,<br>KLM Mix terbuka di PC, dan diizinkan di Firewall Windows.'; }, 6000);
+  }
+  document.getElementById('back').onclick = () => { location.href = KMP.page('hp'); };
+</script>
+</body>
+</html>

@@ -4,8 +4,8 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const INVOKE = ['app:info', 'desktop:sources', 'dialog:open', 'dialog:save', 'dialog:folder', 'file:read-text', 'file:write-text',
   'file:write-binary', 'file:exists', 'file:open-writer', 'file:close-writer', 'shell:show', 'shell:open', 'server:get', 'server:set',
   'app:relaunch', 'browser:open', 'browser:navigate', 'browser:reload', 'browser:show', 'browser:close'];
-const SEND = ['file:write-chunk'];
-const ON = [];
+const SEND = ['file:write-chunk', 'utc:start', 'utc:stop', 'utc:ack', 'utc:reload', 'utc:full'];
+const ON = ['utc:frame'];
 
 contextBridge.exposeInMainWorld('klm', {
   isElectron: true,

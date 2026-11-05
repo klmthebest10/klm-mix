@@ -8,6 +8,7 @@
   window.addEventListener('DOMContentLoaded', async () => {
     KM.audio.init();
     KM.engine.init(KM.$('#pgm'), KM.$('#pvw'));
+    KM.utc.start();
     KM.ui.init();
     KM.link.connect();
     KM.ui.dockTab('audio');

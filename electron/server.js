@@ -15,6 +15,7 @@ const os = require('os');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const hub = require('./hub');
+const createUtc = require('./utc');
 
 const ROOT = path.join(__dirname, '..');
 const DEFAULTS = { httpPort: 8620, httpsPort: 8621, tcpPort: 8622 };
@@ -69,6 +70,7 @@ let reqSeq = 1;
 let tallyStr = '';
 let lastState = null;
 const tcpSubs = new Set();
+let utc = null; // UTC KLM Acara (menyatu)
 
 function send(ws, obj) { try { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); } catch (e) {} }
 function mixer() { const c = mixerId && clients.get(mixerId); return c ? c.ws : null; }
@@ -94,6 +96,7 @@ function onWsConnection(ws, req) {
       info.role = msg.role; info.name = msg.name || ''; info.slot = msg.slot || 0; info.meta = msg.meta || {};
       if (msg.role === 'mixer') {
         mixerId = id;
+        if (utc) setTimeout(() => { utc.onMixerState(); send(ws, { t: 'utc-status', status: utc.status() }); }, 50);
         // beri tahu mixer semua klien yang sudah ada
         for (const [cid, c] of clients) if (cid !== id && c.role !== 'unknown')
           send(ws, { t: 'peer-join', id: cid, role: c.role, name: c.name, slot: c.slot, ip: c.ip, meta: c.meta });
@@ -107,7 +110,7 @@ function onWsConnection(ws, req) {
     }
     if (id === mixerId) {
       // pesan dari mixer
-      if (msg.t === 'fn-res' || msg.t === 'xml-res') {
+      if (msg.t === 'fn-res' || msg.t === 'xml-res' || msg.t === 'utc-res') {
         if (msg.to && msg.to !== 'server') { const c = clients.get(msg.to); if (c) send(c.ws, msg); return; }
         const p = pending.get(msg.reqId);
         if (p) { clearTimeout(p.timer); pending.delete(msg.reqId); p.resolve(msg); }
@@ -117,7 +120,8 @@ function onWsConnection(ws, req) {
         if (msg.str !== tallyStr) { tallyStr = msg.str; for (const s of tcpSubs) s.write('TALLY OK ' + tallyStr + '\r\n'); }
         return;
       }
-      if (msg.t === 'state') lastState = msg;
+      if (msg.t === 'state') { lastState = msg; if (utc) utc.onMixerState(); }
+      if (msg.t === 'utc-cmd' && utc) { const r = utc.klmCmd(msg.cmd || {}); if (msg.reqId) send(ws, { t: 'utc-cmd-res', reqId: msg.reqId, res: r }); return; }
       if (msg.to) { const c = clients.get(msg.to); if (c) send(c.ws, msg); return; }
       if (msg.bcast) { for (const [cid, c] of clients) if (cid !== id && (msg.bcast === 'all' || c.role === msg.bcast)) send(c.ws, msg); return; }
       return;
@@ -131,7 +135,8 @@ function onWsConnection(ws, req) {
   ws.on('close', () => {
     clients.delete(id);
     if (id === mixerId) {
-      mixerId = null;
+      mixerId = null; lastState = null;
+      if (utc) utc.onMixerState();
       for (const c of clients.values()) send(c.ws, { t: 'mixer-gone' });
     } else { const m = mixer(); if (m) send(m, { t: 'peer-leave', id }); }
   });
@@ -201,6 +206,7 @@ async function handleHttp(req, res, ports) {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     return res.end(JSON.stringify({ app: 'KLM Mix', version: require('../package.json').version, ips: localIPs(), ports, mixer: !!mixer() }));
   }
+  if (utc && (p === '/utc' || p.startsWith('/utc/') || p.startsWith('/uploads/'))) return utc.handle(req, res, p, u.searchParams);
   if (p.startsWith('/hub/')) {
     if (!isLoopback(req)) { res.writeHead(403); return res.end('Forbidden'); }
     return hub.handle(req, res, p);
@@ -288,6 +294,15 @@ async function start(opts) {
   const cfg = Object.assign(loadConfig(), opts || {});
   hub.setConfig(loadConfig);
   const ports = { http: 0, https: 0, tcp: 0 };
+  if (!utc) {
+    try {
+      utc = createUtc({
+        dataDir: path.join(configDir(), 'utc'), pubDir: path.join(ROOT, 'src', 'utc'), localIPs, port: () => ports.http,
+        mixer: { call: callMixer, getState: () => lastState, connected: () => !!mixer(), version: require('../package.json').version }
+      });
+    } catch (e) { console.warn('[KLM] UTC KLM Acara gagal dimuat:', e); }
+    if (utc) utc.onState(() => { const m = mixer(); if (m) send(m, { t: 'utc-status', status: utc.status() }); });
+  }
   const wssA = new WebSocketServer({ noServer: true });
   wssA.on('connection', onWsConnection);
   const upgrade = (req, socket, head) => {
@@ -313,13 +328,13 @@ async function start(opts) {
   ports.tcp = await listen(tcpServer, cfg.tcpPort);
 
   console.log(`[KLM Mix] HTTP :${ports.http}  HTTPS :${ports.https}  TCP :${ports.tcp}`);
-  for (const ip of localIPs()) console.log(`   Mixer   : http://${ip.address}:${ports.http}/\n   Menu HP : http://${ip.address}:${ports.http}/hp\n   KLMCAM  : ${ports.https ? `https://${ip.address}:${ports.https}` : `http://${ip.address}:${ports.http}`}/cam\n   Remote  : http://${ip.address}:${ports.http}/remote`);
+  for (const ip of localIPs()) console.log(`   Mixer   : http://${ip.address}:${ports.http}/\n   Menu HP : http://${ip.address}:${ports.http}/hp\n   KLMCAM  : ${ports.https ? `https://${ip.address}:${ports.https}` : `http://${ip.address}:${ports.http}`}/cam\n   Remote  : http://${ip.address}:${ports.http}/remote\n   UTC     : http://${ip.address}:${ports.http}/utc`);
   return { ports, ips: localIPs() };
 }
 
-module.exports = { start, localIPs, loadConfig, saveConfig, configDir, hub };
+module.exports = { start, localIPs, loadConfig, saveConfig, configDir, hub, utc: () => utc };
 
-function cleanup() { try { hub.shutdown(); } catch (e) {} }
+function cleanup() { try { hub.shutdown(); } catch (e) {} try { if (utc) utc.shutdown(); } catch (e) {} }
 process.on('exit', cleanup);
 ['SIGINT', 'SIGTERM'].forEach((sig) => process.on(sig, () => { cleanup(); process.exit(0); }));
 

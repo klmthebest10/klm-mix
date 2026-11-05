@@ -18,23 +18,28 @@ klm-mix/
 │   ├── hub.js                # media hub: input stream (RTMP/SRT/RTSP/HLS/NDI), streaming keluar, deteksi GPU encoder
 │   ├── ffmpeg-args.js        # perintah ffmpeg streaming (RTMP/RTMPS/SRT, multi-tujuan)
 │   ├── ptz.js                # kontrol PTZ: VISCA over IP (Sony/PTZOptics/umum) & HTTP-CGI
+│   ├── utc.js                # server UTC KLM Acara (API sama persis dgn versi 9.0, preset/logo/video, impor data lama)
+│   ├── utc-switch.js         # switcher panel UTC: KLM Mix (bawaan) / OBS (websocket v5) / vMix
+│   ├── utc-osr.js            # render overlay UTC asli secara offscreen → lapisan UTC ON AIR
 │   └── ndi-worker.js         # NDI in/out (proses terpisah, butuh NDI Runtime gratis)
 ├── src/                      # aplikasi mixer (UI + mesin)
 │   ├── index.html            # tampilan utama
 │   ├── output.html           # jendela output eksternal / multiview
 │   ├── css/app.css
 │   ├── vendor/qr.js          # generator QR offline
+│   ├── utc/                  # UTC KLM Acara 9.0 asli (panel kontrol, overlay, 12 font offline, ikon)
 │   └── js/
 │       ├── core.js           # state, pengaturan, utilitas
 │       ├── engine.js         # render Preview/Program, transisi, overlay 1-4, FTB, layer, multiview
 │       ├── effects.js        # GPU: koreksi warna, chroma key, luma key
 │       ├── inputs.js         # semua jenis input
-│       ├── titles.js         # UTC KLM Acara (16 template, 8 tema)
+│       ├── utc.js            # UTC KLM Acara menyatu: lapisan UTC ON AIR (WebGL), input UTC, audio opening/closing
+│       ├── titles.js         # Title Cepat kanvas (16 template, 8 tema)
 │       ├── audio.js          # mixer audio (EQ, kompresor, gate, delay, bus M/A/B, solo, auto)
 │       ├── record.js         # rekam, streaming, MultiCorder, snapshot
 │       ├── replay.js         # instant replay + playlist
 │       ├── link.js           # KLMCAM WebRTC, tally, remote HP
-│       ├── api.js            # 206 fungsi API (nama sama dengan vMix)
+│       ├── api.js            # 223 fungsi API (nama sama dengan vMix, + UTC*)
 │       ├── ptz.js            # panel PTZ fisik + PTZ virtual
 │       ├── script.js         # skrip JavaScript, trigger per input, shortcut kustom
 │       ├── designer.js       # Title Designer (desain title bebas) + impor CSV
@@ -45,6 +50,7 @@ klm-mix/
 │   ├── camera.html/.js       # KLMCAM
 │   ├── remote.html/.js       # Remote switcher, overlay, title, audio, replay (mode hemat data)
 │   ├── call.html/.js         # KLM Call: tamu/narasumber jarak jauh
+│   ├── utc.html              # panel lengkap UTC KLM Acara di APK
 │   └── common.js · phone.css · manifest.json
 ├── mobile/                   # pembungkus Android (Capacitor) → .apk
 ├── build/                    # ikon & skrip installer (aturan firewall otomatis)
@@ -60,10 +66,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
    - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.1.0.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.1.0.exe` (tanpa instal)
+     - `KLM-Mix-Setup-1.2.0.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Mix-Portable-1.2.0.exe` (tanpa instal)
    - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
-3. Untuk rilis resmi: buat tag `v1.1.0` → file otomatis muncul di halaman **Releases**.
+3. Untuk rilis resmi: buat tag `v1.2.0` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
 
@@ -106,7 +112,7 @@ Tips latensi rendah: Wi‑Fi 5 GHz, HP dekat router, kualitas 720p60 atau 1080p3
 - **Output eksternal** ke monitor/proyektor ke‑2 (layar penuh) & **Multiview** (preview + program + 8 input + jam + status REC/LIVE)
 
 ### Jenis input
-Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capture card (hingga 4K), **KLMCAM** (HP), **Stream Masuk** (terima RTMP/SRT dari OBS/HP/encoder, tarik RTSP CCTV/kamera IP, HLS, UDP, **NDI**), **KLM Call** (tamu jarak jauh), Tangkap Layar/Jendela (+audio sistem), **Title UTC KLM Acara**, Mic/Audio device, File Audio, Warna/Gradien, Color Bars + tone, **Web Browser**, Virtual Set, Instant Replay, Video dari URL.
+Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capture card (hingga 4K), **KLMCAM** (HP), **Stream Masuk** (terima RTMP/SRT dari OBS/HP/encoder, tarik RTSP CCTV/kamera IP, HLS, UDP, **NDI**), **KLM Call** (tamu jarak jauh), Tangkap Layar/Jendela (+audio sistem), **Grafis UTC KLM Acara**, Title Cepat (kanvas), Mic/Audio device, File Audio, Warna/Gradien, Color Bars + tone, **Web Browser**, Virtual Set, Instant Replay, Video dari URL.
 
 ### Fitur pro tambahan (setara vMix Pro)
 - **NDI** masuk & keluar (butuh NDI Tools/Runtime gratis) — sekaligus **Virtual Camera** untuk Zoom/Meet/Teams lewat aplikasi *NDI Webcam*
@@ -118,7 +124,22 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Efek audio bawaan** (pengganti VST): high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
-### Title UTC KLM Acara (16 template × 8 tema)
+### UTC KLM Acara — menyatu penuh (bukan tiruan)
+Aplikasi **UTC KLM Acara 9.0 asli** kini ada di dalam KLM Mix — semua fiturnya, tanpa dipangkas:
+- **13 jenis acara** (Pengajian, Pernikahan, Khitanan, Aqiqah, Tasyakuran, Maulid, Isra Mi'raj, Halal bi Halal, Tabligh Akbar, Wisuda, Seminar, Ulang Tahun, Lainnya)
+- **20 layout Lower Third**, **15 layout Title**, **14 layout Running Text**, Title **Lokasi**, **Sosial Media**, **Logo pojok** (banyak sekaligus), **Opening/Closing** animasi atau **video** (dengan suara)
+- Banyak lower third sekaligus, format **B/I/U** & ukuran per baris, tema & warna, animasi masuk/keluar, posisi **seret langsung di preview**, auto-hide, **preset** acara, 12 font offline
+- Buka: tombol **🎬 UTC KLM Acara** di bar atas (atau **F9**) → panel lengkap; **⧉ Jendela terpisah** untuk monitor ke‑2; tab dock **🎬 UTC Acara** untuk kontrol cepat
+- Grafis **otomatis tampil di Program** (lapisan **UTC ON AIR** di atas Overlay 1–4, di bawah FTB) → ikut rekam, streaming, output eksternal, NDI. Tanpa Browser Source.
+- Bisa juga dijadikan **input** "Grafis UTC KLM Acara" (untuk Overlay 1–4, layer PiP, multiview)
+- Switcher di panel UTC memakai **KLM Mix** langsung (input, Preview/Program, TAKE/CUT, transisi, FTB); OBS & vMix tetap bisa dipilih
+- Suara **video opening/closing** masuk mixer audio (strip "UTC Opening/Closing")
+- HP: menu **🎬 UTC KLM Acara** di APK / `http://IP-PC:8620/utc` — panel yang sama persis; Remote HP punya tombol cepat
+- **Data lama otomatis pindah**: preset, logo, video & pengaturan dari `%LOCALAPPDATA%\Programs\UTC KLM Acara\data` (atau folder `utc-klm-acara` di Desktop/Downloads/Documents) disalin saat pertama dibuka. Data baru: `%APPDATA%\KLM Mix\config\utc`
+- API: `UTCShow` / `UTCHide` / `UTCToggle` (Value = `lt` `title` `ticker` `logo` `loc` `soc`), `UTCNext`, `UTCPrevious`, `UTCSelect` (Value=lt, Name=2), `UTCSetText`, `UTCHideAll`, `UTCOpening`, `UTCClosing`, `UTCOpeningClosingOff`, `UTCEvent`, `UTCPreset`, `UTCOnAir`/`On`/`Off` — contoh `http://IP:8620/api/?Function=UTCNext&Value=lt`
+- Overlay untuk OBS/vMix di PC lain tetap tersedia: `http://IP:8620/utc/overlay` (`?only=lt|title|ticker|logo|loc|soc|oc`)
+
+### Title Cepat (kanvas, 16 template × 8 tema)
 Lower Third Klasik / Modern / Elegan, Judul Tengah, Running Text, Logo/Bug + LIVE, Jam & Tanggal + Hijriah, Hitung Mundur, **Pernikahan**, **Khitanan**, **Ayat/Hadits** (Arab + terjemahan), **Info Kajian/Pengajian**, Breaking/Pengumuman, Ucapan Selamat Datang, Credit Roll, Skor Lomba.
 Tema: Emas Elegan, Hijau Islami, Biru Profesional, Merah Breaking, Putih Minimal, Pink Pengantin, Ungu Royal, Hitam Modern.
 Animasi masuk/keluar otomatis, **antrian data** (daftar nama → Next/Prev), edit langsung dari HP, API `SetText`.
@@ -168,4 +189,4 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.1.0
+KLM Mix 1.2.0

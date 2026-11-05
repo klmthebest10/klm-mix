@@ -366,6 +366,7 @@
     if (S.trans) drawTransition(c, S.trans);
     else full(c, KM.getInput(S.programId), 1);
     drawOverlays(c);
+    if (KM.utc) KM.utc.drawDSK(c, E.W, E.H); // lapisan UTC ON AIR (grafis UTC KLM Acara asli)
     if (f.v > 0) { c.fillStyle = 'rgba(0,0,0,' + f.v + ')'; c.fillRect(0, 0, E.W, E.H); }
 
     // PREVIEW (dilewati saat jendela diminimize / mode hemat)
