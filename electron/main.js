@@ -174,7 +174,7 @@ app.whenReady().then(async () => {
 });
 app.on('second-instance', () => { if (mainWin) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.focus(); } });
 app.on('window-all-closed', () => hardQuit('window-all-closed'));
-app.on('before-quit', () => { try { server.hub.shutdown(); } catch (e) {} try { utcOsr && utcOsr.stop(); } catch (e) {} });
+app.on('before-quit', () => { try { server.hub.shutdown(); } catch (e) {} });
 app.on('will-quit', (e) => { if (!quitting) { e.preventDefault(); hardQuit('will-quit'); } });
 
 // Keluar total. Di Windows, proses Chromium (GPU / renderer offscreen) bisa tertinggal setelah keluar biasa sehingga
@@ -184,14 +184,12 @@ let quitting = false;
 function hardQuit(why) {
   if (quitting) return; quitting = true;
   if (process.env.KLM_SMOKE) { try { fs.appendFileSync(path.join(process.env.KLM_SMOKE, 'smoke.log'), new Date().toISOString() + ' hardQuit ' + why + '\n'); } catch (e) {} }
-  try { utcOsr && utcOsr.stop(); } catch (e) {}
   for (const w of browsers.values()) { try { w.destroy(); } catch (e) {} }
   try { server.hub.shutdown(); } catch (e) {}
   const ends = [...writers.values()].map((w) => new Promise((r) => { try { w.end(r); } catch (x) { r(); } setTimeout(r, 2500); }));
   writers.clear();
   const kill = () => {
     if (process.env.KLM_SMOKE) { try { fs.appendFileSync(path.join(process.env.KLM_SMOKE, 'smoke.log'), new Date().toISOString() + ' kill pid ' + process.pid + '\n'); } catch (e) {} }
-    try { app.exit(0); } catch (x) {}
     try { process.kill(process.pid, 'SIGKILL'); } catch (x) { process.exit(0); }
   };
   setTimeout(kill, 4000);

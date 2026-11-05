@@ -11,35 +11,34 @@ module.exports = function setupUtcOsr(o) {
   let win = null, wc = null, target = null; // { wc, w, h, fps, url }
   let last = null, pend = null, inflight = false, inflightAt = 0, sentFull = false, seq = 0;
 
+  // Catatan: jendela offscreen TIDAK pernah di-destroy (di Windows destroy OSR bisa membekukan proses utama).
+  // Jendela dipakai ulang; "stop" cukup menghentikan painting & mengosongkan halaman.
   function stop() {
-    if (win && !win.isDestroyed()) { try { win.destroy(); } catch (e) {} }
-    win = null; wc = null; last = null; pend = null; inflight = false; sentFull = false;
+    target = null; last = null; pend = null; inflight = false; sentFull = false;
+    if (wc && !wc.isDestroyed()) { try { wc.stopPainting(); wc.loadURL('about:blank').catch(() => {}); } catch (e) {} }
   }
   function union(a, b) {
     if (!a) return b;
     const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
     return { x, y, width: Math.max(a.x + a.width, b.x + b.width) - x, height: Math.max(a.y + a.height, b.y + b.height) - y };
   }
-  function start(t) {
-    stop();
-    target = t;
+  let fixed = false;
+  function create() {
     win = new BrowserWindow({
-      show: false, width: t.w, height: t.h, useContentSize: true, frame: false, transparent: true, backgroundColor: '#00000000',
+      show: false, width: 1920, height: 1080, useContentSize: true, frame: false, transparent: true, backgroundColor: '#00000000',
       skipTaskbar: true, focusable: false,
       webPreferences: { offscreen: true, backgroundThrottling: false, contextIsolation: true, nodeIntegration: false, spellcheck: false }
     });
     wc = win.webContents;
     wc.setAudioMuted(true); // suara video opening/closing diputar oleh mixer audio KLM Mix (ikut rekam/stream)
-    wc.setFrameRate(Math.max(10, Math.min(60, t.fps || 30)));
-    let fixed = false;
     wc.on('paint', (e, dirty, image) => {
+      const t = target; if (!t) return;
       const sz = image.getSize();
       if (!sz.width || !sz.height) return;
       // layar DPI tinggi: samakan ukuran piksel dengan resolusi output
       if (!fixed) {
         fixed = true;
-        const [cw, ch] = win.getContentSize();
-        const k = sz.width / cw;
+        const cw = win.getContentSize()[0], k = sz.width / cw;
         if (Math.abs(sz.width - t.w) > 1 && k > 0) { win.setContentSize(Math.round(t.w / k), Math.round(t.h / k)); }
       }
       const k = sz.width / (win.getContentSize()[0] || sz.width);
@@ -49,8 +48,15 @@ module.exports = function setupUtcOsr(o) {
       pend = union(pend, r);
       pump();
     });
-    wc.on('render-process-gone', () => { setTimeout(() => { if (target === t) start(t); }, 1000); });
-    wc.on('did-fail-load', () => { setTimeout(() => { if (target === t && wc && !wc.isDestroyed()) wc.loadURL(t.url).catch(() => {}); }, 1500); });
+    wc.on('render-process-gone', () => { setTimeout(() => { if (target && wc && !wc.isDestroyed()) { sentFull = false; wc.loadURL(target.url).catch(() => {}); } }, 1000); });
+    wc.on('did-fail-load', (e, code, desc, url) => { if (url === 'about:blank') return; setTimeout(() => { if (target && wc && !wc.isDestroyed()) wc.loadURL(target.url).catch(() => {}); }, 1500); });
+  }
+  function start(t) {
+    if (!win || win.isDestroyed() || !wc || wc.isDestroyed()) create();
+    target = t; last = null; pend = null; inflight = false; sentFull = false; fixed = false;
+    win.setContentSize(t.w, t.h);
+    wc.setFrameRate(Math.max(10, Math.min(60, t.fps || 30)));
+    wc.startPainting();
     wc.loadURL(t.url).catch(() => {});
   }
   function pump() {
@@ -76,11 +82,11 @@ module.exports = function setupUtcOsr(o) {
   ipcMain.on('utc:start', (e, t) => {
     const url = 'http://127.0.0.1:' + o.port() + '/utc/overlay?klm=1';
     start({ wc: e.sender, w: Math.max(320, Math.min(3840, t.w | 0 || 1920)), h: Math.max(180, Math.min(2160, t.h | 0 || 1080)), fps: t.fps, url });
-    e.sender.once('destroyed', () => { if (target && target.wc === e.sender) { target = null; stop(); } });
+    e.sender.once('destroyed', () => { if (target && target.wc === e.sender) stop(); });
   });
-  ipcMain.on('utc:stop', () => { target = null; stop(); });
+  ipcMain.on('utc:stop', () => stop());
   ipcMain.on('utc:reload', () => { if (wc && !wc.isDestroyed()) { sentFull = false; wc.reloadIgnoringCache(); } });
   ipcMain.on('utc:full', () => { sentFull = false; if (wc && !wc.isDestroyed()) wc.invalidate(); });
   ipcMain.on('utc:ack', () => { inflight = false; pump(); });
-  return { stop, active: () => !!win };
+  return { stop, active: () => !!target };
 };
