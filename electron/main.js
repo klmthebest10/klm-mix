@@ -24,6 +24,7 @@ app.commandLine.appendSwitch('enable-accelerated-video-decode');
 if (!app.requestSingleInstanceLock()) { app.quit(); }
 
 let mainWin = null;
+let utcOsr = null;
 let netInfo = { ports: {}, ips: [] };
 const writers = new Map();
 let writerSeq = 1;
@@ -79,7 +80,13 @@ function createMain() {
     });
     if (choice === 1) e.preventDefault();
   });
-  mainWin.on('closed', () => { mainWin = null; for (const w of browsers.values()) { try { w.destroy(); } catch (e) {} } app.quit(); });
+  mainWin.on('closed', () => {
+    mainWin = null;
+    try { utcOsr && utcOsr.stop(); } catch (e) {}
+    for (const w of browsers.values()) { try { w.destroy(); } catch (e) {} }
+    app.quit();
+    setTimeout(() => process.exit(0), 4000).unref(); // pastikan tidak tertinggal di latar belakang
+  });
 }
 
 function toRenderer(ch, data) { if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send(ch, data); }
@@ -166,13 +173,14 @@ app.whenReady().then(async () => {
     desktopCapturer.getSources({ types: ['screen'] }).then((s) => cb({ video: s[0], audio: 'loopback' })).catch(() => cb({}));
   });
   netInfo = await server.start();
-  setupUtcOsr({ port: () => netInfo.ports.http });
+  utcOsr = setupUtcOsr({ port: () => netInfo.ports.http });
   createMain();
   if (process.env.KLM_SMOKE) smokeTest();
 });
 app.on('second-instance', () => { if (mainWin) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.focus(); } });
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => { try { server.hub.shutdown(); } catch (e) {} });
+app.on('before-quit', () => { try { server.hub.shutdown(); } catch (e) {} try { utcOsr && utcOsr.stop(); } catch (e) {} });
+app.on('will-quit', () => { setTimeout(() => process.exit(0), 3000).unref(); });
 
 // ---------------- uji otomatis CI (KLM_SMOKE=folder) ----------------
 // Membuka aplikasi, memastikan panel UTC & lapisan UTC ON AIR benar-benar tampil di Program, lalu menyimpan screenshot.
@@ -214,6 +222,9 @@ function smokeTest() {
     log(fail ? 'HASIL: GAGAL (' + fail + ')' : 'HASIL: OK');
     try { fs.writeFileSync(path.join(out, 'result.txt'), fail ? 'FAIL' : 'OK'); } catch (e) {}
     mainWin.removeAllListeners('close');
+    try { utcOsr && utcOsr.stop(); } catch (e) {}
+    try { server.hub.shutdown(); } catch (e) {}
     app.exit(fail ? 1 : 0);
+    setTimeout(() => process.exit(fail ? 1 : 0), 1500);
   })();
 }
