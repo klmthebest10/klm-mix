@@ -98,8 +98,8 @@
     const url = KMP.page('utc');
     box.innerHTML = `<div class="card"><div class="row" style="align-items:center"><b style="flex:1">🎬 UTC KLM Acara</b><span class="pill ${u && u.onAir ? 'ok' : 'warn'}" style="flex:none">${u && u.onAir ? 'ON AIR' : 'OFF'}</span></div>
       <p class="muted" style="margin:6px 0 8px">${u ? esc(u.eventName || '') : 'Menunggu PC…'}</p>
-      <div class="row" style="flex-wrap:wrap;gap:6px">${names.map(([k, l]) => `<button data-utc="${k}" class="${vis[k] ? 'pri' : ''}" style="flex:1 1 30%">${vis[k] ? '● ' : ''}${l}</button>`).join('')}</div>
-      <div class="row" style="margin-top:6px"><button data-uf="UTCPrevious">◀ LT</button><button data-uf="UTCNext">LT ▶</button><button data-uf="UTCOpening">Opening</button><button data-uf="UTCClosing">Closing</button><button data-uf="UTCHideAll">⛔ OFF</button></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">${names.map(([k, l]) => `<button data-utc="${k}" style="padding:8px 4px;font-size:13px;${vis[k] ? 'background:linear-gradient(180deg,#5a2e09,#3f2007);border-color:var(--utc);color:#fff' : ''}">${l}</button>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px"><button data-uf="UTCPrevious">◀ LT</button><button data-uf="UTCNext">LT ▶</button><button data-uf="UTCHideAll" class="red">⛔ OFF</button><button data-uf="UTCOpening" style="grid-column:span 1">Opening</button><button data-uf="UTCClosing">🌙 Closing</button><button data-uf="UTCOpeningClosingOff">✕ Stop</button></div>
       <a href="${url}" style="display:block;margin-top:10px"><button class="pri" style="width:100%">Buka Panel Lengkap UTC KLM Acara</button></a></div>`;
     box.querySelectorAll('[data-utc]').forEach((b) => { b.onclick = () => fn('UTCToggle', { Value: b.dataset.utc }); });
     box.querySelectorAll('[data-uf]').forEach((b) => { b.onclick = () => fn(b.dataset.uf, { Value: 'lt' }); });
@@ -118,7 +118,7 @@
     box._sig = sig;
     const ov = S.overlays.findIndex((o) => o.on && o.inputId === t.id);
     box.innerHTML = `<label>Title</label><select id="tSel">${titles.map((x) => `<option value="${x.id}" ${x.id === t.id ? 'selected' : ''}>${x.num}. ${esc(x.title)}</option>`).join('')}</select>
-      <div class="card"><div class="row"><select id="tCh" style="flex:none;width:110px">${[0, 1, 2, 3].map((n) => `<option value="${n}" ${n === titleCh ? 'selected' : ''}>Overlay ${n + 1}</option>`).join('')}</select>
+      <div class="card"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><select id="tCh" style="grid-column:1/-1">${[0, 1, 2, 3].map((n) => `<option value="${n}" ${n === titleCh ? 'selected' : ''}>Overlay ${n + 1}</option>`).join('')}</select>
       <button class="green" id="tIn">▶ TAMPIL</button><button class="red" id="tOut">■ SEMBUNYI</button></div>
       <p style="margin:8px 0 0">Status: <span class="pill" id="tAir"></span></p></div>
       <div class="card">${t.title_.defs.map((d) => `<label>${esc(d.label)}</label>${d.multi ? `<textarea rows="2" data-k="${d.k}" ${d.k === 'arab' ? 'dir="rtl"' : ''}>${esc(t.title_.fields[d.k])}</textarea>` : `<input data-k="${d.k}" value="${esc(t.title_.fields[d.k])}">`}`).join('')}

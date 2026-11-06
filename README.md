@@ -51,6 +51,8 @@ klm-mix/
 │   ├── remote.html/.js       # Remote switcher, overlay, title, audio, replay (mode hemat data)
 │   ├── call.html/.js         # KLM Call: tamu/narasumber jarak jauh
 │   ├── utc.html              # panel lengkap UTC KLM Acara di APK
+│   ├── icons.js              # set ikon SVG bersama (PC & HP)
+│   ├── jakarta.woff          # font antarmuka (offline)
 │   └── common.js · phone.css · manifest.json
 ├── mobile/                   # pembungkus Android (Capacitor) → .apk
 ├── build/                    # ikon & skrip installer (aturan firewall otomatis)
@@ -66,10 +68,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
    - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.2.0.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.2.0.exe` (tanpa instal)
+     - `KLM-Mix-Setup-1.3.0.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Mix-Portable-1.3.0.exe` (tanpa instal)
    - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
-3. Untuk rilis resmi: buat tag `v1.2.0` → file otomatis muncul di halaman **Releases**.
+3. Untuk rilis resmi: buat tag `v1.3.0` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
 
@@ -123,6 +125,13 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Skrip JavaScript** (pengganti VB.NET): `API.Function("Cut")`, `Sleep()`, `Input()`, jalankan dari tombol/shortcut/trigger/Stream Deck
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Efek audio bawaan** (pengganti VST): high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
+
+### Tampilan profesional (v1.3)
+- Sistem desain baru: font **Plus Jakarta Sans** (offline), palet grafit gelap ruang kontrol, warna tally standar (Preview hijau, Program/LIVE merah, Overlay kuning)
+- **Set ikon garis seragam** (100+ ikon SVG) menggantikan emoji — tampil sama persis di semua PC & HP, tidak tergantung font sistem
+- Logo & ikon aplikasi baru (PC, installer, APK), layar pembuka, keadaan kosong dengan tombol cepat, label LIVE/PVW di kartu input, monitor "TIDAK ADA SUMBER"
+- Panel transisi ringkas, T-Bar bergaya hardware, bar status ber-ikon, dialog/menu/notifikasi yang konsisten
+- Aplikasi HP (menu, Remote, KLMCAM, KLM Call) memakai bahasa desain yang sama
 
 ### UTC KLM Acara — menyatu penuh (bukan tiruan)
 Aplikasi **UTC KLM Acara 9.0 asli** kini ada di dalam KLM Mix — semua fiturnya, tanpa dipangkas:
@@ -189,4 +198,4 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.2.0
+KLM Mix 1.3.0

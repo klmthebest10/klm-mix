@@ -6,16 +6,25 @@
   function placeholder(inp, line1, line2) {
     const rt = inp.rt;
     if (!rt.ph) { rt.ph = document.createElement('canvas'); rt.ph.width = 640; rt.ph.height = 360; }
-    const key = line1 + '|' + line2;
+    const ic = window.KI ? KI.leading(line1) : null, t1 = window.KI ? KI.strip(line1) : line1;
+    const img = ic ? KI.img(ic, '#8fb8ff', () => { rt.phKey = ''; }) : null;
+    const key = line1 + '|' + line2 + '|' + (img && img.complete ? 1 : 0);
     if (rt.phKey !== key) {
       rt.phKey = key;
       const c = rt.ph.getContext('2d');
-      const g = c.createLinearGradient(0, 0, 640, 360); g.addColorStop(0, '#1d2230'); g.addColorStop(1, '#0d0f15');
+      const g = c.createRadialGradient(320, 150, 20, 320, 180, 420); g.addColorStop(0, '#1b2130'); g.addColorStop(1, '#0a0c10');
       c.fillStyle = g; c.fillRect(0, 0, 640, 360);
-      c.strokeStyle = '#2f3750'; c.lineWidth = 2; c.strokeRect(8, 8, 624, 344);
-      c.fillStyle = '#e6e9f2'; c.font = '600 30px Segoe UI, Arial'; c.textAlign = 'center';
-      c.fillText(line1, 320, 170);
-      c.fillStyle = '#8b93a8'; c.font = '20px Segoe UI, Arial'; c.fillText(line2 || '', 320, 210);
+      c.strokeStyle = 'rgba(255,255,255,.06)'; c.lineWidth = 1;
+      for (let x = 0; x <= 640; x += 40) { c.beginPath(); c.moveTo(x + .5, 0); c.lineTo(x + .5, 360); c.stroke(); }
+      for (let y = 0; y <= 360; y += 40) { c.beginPath(); c.moveTo(0, y + .5); c.lineTo(640, y + .5); c.stroke(); }
+      let ty = 196;
+      if (img && img.complete) {
+        c.fillStyle = 'rgba(61,139,255,.14)'; c.beginPath(); c.arc(320, 128, 44, 0, Math.PI * 2); c.fill();
+        c.drawImage(img, 296, 104, 48, 48); ty = 222;
+      }
+      c.textAlign = 'center';
+      c.fillStyle = '#eceff4'; c.font = '700 28px "Plus Jakarta Sans", "Segoe UI", Arial'; c.fillText(t1, 320, ty);
+      c.fillStyle = '#8b94a5'; c.font = '500 19px "Plus Jakarta Sans", "Segoe UI", Arial'; c.fillText(line2 || '', 320, ty + 34);
     }
     return { src: rt.ph, w: 640, h: 360 };
   }
@@ -91,7 +100,7 @@
   };
 
   T.video = {
-    label: 'Video', icon: '🎬', playable: true,
+    label: 'Video', icon: '🎦', playable: true,
     create(inp) {
       inp.audio.auto = inp.audio.auto !== false;
       const v = videoEl(); v.src = inp.opts.url; v.loop = !!inp.loop;

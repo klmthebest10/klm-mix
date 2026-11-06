@@ -12,21 +12,22 @@
 <body>
 <div class="wrap">
   <div class="brand"><b>KLM</b> Mix <span class="muted" style="font-weight:400;font-size:13px">• HP</span></div>
-  <p class="muted">Kamera nirkabel (KLMCAM), remote switcher, title & audio untuk KLM Mix di PC. Semua lewat Wi-Fi lokal, tanpa internet.</p>
+  <p class="muted" style="margin:10px 0 4px">Kamera nirkabel, remote switcher, grafis acara & audio untuk KLM Mix di PC — lewat Wi-Fi lokal, tanpa internet.</p>
 
   <div class="card" id="srvCard">
     <label for="srv">Alamat PC (IP KLM Mix)</label>
     <div class="row"><input id="srv" inputmode="url" placeholder="contoh: 192.168.1.10"><button class="pri" id="test" style="flex:none">Cek</button></div>
-    <div class="muted" id="srvInfo" style="margin-top:8px">Lihat IP di KLM Mix PC → menu "📱 HP & Jaringan".</div>
+    <div class="muted" id="srvInfo" style="margin-top:10px">Lihat IP di KLM Mix (PC) → menu <b>HP &amp; Jaringan</b>, atau scan QR di sana.</div>
   </div>
 
-  <button class="big" id="goCam"><i>📷</i><div><b>Kamera (KLMCAM)</b><span>Jadikan HP ini kamera wireless latensi rendah + tally</span></div></button>
+  <button class="big c-cam" id="goCam"><i>📷</i><div><b>Kamera (KLMCAM)</b><span>Jadikan HP ini kamera wireless latensi rendah + tally</span></div></button>
   <button class="big" id="goRemote"><i>🎛️</i><div><b>Remote Switcher</b><span>Cut, transisi, overlay, rekam, streaming, replay</span></div></button>
-  <button class="big" id="goUtc"><i>🎬</i><div><b>UTC KLM Acara (Panel Lengkap)</b><span>Lower third, title, running text, logo, lokasi, sosmed, opening/closing, preset</span></div></button>
-  <button class="big" id="goCall"><i>📞</i><div><b>KLM Call (Tamu)</b><span>Narasumber jarak jauh: lihat tayangan studio + suara tanpa gema</span></div></button>
-  <button class="big" id="goAudio"><i>🎚️</i><div><b>Mixer Audio</b><span>Volume & mute tiap input dari HP</span></div></button>
-  <p class="muted" style="text-align:center;margin-top:18px">KLM Mix v1.2.0</p>
+  <button class="big c-utc" id="goUtc"><i>🎬</i><div><b>UTC KLM Acara (Panel Lengkap)</b><span>Lower third, title, running text, logo, lokasi, sosmed, opening/closing, preset</span></div></button>
+  <button class="big c-call" id="goCall"><i>📞</i><div><b>KLM Call (Tamu)</b><span>Narasumber jarak jauh: lihat tayangan studio + suara tanpa gema</span></div></button>
+  <button class="big c-aud" id="goAudio"><i>🎚️</i><div><b>Mixer Audio</b><span>Volume & mute tiap input dari HP</span></div></button>
+  <p class="foot">KLM Mix v1.3.0 · Studio Produksi Live</p>
 </div>
+<script src="icons.js"></script>
 <script src="common.js"></script>
 <script>
   const srv = document.getElementById('srv'), info = document.getElementById('srvInfo');
@@ -42,9 +43,9 @@
       const ctl = new AbortController(); setTimeout(() => ctl.abort(), 3500);
       const r = await fetch('http://' + s.host + '/info', { signal: ctl.signal });
       const j = await r.json();
-      info.innerHTML = '<span class="pill ok">Terhubung</span> ' + j.app + ' ' + j.version + (j.mixer ? '' : ' (mixer belum dibuka)');
+      info.innerHTML = '<span class="pill ok">Terhubung</span> ' + j.app + ' ' + j.version + (j.mixer ? '' : ' — mixer belum dibuka');
       return true;
-    } catch (e) { info.innerHTML = '<span class="pill warn">Gagal</span> Pastikan HP & PC di Wi-Fi yang sama dan KLM Mix sudah dibuka. Izinkan KLM Mix di Firewall Windows.'; return false; }
+    } catch (e) { info.innerHTML = '<span class="pill warn">Tidak terhubung</span><br>Pastikan HP & PC di Wi-Fi yang sama, KLM Mix terbuka, dan diizinkan di Firewall Windows.'; return false; }
   }
   document.getElementById('test').onclick = test;
   const go = async (page, extra) => { if (!KMP.servedByPc) { save(); if (!KMP.server().host) { KMP.toast('Isi IP PC dulu'); srv.focus(); return; } } location.href = KMP.page(page) + (extra || ''); };

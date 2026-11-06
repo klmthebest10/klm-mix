@@ -9,45 +9,48 @@
 <link rel="icon" href="icon-192.png">
 <style>
   body { padding-bottom: 70px; }
-  .top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 8px 10px 6px; border-bottom: 1px solid var(--line); }
+  .top { position: sticky; top: 0; z-index: 5; background: rgba(11,13,16,.96); backdrop-filter: blur(8px); padding: 10px 12px 10px; padding-top: max(10px, env(safe-area-inset-top)); border-bottom: 1px solid var(--line); }
+  .top .brand { font-size: 17px; } .top .brand::before { width: 26px; height: 26px; }
+  .ib { flex: none !important; width: 42px; padding: 0; }
   .mon { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .mon div { position: relative; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; border: 2px solid var(--pvw); }
+  .mon div { position: relative; aspect-ratio: 16/9; background: #000; border-radius: 10px; overflow: hidden; border: 2px solid var(--pvw); }
   .mon div.pg { border-color: var(--pgm); }
   .mon img { width: 100%; height: 100%; object-fit: contain; display: block; }
-  .mon span { position: absolute; left: 4px; top: 4px; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; background: var(--pvw); color: #000; }
+  .mon span { position: absolute; left: 5px; top: 5px; font-size: 9.5px; font-weight: 800; letter-spacing: .8px; padding: 2px 7px; border-radius: 5px; background: var(--pvw); color: #fff; }
   .mon .pg span { background: var(--pgm); color: #fff; }
   .tr { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 6px; margin-top: 6px; }
-  .tr button { padding: 10px 4px; font-weight: 700; font-size: 13px; }
-  .tr .cut { background: #5b1d1f; border-color: #dc2626; letter-spacing: 2px; }
-  .tbar { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--tx2); }
+  .tr button { padding: 10px 4px; font-weight: 800; font-size: 13px; min-height: 46px; }
+  .tr .cut { background: linear-gradient(180deg,#4a1719,#331012); border-color: #8a2b2b; color: #ffd6d3; letter-spacing: 3px; }
+  .tbar { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 11px; font-weight: 800; letter-spacing: 1px; color: var(--tx3); }
   .tbar input { padding: 0; accent-color: var(--acc); }
-  .sec { padding: 10px; display: none; } .sec.show { display: block; }
+  .sec { padding: 12px; display: none; } .sec.show { display: block; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
-  .inp { padding: 0; overflow: hidden; text-align: left; border-width: 3px; }
+  .inp { padding: 0; overflow: hidden; text-align: left; border-width: 2px; display: block; border-radius: 12px; background: var(--panel); }
   .inp .th { aspect-ratio: 16/9; background: #000 center/contain no-repeat; position: relative; }
-  .inp .n { position: absolute; left: 4px; top: 4px; background: #000c; padding: 0 6px; border-radius: 4px; font-weight: 800; font-size: 13px; }
-  .inp .t { padding: 5px 7px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .inp .n { position: absolute; left: 6px; top: 6px; background: rgba(10,12,15,.85); padding: 1px 7px; border-radius: 6px; font-weight: 800; font-size: 12px; }
+  .inp .t { padding: 8px 10px; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .inp .t .ki { width: 14px; height: 14px; }
   .inp.program { border-color: var(--pgm); } .inp.program .n { background: var(--pgm); }
-  .inp.preview { border-color: var(--pvw); } .inp.preview .n { background: var(--pvw); color: #000; }
-  .mode { display: flex; gap: 6px; margin-bottom: 8px; } .mode button { flex: 1; padding: 8px; font-size: 13px; }
-  nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: #111419; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); z-index: 6; }
-  nav button { flex: 1; border: 0; border-radius: 0; background: none; padding: 9px 2px; font-size: 11px; color: var(--tx2); display: flex; flex-direction: column; align-items: center; gap: 2px; }
-  nav button i { font-style: normal; font-size: 19px; } nav button.on { color: #fff; box-shadow: inset 0 3px var(--acc); }
+  .inp.preview { border-color: var(--pvw); } .inp.preview .n { background: var(--pvw); color: #fff; }
+  .mode { display: flex; gap: 4px; margin-bottom: 12px; padding: 4px; background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; } .mode button { flex: 1; padding: 6px; min-height: 38px; font-size: 12.5px; border: 0; background: transparent; color: var(--tx2); border-radius: 9px; } .mode button.on { background: var(--panel3); color: #fff; box-shadow: none; }
+  nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: rgba(11,13,16,.97); backdrop-filter: blur(8px); border-top: 1px solid var(--line); padding: 4px 4px env(safe-area-inset-bottom); z-index: 6; }
+  nav button { flex: 1; border: 0; border-radius: 10px; background: none; padding: 7px 2px; min-height: 54px; font-size: 11px; font-weight: 700; color: var(--tx3); display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  nav button i { font-style: normal; display: flex; } nav button i .ki { width: 22px; height: 22px; margin: 0; } nav button.on { color: #fff; background: none; } nav button.on i { color: #8ab8ff; }
   .ovr { display: grid; grid-template-columns: 44px 1fr 90px; gap: 8px; align-items: center; margin-bottom: 8px; }
-  .ovr b { font-size: 18px; text-align: center; }
+  .ovr b { font-size: 16px; font-weight: 800; text-align: center; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
   .ovr .on { background: var(--ovl); border-color: var(--ovl); color: #000; font-weight: 800; }
-  .fader { display: grid; grid-template-columns: 1fr 52px; gap: 8px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 8px; }
-  .fader .nm { font-size: 14px; margin-bottom: 4px; } .fader input { padding: 0; }
-  .fader button.on { background: #b91c1c; border-color: #ef4444; }
-  .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .acts button { padding: 16px 8px; font-weight: 700; }
-  .acts button.live { background: #b91c1c; border-color: #ef4444; animation: bl 1s infinite; } @keyframes bl { 50% { opacity: .75; } }
+  .fader { display: grid; grid-template-columns: 1fr 52px; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 8px; }
+  .fader .nm { font-size: 14px; font-weight: 700; margin-bottom: 4px; } .fader input { padding: 0; }
+  .fader button.on { background: var(--pgm); border-color: var(--pgm); color: #fff; }
+  .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .acts button { padding: 14px 8px; min-height: 56px; font-weight: 700; background: var(--panel); border-color: var(--line); }
+  .acts button.live { background: var(--pgm); border-color: var(--pgm); color: #fff; animation: bl 1.2s infinite; } @keyframes bl { 50% { opacity: .8; } }
   .st { font-size: 12px; }
-  h3 { margin: 14px 0 8px; font-size: 14px; color: var(--tx2); text-transform: uppercase; letter-spacing: .5px; }
+  h3 { margin: 18px 2px 10px; font-size: 11px; font-weight: 800; color: var(--tx3); text-transform: uppercase; letter-spacing: 1.2px; } .sec h3:first-child { margin-top: 4px; }
 </style>
 </head>
 <body>
 <div class="top">
-  <div class="row" style="margin-bottom:6px"><button id="home" style="flex:none;padding:6px 10px">⬅</button><div class="brand" style="font-size:16px"><b>KLM</b> Remote</div><span class="pill st" id="status" style="flex:none">…</span><button id="saver" style="flex:none;padding:6px 10px" title="Hemat data/baterai">🍃</button></div>
+  <div class="row" style="margin-bottom:10px"><button id="home" class="ib" title="Menu">⬅</button><div class="brand"><b>KLM</b> Remote</div><span class="pill st" id="status" style="flex:none">…</span><button id="saver" class="ib" title="Hemat data/baterai">🍃</button></div>
   <div class="mon"><div><img id="pvwImg" alt=""><span>PREVIEW</span></div><div class="pg"><img id="pgmImg" alt=""><span>PROGRAM</span></div></div>
   <div class="tr">
     <button class="cut" data-fn="Cut">CUT</button>
@@ -55,7 +58,7 @@
     <button data-fn="Transition2" id="t2">T2</button>
     <button data-fn="FadeToBlack" id="ftb">FTB</button>
   </div>
-  <div class="tbar">T-Bar <input type="range" id="tbar" min="0" max="255" value="0" class="grow"></div>
+  <div class="tbar">T-BAR <input type="range" id="tbar" min="0" max="255" value="0" class="grow"></div>
 </div>
 
 <div class="sec show" id="s-input">
@@ -103,6 +106,7 @@
   <button data-tab="audio"><i>🎚️</i>Audio</button>
   <button data-tab="more"><i>⚡</i>Lainnya</button>
 </nav>
+<script src="icons.js"></script>
 <script src="common.js"></script>
 <script src="remote.js"></script>
 </body>

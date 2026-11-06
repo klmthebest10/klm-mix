@@ -4,47 +4,49 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KLM Mix</title>
+<meta name="color-scheme" content="dark">
 <link rel="icon" href="/build/icon.png">
 <link rel="stylesheet" href="/src/css/app.css">
 </head>
 <body>
+<div id="splash"><svg class="ki ki-logo" viewBox="0 0 24 24"><defs><linearGradient id="kmgs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4b3e"/><stop offset="1" stop-color="#ffb11f"/></linearGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#kmgs)"/><path d="M7.6 6.5h2.9v4.6l4.2-4.6h3.5l-4.95 5.25L18.4 17.5h-3.6l-4.3-4.75v4.75H7.6Z" fill="#fff"/></svg><div class="wm">KLM <span>Mix</span></div><div class="sub">Studio Produksi Live</div><div class="bar"><i></i></div></div>
 <div id="app">
   <header id="topbar">
-    <div class="brand"><span class="logo">KLM</span><span class="logo2">Mix</span><span class="ver" id="ver"></span></div>
+    <div class="brand"><span id="brandLogo"></span><span class="wm">KLM <span>Mix</span></span><span class="ver" id="ver"></span></div>
     <nav class="menu">
       <div class="dd">
-        <button class="mbtn">Proyek ▾</button>
+        <button class="mbtn"><i data-ic="folder"></i>Proyek<i data-ic="chev-down"></i></button>
         <div class="ddm">
-          <button data-act="project-new">Proyek baru</button>
-          <button data-act="project-open">Buka proyek… <kbd>Ctrl+O</kbd></button>
-          <button data-act="project-save">Simpan proyek <kbd>Ctrl+S</kbd></button>
-          <button data-act="project-saveas">Simpan sebagai…</button>
+          <button data-act="project-new"><i data-ic="file-plus"></i>Proyek baru</button>
+          <button data-act="project-open"><i data-ic="folder-open"></i>Buka proyek… <kbd>Ctrl+O</kbd></button>
+          <button data-act="project-save"><i data-ic="save"></i>Simpan proyek <kbd>Ctrl+S</kbd></button>
+          <button data-act="project-saveas"><i data-ic="copy"></i>Simpan sebagai…</button>
           <hr>
-          <button data-act="autosave-restore">Pulihkan sesi terakhir</button>
+          <button data-act="autosave-restore"><i data-ic="rotate-ccw"></i>Pulihkan sesi terakhir</button>
         </div>
       </div>
-      <button class="mbtn" data-act="add-input">＋ Tambah Input</button>
+      <button class="mbtn" data-act="add-input"><i data-ic="plus"></i>Input</button>
       <div class="dd">
-        <button class="mbtn">Output ▾</button>
+        <button class="mbtn"><i data-ic="cast"></i>Output<i data-ic="chev-down"></i></button>
         <div class="ddm">
-          <button data-act="external">Output Eksternal / Monitor 2…</button>
-          <button data-act="multiview">Multiview…</button>
-          <button data-act="snapshot">Snapshot Program <kbd>Ctrl+Shift+S</kbd></button>
-          <button data-act="open-rec-folder">Buka folder rekaman</button>
+          <button data-act="external"><i data-ic="monitor"></i>Output Eksternal / Monitor 2…</button>
+          <button data-act="multiview"><i data-ic="grid"></i>Multiview…</button>
+          <button data-act="snapshot"><i data-ic="camera"></i>Snapshot Program <kbd>Ctrl+Shift+S</kbd></button>
+          <button data-act="open-rec-folder"><i data-ic="folder-open"></i>Buka folder rekaman</button>
         </div>
       </div>
-      <button class="mbtn utcbtn" data-act="utc-panel" title="Panel lengkap UTC KLM Acara: lower third, title, running text, logo, lokasi, sosmed, opening/closing, preset (F9)">🎬 UTC KLM Acara</button>
-      <button class="mbtn" data-act="settings">⚙ Pengaturan</button>
-      <button class="mbtn" data-act="phone">📱 HP & Jaringan</button>
-      <button class="mbtn" data-act="help">❔ Bantuan</button>
+      <button class="mbtn utcbtn" data-act="utc-panel" title="Panel lengkap UTC KLM Acara: lower third, title, running text, logo, lokasi, sosmed, opening/closing, preset (F9)"><i data-ic="clapper"></i>UTC KLM Acara</button>
+      <button class="mbtn" data-act="settings"><i data-ic="settings"></i>Pengaturan</button>
+      <button class="mbtn" data-act="phone"><i data-ic="phone"></i><span>HP <span class="lbl-x">&amp; Jaringan</span></span></button>
+      <button class="mbtn" data-act="help"><i data-ic="help"></i>Bantuan</button>
     </nav>
     <div class="status">
-      <span class="st" id="st-hp" title="Perangkat HP terhubung">📱 0</span>
-      <span class="st" id="st-fps">0 fps</span>
-      <span class="st" id="st-res"></span>
-      <span class="st" id="st-perf" title="Mode performa (klik untuk ganti)" style="cursor:pointer"></span>
-      <span class="st rec" id="st-rec" hidden>● REC 00:00:00</span>
-      <span class="st live" id="st-live" hidden>● LIVE 00:00:00</span>
+      <span class="st" id="st-hp" title="Perangkat HP terhubung"></span>
+      <span class="st" id="st-fps" title="Frame per detik mixer"></span>
+      <span class="st" id="st-res" title="Resolusi output"></span>
+      <span class="st" id="st-perf" title="Mode performa (klik untuk ganti)"></span>
+      <span class="st rec" id="st-rec" hidden></span>
+      <span class="st live" id="st-live" hidden></span>
       <span class="st clock" id="st-clock">00:00:00</span>
     </div>
   </header>
@@ -59,11 +61,12 @@
     </div>
 
     <div id="trans">
-      <button class="tb qp" data-act="quickplay" title="Quick Play: transisi langsung ke preview tanpa menukar">Quick Play</button>
+      <button class="tb qp" data-act="quickplay" title="Quick Play: transisi langsung ke preview tanpa menukar"><i data-ic="play"></i>Quick Play</button>
       <button class="tb cut" data-act="cut" title="Cut (Spasi)">CUT</button>
+      <div class="tlbl"><span>Transisi</span><span>ms</span></div>
       <div id="tslots"></div>
-      <div class="tbar-wrap"><span>T-Bar</span><input type="range" id="tbar" min="0" max="1000" value="0"></div>
-      <div class="sting"><button class="tb" data-act="stinger1">Stinger 1</button><button class="tb" data-act="stinger2">Stinger 2</button></div>
+      <div class="tbar-wrap"><span>T-BAR</span><input type="range" id="tbar" min="0" max="1000" value="0" title="T-Bar: geser untuk transisi manual"></div>
+      <div class="sting"><button class="tb" data-act="stinger1" title="Transisi Stinger 1">Stinger 1</button><button class="tb" data-act="stinger2" title="Transisi Stinger 2">Stinger 2</button></div>
       <button class="tb ftb" data-act="ftb" id="ftbBtn" title="Fade To Black (B)">FTB</button>
     </div>
 
@@ -71,8 +74,8 @@
       <div class="screen-head">
         <span class="tag">PROGRAM</span><span class="sname" id="pgmName">—</span>
         <div class="stools">
-          <button class="ic" data-act="snapshot" title="Snapshot">📸</button>
-          <button class="ic" data-act="external" title="Output eksternal">🖥️</button>
+          <button class="ic" data-act="snapshot" title="Snapshot Program (Ctrl+Shift+S)"><i data-ic="camera"></i></button>
+          <button class="ic" data-act="external" title="Output eksternal / monitor 2"><i data-ic="monitor"></i></button>
         </div>
       </div>
       <div class="cwrap"><canvas id="pgm"></canvas></div>
@@ -81,19 +84,20 @@
 
   <section id="lower">
     <div id="inputsPanel">
+      <div class="ihead"><h3>Input</h3><span class="cnt" id="inCount">0</span><span class="hint"><b>Klik</b> = Preview &nbsp;•&nbsp; <b>Ctrl+Klik</b> = Cut &nbsp;•&nbsp; <b>Seret</b> = urutkan &nbsp;•&nbsp; <b>Klik kanan</b> = menu</span></div>
       <div id="inputs"></div>
     </div>
-    <div id="splitter"></div>
+    <div id="splitter" title="Seret untuk mengubah lebar panel"></div>
     <aside id="dock">
       <div class="dtabs">
-        <button data-tab="audio" class="on">🎚 Audio</button>
-        <button data-tab="utc">🎬 UTC Acara</button>
-        <button data-tab="title">🅃 Title Cepat</button>
-        <button data-tab="replay">⏪ Replay</button>
-        <button data-tab="phone">📱 KLMCAM</button>
-        <button data-tab="playlist">📃 Playlist</button>
-        <button data-tab="ptz">🎥 PTZ</button>
-        <button data-tab="script">⚡ Skrip</button>
+        <button data-tab="audio" class="on"><i data-ic="sliders"></i>Audio</button>
+        <button data-tab="utc"><i data-ic="clapper"></i>UTC Acara</button>
+        <button data-tab="title"><i data-ic="title"></i>Title Cepat</button>
+        <button data-tab="replay"><i data-ic="rewind"></i>Replay</button>
+        <button data-tab="phone"><i data-ic="phone"></i>KLMCAM</button>
+        <button data-tab="playlist"><i data-ic="list"></i>Playlist</button>
+        <button data-tab="ptz"><i data-ic="video"></i>PTZ</button>
+        <button data-tab="script"><i data-ic="zap"></i>Skrip</button>
       </div>
       <div class="dbody" id="dock-audio"></div>
       <div class="dbody" id="dock-utc" hidden></div>
@@ -107,42 +111,45 @@
   </section>
 
   <footer id="bottombar">
-    <button class="bb add" data-act="add-input">＋ Tambah Input</button>
+    <button class="bb add" data-act="add-input" title="Tambah input (Ctrl+I)"><i data-ic="plus"></i>Tambah Input</button>
     <span class="sep"></span>
-    <button class="bb" data-act="record" id="bb-rec"><i class="dot"></i>Rekam</button>
-    <button class="bb" data-act="external" id="bb-ext"><i class="dot"></i>External</button>
-    <button class="bb" data-act="stream" id="bb-stream"><i class="dot"></i>Stream</button>
-    <button class="bb" data-act="multicorder" id="bb-mc"><i class="dot"></i>MultiCorder</button>
-    <button class="bb" data-act="playlist" id="bb-pl"><i class="dot"></i>PlayList</button>
-    <button class="bb" data-act="replay-toggle" id="bb-rp"><i class="dot"></i>Replay</button>
+    <button class="bb" data-act="record" id="bb-rec" title="Mulai / hentikan rekaman Program"><i class="dot"></i>Rekam</button>
+    <button class="bb" data-act="stream" id="bb-stream" title="Mulai / hentikan streaming"><i class="dot"></i>Stream</button>
+    <button class="bb" data-act="external" id="bb-ext" title="Output ke monitor / proyektor"><i class="dot"></i>External</button>
+    <button class="bb" data-act="multicorder" id="bb-mc" title="Rekam beberapa input terpisah"><i class="dot"></i>MultiCorder</button>
+    <button class="bb" data-act="playlist" id="bb-pl" title="Jalankan playlist"><i class="dot"></i>PlayList</button>
+    <button class="bb" data-act="replay-toggle" id="bb-rp" title="Buffer instant replay"><i class="dot"></i>Replay</button>
     <button class="bb" data-act="ndi" id="bb-ndi" title="Output NDI (juga virtual camera via NDI Webcam)"><i class="dot"></i>NDI / VCam</button>
     <span class="sep"></span>
     <button class="bb utc" data-act="utc-air" id="bb-utc" title="Tampilkan / sembunyikan grafis UTC KLM Acara di Program (lapisan di atas Overlay 1–4)"><i class="dot"></i>UTC ON AIR</button>
     <span class="sep"></span>
-    <span class="ovl-lbl">Overlay</span>
-    <button class="bb ov" data-ov="0" id="bb-ov0">1</button>
-    <button class="bb ov" data-ov="1" id="bb-ov1">2</button>
-    <button class="bb ov" data-ov="2" id="bb-ov2">3</button>
-    <button class="bb ov" data-ov="3" id="bb-ov3">4</button>
-    <button class="bb" data-act="ovl-off" title="Matikan semua overlay">✕</button>
+    <div class="ovgrp">
+      <span class="ovl-lbl">Overlay</span>
+      <button class="bb ov" data-ov="0" id="bb-ov0" title="Overlay 1 (input Preview)">1</button>
+      <button class="bb ov" data-ov="1" id="bb-ov1" title="Overlay 2 (input Preview)">2</button>
+      <button class="bb ov" data-ov="2" id="bb-ov2" title="Overlay 3 (input Preview)">3</button>
+      <button class="bb ov" data-ov="3" id="bb-ov3" title="Overlay 4 (input Preview)">4</button>
+      <button class="bb ov" data-act="ovl-off" title="Matikan semua overlay"><i data-ic="x"></i></button>
+    </div>
     <span class="grow"></span>
-    <button class="bb" data-act="snapshot">📸 Snapshot</button>
-    <button class="bb" data-act="settings-stream">⚙ Stream</button>
+    <button class="bb ghost" data-act="snapshot" title="Snapshot Program"><i data-ic="camera"></i>Snapshot</button>
+    <button class="bb ghost" data-act="settings-stream" title="Pengaturan streaming"><i data-ic="settings"></i>Stream</button>
   </footer>
 </div>
 <div id="utcWs" hidden>
   <div class="utc-head">
-    <b>🎬 UTC KLM Acara</b><span class="muted" id="utcLive"></span>
+    <b><i data-ic="clapper"></i>UTC KLM Acara</b><span class="muted" id="utcLive"></span>
     <span class="grow"></span>
     <button class="bb utc" data-act="utc-air" id="ws-utc-air"><i class="dot"></i>UTC ON AIR</button>
-    <button class="bb" data-act="utc-window" title="Buka panel di jendela sendiri (mis. di monitor ke-2)">⧉ Jendela terpisah</button>
-    <button class="bb" data-act="utc-reload" title="Muat ulang renderer grafis">⟳</button>
-    <button class="bb add" data-act="utc-close" title="Kembali ke mixer (Esc / F9)">✕ Kembali ke Mixer</button>
+    <button class="bb" data-act="utc-window" title="Buka panel di jendela sendiri (mis. di monitor ke-2)"><i data-ic="external"></i>Jendela terpisah</button>
+    <button class="bb" data-act="utc-reload" title="Muat ulang renderer grafis"><i data-ic="refresh"></i></button>
+    <button class="bb add" data-act="utc-close" title="Kembali ke mixer (Esc / F9)"><i data-ic="arrow-left"></i>Kembali ke Mixer</button>
   </div>
   <div class="utc-body"></div>
 </div>
 <div id="modal-root"></div>
 
+<script src="/icons.js"></script>
 <script src="/src/vendor/qr.js"></script>
 <script src="/src/js/core.js"></script>
 <script src="/src/js/perf.js"></script>

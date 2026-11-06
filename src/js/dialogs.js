@@ -501,7 +501,7 @@
         peer && peer.info ? h('p.muted', `HP: ${peer.info.w}×${peer.info.h} @${peer.info.fps}fps • baterai ${peer.info.battery != null ? peer.info.battery + '%' : '?'}`) : null,
         h('p.muted', 'Tips latensi rendah: gunakan Wi-Fi 5 GHz / router dekat, 720p60 atau 1080p30, dan atur Delay audio jika perlu.'));
     },
-    title(inp) { return h('div.sec', h('h4', 'Title UTC KLM Acara'), KM.dock.titleEditor(inp)); },
+    title(inp) { return h('div.sec', h('h4', 'Title Cepat (kanvas)'), KM.dock.titleEditor(inp)); },
     bars(inp) { return h('div.sec', h('p.muted', 'Color bars standar untuk kalibrasi monitor.')); },
     browser(inp) {
       const u = h('input.grow', { value: inp.opts.url });

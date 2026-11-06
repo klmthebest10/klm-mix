@@ -12,7 +12,7 @@
     const foot = h('div.mf');
     const m = { close, el: null, foot };
     (buttons || [{ label: 'Tutup', cls: 'pri' }]).forEach((b) => foot.appendChild(h('button.btn' + (b.cls ? '.' + b.cls : ''), { onclick: async () => { if (b.fn) { const r = await b.fn(); if (r === false) return; } close(); } }, b.label)));
-    const box = h('div.modal' + (cls ? '.' + cls : ''), h('div.mh', title, h('button.x', { onclick: close, title: 'Tutup' }, '✕')), h('div.mb', body), foot);
+    const box = h('div.modal' + (cls ? '.' + cls : ''), h('div.mh', title, h('button.x', { onclick: close, title: 'Tutup (Esc)' }, KI.el('x'))), h('div.mb', body), foot);
     m.el = box;
     bg.appendChild(box);
     bg.addEventListener('mousedown', (e) => { if (e.target === bg) close(); });
@@ -115,38 +115,38 @@
   function renderTransSlots() {
     const box = $('#tslots'); box.innerHTML = '';
     KM.settings.transitions.forEach((t, i) => {
-      const sel = h('select', { title: 'Efek transisi ' + (i + 1), onchange: () => { t.type = sel.value; KM.saveSettings(); renderTransSlots(); } },
+      const sel = h('select', { title: 'Ganti efek transisi ' + (i + 1), onchange: () => { t.type = sel.value; KM.saveSettings(); renderTransSlots(); } },
         Object.entries(KM.engine.TRANSITIONS).filter(([k]) => k !== 'cut' && !k.startsWith('stinger')).map(([k, v]) => h('option', { value: k, selected: k === t.type }, v)));
-      const dur = h('input', { type: 'number', value: t.dur, min: 50, max: 10000, step: 50, title: 'Durasi (ms)', onchange: () => { t.dur = +dur.value || 500; KM.saveSettings(); } });
+      const dur = h('input', { type: 'number', value: t.dur, min: 50, max: 10000, step: 50, title: 'Durasi transisi (milidetik)', onchange: () => { t.dur = +dur.value || 500; KM.saveSettings(); } });
       box.appendChild(h('div.tslot',
-        h('button.tb', { title: 'Transisi ' + (i + 1) + (i === 0 ? ' (Enter)' : ''), onclick: () => KM.engine.transition(t.type, t.dur) }, KM.engine.TRANSITIONS[t.type] || t.type),
+        h('button.tb', { title: 'Transisi ' + (i + 1) + (i === 0 ? ' (Enter)' : ''), onclick: () => KM.engine.transition(t.type, t.dur) }, h('span', KM.engine.TRANSITIONS[t.type] || t.type), i === 0 ? h('span.k', '↵') : null),
         h('div.row', sel, dur)));
     });
   }
   UI.renderTransSlots = renderTransSlots;
 
   // ---------- kartu input ----------
-  function typeIcon(inp) { return KM.inputTypes[inp.type].icon; }
+  function typeIcon(inp) { const ic = KM.inputTypes[inp.type].icon, n = KI.leading(ic); return n ? KI.el(n) : ic; }
   function cardButtons(inp) {
     const n = KM.inputNum(inp);
-    const btn = (lbl, title, fn, cls) => h('button.cb' + (cls ? '.' + cls.replace(/\s+/g, '.') : ''), { title, onclick: (e) => { e.stopPropagation(); fn(e); } }, lbl);
+    const btn = (lbl, title, fn, cls) => h('button.cb' + (cls ? '.' + cls.replace(/\s+/g, '.') : ''), { title, onclick: (e) => { e.stopPropagation(); fn(e); } }, typeof lbl === 'string' && KI.names.includes(lbl) ? KI.el(lbl) : lbl);
     const top = [
-      btn('✕', 'Tutup / hapus input', async () => { if (await UI.confirm('Hapus input ' + n + ' "' + inp.title + '"?', 'Hapus')) KM.inputs.remove(inp); }),
-      btn('Quick Play', 'Quick Play ke program', () => KM.engine.quickPlay(inp.id), 'grow'),
-      btn('Cut', 'Cut langsung ke program', () => KM.engine.cut(inp.id), 'grow red'),
-      btn('⚙', 'Pengaturan input', () => KM.dialogs.inputSettings(inp))
+      btn('x', 'Hapus input', async () => { if (await UI.confirm('Hapus input ' + n + ' "' + inp.title + '"?', 'Hapus')) KM.inputs.remove(inp); }, 'del'),
+      btn([KI.el('play'), 'Quick'], 'Quick Play ke Program (transisi tanpa menukar)', () => KM.engine.quickPlay(inp.id), 'grow'),
+      btn('CUT', 'Cut langsung ke Program', () => KM.engine.cut(inp.id), 'grow red'),
+      btn('settings', 'Pengaturan input', () => KM.dialogs.inputSettings(inp))
     ];
     const els = [];
     if (KM.inputs.isPlayable(inp)) {
-      els.push(btn(KM.inputs.isPlaying(inp) ? '⏸' : '▶', 'Play/Pause', () => { KM.inputs.isPlaying(inp) ? KM.inputs.pause(inp) : KM.inputs.play(inp); UI.updateCards(); }, 'play'));
-      els.push(btn('🔁', 'Loop', () => { KM.inputs.setLoop(inp, !inp.loop); UI.updateCards(); }, 'loop' + (inp.loop ? '.on' : '')));
+      els.push(btn(KM.inputs.isPlaying(inp) ? 'pause' : 'play', 'Play / Pause', () => { KM.inputs.isPlaying(inp) ? KM.inputs.pause(inp) : KM.inputs.play(inp); UI.updateCards(); }, 'play'));
+      els.push(btn('repeat', 'Loop', () => { KM.inputs.setLoop(inp, !inp.loop); UI.updateCards(); }, 'loop' + (inp.loop ? '.on' : '')));
     }
     for (let k = 0; k < 4; k++) {
       const ch = S.overlays[k];
       const on = ch.inputId === inp.id && ch.phase !== 'off';
-      els.push(btn(String(k + 1), 'Overlay ' + (k + 1), () => KM.engine.overlay(k, inp.id, 'toggle'), 'ov.o' + k + (on ? '.on' : '')));
+      els.push(btn(String(k + 1), 'Overlay ' + (k + 1) + (on ? ' (aktif — klik untuk mematikan)' : ''), () => KM.engine.overlay(k, inp.id, 'toggle'), 'ov.o' + k + (on ? '.on' : '')));
     }
-    if (KM.inputs.hasAudio(inp)) els.push(btn(inp.audio.mute ? '🔇' : '🔊', 'Audio on/off', () => KM.audio.set(inp, 'mute', null), 'aud' + (inp.audio.mute ? '' : '.on')));
+    if (KM.inputs.hasAudio(inp)) els.push(btn(inp.audio.mute ? 'volume-x' : 'volume', inp.audio.mute ? 'Audio mati (klik untuk nyalakan)' : 'Audio aktif (klik untuk mute)', () => KM.audio.set(inp, 'mute', null), 'aud' + (inp.audio.mute ? '' : '.on')));
     return [h('div.cbrow', top), h('div.cbrow', els)];
   }
 
@@ -160,7 +160,7 @@
           onclick: (e) => { if (e.ctrlKey) KM.engine.cut(inp.id); else KM.engine.setPreview(inp.id); },
           ondblclick: () => KM.dialogs.inputSettings(inp),
           title: 'Klik: ke Preview • Ctrl+Klik: Cut • Dobel klik: pengaturan'
-        }, inp.rt.thumb, h('span.num', String(idx + 1)), h('span.typ', typeIcon(inp)), h('div.pbar'), KM.inputs.hasAudio(inp) ? h('div.ameter', meter) : null),
+        }, inp.rt.thumb, h('span.num', String(idx + 1)), h('span.tly'), h('span.typ', { title: KM.inputTypes[inp.type].label }, typeIcon(inp)), h('div.pbar'), KM.inputs.hasAudio(inp) ? h('div.ameter', meter) : null),
         h('div.ctitle', h('span', { title: inp.title, ondblclick: async () => { const v = await UI.prompt('Ganti nama input', inp.title); if (v) { inp.title = v; KM.changed('inputs'); } } }, inp.title)),
         h('div.cbtns', cardButtons(inp)));
       card._meter = meter; card._inp = inp;
@@ -177,9 +177,29 @@
       });
       box.appendChild(card);
     });
-    box.appendChild(h('div.card.add', { onclick: () => KM.dialogs.addInput() }, '＋ Tambah Input'));
+    if (!S.inputs.length) box.appendChild(emptyState());
+    else box.appendChild(h('div.card.add', { onclick: () => KM.dialogs.addInput(), title: 'Tambah input (Ctrl+I)' }, KI.el('plus'), 'Tambah Input'));
+    const c = $('#inCount'); if (c) c.textContent = S.inputs.length;
     UI.updateCards();
   };
+
+  function emptyState() {
+    const q = (type, icon, name, sub) => h('button', { onclick: () => KM.dialogs.addInput(type) }, KI.el(icon), name, h('span', sub));
+    return h('div.empty',
+      KI.el('logo'), h('h2', 'Mulai produksi Anda'),
+      h('p', 'Tambahkan sumber gambar: kamera, kamera HP (KLMCAM), video, foto, layar, atau grafis acara. Klik sumber di Preview, lalu CUT atau transisi ke Program.'),
+      h('div.qadd',
+        q('camera', 'camera', 'Kamera', 'Webcam / capture'),
+        q('klmcam', 'phone', 'KLMCAM', 'Kamera HP'),
+        q('video', 'film', 'Video', 'MP4, MOV, MKV'),
+        q('image', 'image', 'Gambar', 'Foto / logo'),
+        q('screen', 'monitor', 'Layar', 'Desktop / jendela'),
+        q('utc', 'clapper', 'Grafis Acara', 'UTC KLM Acara')),
+      h('div.row', { style: { marginTop: '14px', justifyContent: 'center' } },
+        h('button.btn', { onclick: () => KM.dialogs.addInput() }, KI.el('grid'), 'Semua jenis input'),
+        h('button.btn', { onclick: () => UI.openProject() }, KI.el('folder-open'), 'Buka proyek'),
+        h('button.btn', { onclick: () => UI.restoreAutosave(true) }, KI.el('rotate-ccw'), 'Pulihkan sesi terakhir')));
+  }
 
   UI.updateCards = function () {
     KM.$$('#inputs .card[data-id]').forEach((card) => {
@@ -192,8 +212,9 @@
       const t = card.querySelector('.ctitle span'); if (t.textContent !== inp.title) { t.textContent = inp.title; t.title = inp.title; }
     });
     const pv = KM.getInput(S.previewId), pg = KM.getInput(S.programId);
-    $('#pvwName').textContent = pv ? KM.inputNum(pv) + '  ' + pv.title : '—';
-    $('#pgmName').textContent = pg ? KM.inputNum(pg) + '  ' + pg.title : '—';
+    const nm = (el, inp) => { const k = inp ? KM.inputNum(inp) + '|' + inp.title : '-'; if (el._k === k) return; el._k = k; el.replaceChildren(...(inp ? [h('span.n', String(KM.inputNum(inp))), inp.title] : [h('span.muted', 'Belum ada input')])); };
+    nm($('#pvwName'), pv); nm($('#pgmName'), pg);
+    $('#pvwBox').classList.toggle('nosig', !pv); $('#pgmBox').classList.toggle('nosig', !pg);
     renderPvwTools(pv);
   };
 
@@ -201,15 +222,15 @@
     const box = $('#pvwTools'); box.innerHTML = '';
     if (!pv) return;
     if (KM.inputs.isPlayable(pv)) {
-      box.appendChild(h('button.ic', { title: 'Mulai ulang', onclick: () => KM.inputs.restart(pv) }, '⏮'));
-      box.appendChild(h('button.ic', { title: 'Play/Pause', onclick: () => { KM.inputs.isPlaying(pv) ? KM.inputs.pause(pv) : KM.inputs.play(pv); UI.updateCards(); } }, KM.inputs.isPlaying(pv) ? '⏸' : '▶'));
-      if (pv.type === 'list') box.appendChild(h('button.ic', { title: 'Item berikutnya', onclick: () => KM.inputTypes.list.next(pv) }, '⏭'));
+      box.appendChild(h('button.ic', { title: 'Mulai ulang', onclick: () => KM.inputs.restart(pv) }, KI.el('skip-back')));
+      box.appendChild(h('button.ic', { title: 'Play / Pause', onclick: () => { KM.inputs.isPlaying(pv) ? KM.inputs.pause(pv) : KM.inputs.play(pv); UI.updateCards(); } }, KI.el(KM.inputs.isPlaying(pv) ? 'pause' : 'play')));
+      if (pv.type === 'list') box.appendChild(h('button.ic', { title: 'Item berikutnya', onclick: () => KM.inputTypes.list.next(pv) }, KI.el('skip-fwd')));
     }
     if (pv.type === 'title') {
       box.appendChild(h('button.ic', { title: 'Animasi masuk', onclick: () => KM.titles.animIn(pv) }, 'In'));
       box.appendChild(h('button.ic', { title: 'Animasi keluar', onclick: () => KM.titles.animOut(pv) }, 'Out'));
     }
-    box.appendChild(h('button.ic', { title: 'Pengaturan input', onclick: () => KM.dialogs.inputSettings(pv) }, '⚙'));
+    box.appendChild(h('button.ic', { title: 'Pengaturan input', onclick: () => KM.dialogs.inputSettings(pv) }, KI.el('settings')));
   }
 
   UI.inputMenu = function (inp, x, y) {
@@ -218,7 +239,7 @@
       { label: '✎ Ganti nama…', fn: async () => { const v = await UI.prompt('Ganti nama input', inp.title); if (v) { inp.title = v; KM.changed('inputs'); } } },
       { label: '⧉ Duplikat', fn: () => KM.inputs.duplicate(inp) },
       '-',
-      { label: '→ Ke Preview', fn: () => KM.engine.setPreview(inp.id) },
+      { label: '👁 Ke Preview', fn: () => KM.engine.setPreview(inp.id) },
       { label: '✂ Cut ke Program', fn: () => KM.engine.cut(inp.id) },
       { label: '📃 Tambah ke Playlist', fn: () => { KM.playlist.add(inp.id, KM.inputs.isPlayable(inp) ? 0 : 10); KM.toast('Ditambahkan ke playlist'); } },
       { label: '✨ Jadikan Stinger 1', fn: () => { KM.settings.stingers[0].inputId = inp.id; KM.saveSettings(); KM.toast('Stinger 1 = ' + inp.title); } },
@@ -252,20 +273,21 @@
     $('#bb-rp').classList.toggle('on', KM.replay.enabled);
     S.overlays.forEach((o, i) => $('#bb-ov' + i).classList.toggle('on', o.phase !== 'off'));
     $('#ftbBtn').classList.toggle('on', S.ftb.on);
-    $('#st-res').textContent = KM.settings.width + '×' + KM.settings.height + ' ' + KM.settings.fps + 'p';
+    $('#st-res').innerHTML = KI.svg('monitor') + KM.settings.width + '×' + KM.settings.height + '<b>' + KM.settings.fps + 'p</b>';
     $('#st-perf').textContent = KM.perf.label();
     $('#bb-ndi').classList.toggle('on', !!S.ndiOut);
     updateUtc();
   }
+  const setHTML = (el, v) => { if (el._v !== v) { el._v = v; el.innerHTML = v; } };
   function tickStatus() {
     const d = new Date();
     $('#st-clock').textContent = KM.pad(d.getHours()) + ':' + KM.pad(d.getMinutes()) + ':' + KM.pad(d.getSeconds());
-    $('#st-fps').textContent = KM.engine.fps + ' fps';
-    const r = $('#st-rec'); r.hidden = !S.recording; if (S.recording) r.textContent = '● REC ' + KM.fmtTime(KM.rec.recTime());
+    setHTML($('#st-fps'), KI.svg('activity') + '<b>' + KM.engine.fps + '</b> fps');
+    const r = $('#st-rec'); r.hidden = !S.recording; if (S.recording) setHTML(r, KI.svg('rec') + 'REC ' + KM.fmtTime(KM.rec.recTime()));
     const l = $('#st-live'); l.hidden = !S.streaming;
-    if (S.streaming) { const s = KM.rec.stats; l.textContent = '● LIVE ' + KM.fmtTime(KM.rec.streamTime()) + (s ? '  ' + s.bitrate + ' ' + s.speed : ''); }
+    if (S.streaming) { const s = KM.rec.stats; setHTML(l, KI.svg('radio') + 'LIVE ' + KM.fmtTime(KM.rec.streamTime()) + (s ? ' · ' + s.bitrate : '')); }
     let cams = 0, rems = 0; for (const p of KM.link.peers.values()) { if (p.role === 'camera') cams++; else if (p.role === 'remote') rems++; }
-    $('#st-hp').textContent = '📱 ' + cams + '  🎛 ' + rems;
+    setHTML($('#st-hp'), KI.svg('camera') + '<b>' + cams + '</b>' + KI.svg('phone') + '<b>' + rems + '</b>');
     $('#st-hp').title = cams + ' KLMCAM, ' + rems + ' remote HP terhubung';
     // tombol play di kartu (status play bisa berubah sendiri)
   }
@@ -428,7 +450,8 @@
 
   // ---------- init ----------
   UI.init = function () {
-    $('#ver').textContent = 'v' + KM.version + (KM.isElectron ? '' : ' • web');
+    $('#ver').textContent = 'v' + KM.version + (KM.isElectron ? '' : ' · web');
+    const bl = $('#brandLogo'); if (bl) bl.replaceWith(KI.el('logo'));
     renderTransSlots(); initTbar(); initShortcuts(); initDrop(); initSplitter();
     KM.$$('.dtabs button').forEach((b) => b.addEventListener('click', () => UI.dockTab(b.dataset.tab)));
     KM.$$('.dd > .mbtn').forEach((b) => b.addEventListener('click', () => b.parentElement.classList.toggle('open')));
@@ -450,6 +473,8 @@
     setInterval(() => { if (!document.hidden) tickCards(); }, 100);
     setInterval(UI.autosave, 10000);
     // tampilkan status play terbaru
-    setInterval(() => KM.$$('#inputs .card[data-id]').forEach((c) => { const b = c.querySelector('.cb.play'); if (b && c._inp) { const t = KM.inputs.isPlaying(c._inp) ? '⏸' : '▶'; if (b.textContent !== t) b.textContent = t; } }), 500);
+    setInterval(() => KM.$$('#inputs .card[data-id]').forEach((c) => { const b = c.querySelector('.cb.play'); if (b && c._inp) { const t = KM.inputs.isPlaying(c._inp) ? 'pause' : 'play'; if (b._t !== t) { b._t = t; b.replaceChildren(KI.el(t)); } } }), 500);
+    // layar pembuka
+    setTimeout(() => { const sp = $('#splash'); if (sp) { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); } }, 450);
   };
 })(window.KM);

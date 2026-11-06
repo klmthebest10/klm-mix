@@ -248,9 +248,10 @@
   function renderUtc() {
     const box = KM.$('#dock-utc'), U = KM.utc, st = U.status || {}, vis = st.visible || {};
     const run = async (cmd, target, extra) => { const r = await U.cmd(cmd, target, extra); if (!r.ok) KM.toast(r.msg || 'Gagal', 'warn'); };
-    const tg = (k, label) => h('button.tg' + (vis[k] ? '.on' : ''), { title: (vis[k] ? 'Sembunyikan ' : 'Tampilkan ') + label, onclick: () => run('toggle', k) }, (vis[k] ? '● ' : '') + label);
+    const TI = { lt: 'rect', tt: 'title', tk: 'type', bug: 'image', loc: 'target', soc: 'share' };
+    const tg = (k, label) => h('button.tg' + (vis[k] ? '.on' : ''), { title: (vis[k] ? 'Sembunyikan ' : 'Tampilkan ') + label, onclick: () => run('toggle', k) }, KI.el(TI[k]), label);
     const items = (k, list, actId, lbl) => list && list.length ? h('div.sec', h('h4', lbl),
-      h('div.row', h('button.btn.sm', { title: 'Sebelumnya', onclick: () => run('prev', k, { show: true }) }, '◀'), h('button.btn.sm', { title: 'Berikutnya', onclick: () => run('next', k, { show: true }) }, '▶'),
+      h('div.row', h('button.btn.sm', { title: 'Sebelumnya', onclick: () => run('prev', k, { show: true }) }, KI.el('chev-left'), 'Sebelumnya'), h('button.btn.sm', { title: 'Berikutnya', onclick: () => run('next', k, { show: true }) }, 'Berikutnya', KI.el('chev-right')),
         h('span.grow'), h('span.muted', { style: { fontSize: '11px' } }, 'klik = pilih & tampilkan')),
       h('div.items', list.map((x, i) => h('button.btn.sm' + (x.id === actId ? '.act' : ''), { title: [x.label, x.name || x.title, x.role].filter(Boolean).join(' • '), onclick: () => run('select', k, { name: String(i + 1) }) }, (i + 1) + '. ' + (x.name || x.title || x.label || '—'))))) : null;
     const presetSel = h('select', { style: { flex: 1 } }, h('option', { value: '' }, utcPresets ? (utcPresets.length ? '— pilih preset —' : '(belum ada preset)') : 'memuat…'),
@@ -258,22 +259,22 @@
     if (!utcPresets) fetch('/utc/api/presets').then((r) => r.json()).then((l) => { utcPresets = l; if (DK.cur === 'utc') renderUtc(); }).catch(() => { utcPresets = []; });
     box.replaceChildren(h('div.utcq',
       h('div.sec',
-        h('button.btn.air' + (U.onAir() ? '.pri' : ''), { style: U.onAir() ? { background: '#b45309', borderColor: '#f59e0b' } : {}, onclick: () => U.setOnAir() }, U.onAir() ? '● UTC ON AIR di Program' : '○ UTC tidak tampil — klik untuk tayang'),
+        h('button.btn.air' + (U.onAir() ? '.on' : ''), { onclick: () => U.setOnAir(), title: 'Tampilkan / sembunyikan semua grafis UTC dari Program' }, KI.el(U.onAir() ? 'radio' : 'eye'), U.onAir() ? 'UTC ON AIR di Program' : 'UTC tidak tayang — klik untuk menayangkan'),
         h('div.live', { innerHTML: U.liveInfo() }),
-        h('div.row', h('button.btn.sm.pri', { style: { flex: 1 }, onclick: () => KM.ui.utcPanel(true) }, '🎬 Buka Panel Lengkap (F9)'),
-          h('button.btn.sm', { title: 'Jadikan input KLM Mix (Overlay 1–4, layer, multiview)', onclick: () => { U.addInput(); KM.toast('Input "Grafis UTC KLM Acara" siap', 'ok'); } }, '＋ Input'))),
+        h('div.row', h('button.btn.pri', { style: { flex: 1 }, onclick: () => KM.ui.utcPanel(true) }, KI.el('clapper'), 'Buka Panel Lengkap', h('kbd', { style: { marginLeft: '4px', color: '#cfe2ff', borderColor: 'rgba(255,255,255,.3)', background: 'transparent' } }, 'F9')),
+          h('button.btn', { title: 'Jadikan input KLM Mix (Overlay 1–4, layer, multiview)', onclick: () => { U.addInput(); KM.toast('Input "Grafis UTC KLM Acara" siap', 'ok'); } }, KI.el('plus'), 'Input'))),
       h('div.sec', h('h4', 'Tampilkan / sembunyikan'),
         h('div.grid', tg('lt', 'Lower Third'), tg('tt', 'Title'), tg('tk', 'Running Text'), tg('bug', 'Logo'), tg('loc', 'Lokasi'), tg('soc', 'Sosmed')),
         h('div.row', { style: { marginTop: '6px' } },
-          h('button.btn.sm' + (st.oc && st.oc.kind === 'opening' ? '.pri' : ''), { onclick: () => run('opening') }, '🎬 Opening'),
-          h('button.btn.sm' + (st.oc && st.oc.kind === 'closing' ? '.pri' : ''), { onclick: () => run('closing') }, '🌙 Closing'),
-          st.oc ? h('button.btn.sm', { onclick: () => run('ocoff') }, '✕ Opening/Closing') : null,
-          h('span.grow'), h('button.btn.sm', { title: 'Sembunyikan semua grafis', onclick: () => run('hideall') }, '⛔ Semua OFF'))),
+          h('button.btn.sm' + (st.oc && st.oc.kind === 'opening' ? '.pri' : ''), { onclick: () => run('opening') }, KI.el('play'), 'Opening'),
+          h('button.btn.sm' + (st.oc && st.oc.kind === 'closing' ? '.pri' : ''), { onclick: () => run('closing') }, KI.el('moon'), 'Closing'),
+          st.oc ? h('button.btn.sm', { onclick: () => run('ocoff') }, KI.el('x'), 'Hentikan') : null,
+          h('span.grow'), h('button.btn.sm.red', { title: 'Sembunyikan semua grafis', onclick: () => run('hideall') }, KI.el('ban'), 'Semua OFF'))),
       items('lt', st.lists && st.lists.lt, st.activeId && st.activeId.lt, 'Lower Third'),
       items('tt', st.lists && st.lists.tt, st.activeId && st.activeId.tt, 'Title'),
       h('div.sec', h('h4', 'Preset acara'),
-        h('div.row', presetSel, h('button.btn.sm', { onclick: async () => { if (!presetSel.value) return; await run('preset', '', { name: presetSel.value }); KM.toast('Preset dimuat: ' + presetSel.value, 'ok'); } }, 'Muat'),
-          h('button.btn.sm', { title: 'Muat ulang daftar', onclick: () => { utcPresets = null; renderUtc(); } }, '⟳')),
+        h('div.row', presetSel, h('button.btn', { onclick: async () => { if (!presetSel.value) return; await run('preset', '', { name: presetSel.value }); KM.toast('Preset dimuat: ' + presetSel.value, 'ok'); } }, KI.el('download'), 'Muat'),
+          h('button.btn', { title: 'Muat ulang daftar', onclick: () => { utcPresets = null; renderUtc(); } }, KI.el('refresh'))),
         h('p.muted', { style: { fontSize: '11px', marginTop: '6px' } }, 'Ubah teks, tema, animasi, posisi, logo, video opening/closing & simpan preset di Panel Lengkap. Bisa juga dari HP: ' + (KM.link.ips[0] ? 'http://' + KM.link.ips[0].address + ':' + (KM.link.ports.http || 8620) + '/utc' : '/utc'))))
     );
   }

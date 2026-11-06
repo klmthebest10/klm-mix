@@ -34,7 +34,7 @@ const browsers = new Map();
 function createMain() {
   mainWin = new BrowserWindow({
     width: 1600, height: 940, minWidth: 1180, minHeight: 700,
-    backgroundColor: '#15171c', title: 'KLM Mix',
+    backgroundColor: '#0a0c0f', title: 'KLM Mix',
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
