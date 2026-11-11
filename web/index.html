@@ -23,9 +23,10 @@
   <button class="big c-cam" id="goCam"><i>📷</i><div><b>Kamera (KLMCAM)</b><span>Jadikan HP ini kamera wireless latensi rendah + tally</span></div></button>
   <button class="big" id="goRemote"><i>🎛️</i><div><b>Remote Switcher</b><span>Cut, transisi, overlay, rekam, streaming, replay</span></div></button>
   <button class="big c-utc" id="goUtc"><i>🎬</i><div><b>UTC KLM Acara (Panel Lengkap)</b><span>Lower third, title, running text, logo, lokasi, sosmed, opening/closing, preset</span></div></button>
+  <button class="big c-utc" id="goScore"><i>🏆</i><div><b>UTC KLM Scoreboard</b><span>Skor, jam pertandingan, kartu, foul, timeout — sepak bola, futsal, basket, voli, badminton</span></div></button>
   <button class="big c-call" id="goCall"><i>📞</i><div><b>KLM Call (Tamu)</b><span>Narasumber jarak jauh: lihat tayangan studio + suara tanpa gema</span></div></button>
   <button class="big c-aud" id="goAudio"><i>🎚️</i><div><b>Mixer Audio</b><span>Volume & mute tiap input dari HP</span></div></button>
-  <p class="foot">KLM Mix v1.4.0 · Studio Produksi Live</p>
+  <p class="foot">KLM Mix v1.5.0 · Studio Produksi Live</p>
 </div>
 <script src="icons.js"></script>
 <script src="common.js"></script>
@@ -59,6 +60,12 @@
   document.getElementById('goCall').onclick = () => {
     if (KMP.servedByPc && location.protocol !== 'https:') fetch('/info').then(r => r.json()).then(j => { location.href = j.ports.https ? 'https://' + location.hostname + ':' + j.ports.https + '/call' : '/call'; }).catch(() => go('call'));
     else go('call');
+  };
+  document.getElementById('goScore').onclick = async () => {
+    let host = location.hostname, base = '';
+    if (!KMP.servedByPc) { save(); const sv = KMP.server(); if (!sv.host) { KMP.toast('Isi IP PC dulu'); srv.focus(); return; } host = sv.host.split(':')[0]; base = 'http://' + sv.host; }
+    try { const j = await (await fetch(base + '/info')).json(); if (j.ports && j.ports.score) { location.href = 'http://' + host + ':' + j.ports.score + '/hp'; return; } } catch (e) {}
+    KMP.toast('Scoreboard belum aktif di PC');
   };
   document.getElementById('goUtc').onclick = () => { if (KMP.servedByPc) location.href = '/utc'; else { save(); if (!KMP.server().host) { KMP.toast('Isi IP PC dulu'); srv.focus(); return; } location.href = KMP.page('utc'); } };
   document.getElementById('goAudio').onclick = () => go('remote', '#audio');

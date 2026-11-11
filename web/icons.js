@@ -64,6 +64,7 @@
     battery: '<rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 11v2M6 10v4M10 10v4"/>',
     moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/>',
     ban: '<circle cx="12" cy="12" r="9.5"/><path d="m5.3 5.3 13.4 13.4"/>',
+    trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4Z"/><path d="M7 6H4.5a.5.5 0 0 0-.5.5V8a3 3 0 0 0 3 3M17 6h2.5a.5.5 0 0 1 .5.5V8a3 3 0 0 1-3 3"/>',
     music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
     'chev-down': '<path d="m6 9 6 6 6-6"/>',
     'chev-right': '<path d="m9 18 6-6-6-6"/>',
@@ -129,7 +130,7 @@
   const SOLID = { play: 1, pause: 1, stop: 1, rec: 1, dot: 1, 'skip-back': 1, 'skip-fwd': 1, rewind: 1, 'play-back': 1, logo: 1 };
   // simbol/emoji lama → nama ikon
   const MAP = {
-    '●': 'dot', '▶': 'play', '🎬': 'clapper', '📱': 'phone', '⚙': 'settings', '✕': 'x', '✖': 'x', '■': 'stop', '📞': 'call',
+    '●': 'dot', '▶': 'play', '🎬': 'clapper', '🏆': 'trophy', '📱': 'phone', '⚙': 'settings', '✕': 'x', '✖': 'x', '■': 'stop', '📞': 'call',
     '⏮': 'skip-back', '⏭': 'skip-fwd', '⏸': 'pause', '⚠': 'alert', '🎨': 'palette', '⏪': 'rewind', '📷': 'camera', '🎛': 'switcher',
     '🔇': 'volume-x', '🎤': 'mic', '🖼': 'image', '🅃': 'title', '📸': 'camera', '⚡': 'zap', '📡': 'radio', '🌐': 'globe', '🔄': 'refresh',
     '🍃': 'leaf', '👁': 'eye', '🖥': 'monitor', '🔊': 'volume', '⧉': 'external', '📃': 'list', '◀': 'play-back', '🗑': 'trash', '🎥': 'video',

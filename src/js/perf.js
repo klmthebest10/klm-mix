@@ -3,7 +3,7 @@
 (function (KM) {
   const PRESET = {
     hemat: { previewScale: 0.33, previewEvery: 2, thumbEvery: 8, thumbsPer: 1, h: 720, fps: 30, replay: [640, 360, 10], label: '🍃 Hemat' },
-    seimbang: { previewScale: 0.5, previewEvery: 1, thumbEvery: 4, thumbsPer: 2, h: 1080, fps: 30, replay: [640, 360, 15], label: '⚖ Seimbang' },
+    seimbang: { previewScale: 0.5, previewEvery: 1, thumbEvery: 4, thumbsPer: 2, h: 1080, fps: null, replay: [640, 360, 15], label: '⚖ Seimbang' },
     kualitas: { previewScale: 1, previewEvery: 1, thumbEvery: 2, thumbsPer: 3, h: null, fps: null, replay: [960, 540, 15], label: '💎 Kualitas' }
   };
   KM.perf = {

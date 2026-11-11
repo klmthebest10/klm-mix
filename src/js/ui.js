@@ -1,8 +1,10 @@
 /* KLM Mix - UI utama: kartu input, panel transisi, T-bar, bottom bar, status, shortcut, menu konteks, proyek */
 'use strict';
 (function (KM) {
-  const h = KM.h, $ = KM.$, S = KM.state;
+  const h = KM.h, $ = KM.$, $$ = KM.$$, S = KM.state;
   const UI = KM.ui = {};
+  // thumbnail yang tidak terlihat (daftar input digulir / workspace UTC terbuka) tidak digambar ulang → hemat GPU saat banyak input
+  const thumbIO = window.IntersectionObserver ? new IntersectionObserver((es) => es.forEach((e) => { e.target._vis = e.isIntersecting; }), { rootMargin: '60px' }) : null;
 
   // ---------- modal ----------
   UI.modal = function (title, body, buttons, cls) {
@@ -78,26 +80,72 @@
     ndi: async () => { if (S.ndiOut) return KM.rec.stopNdi(); const r = await KM.rec.startNdi(); if (!r) KM.dialogs.settings('ndi'); },
     'utc-panel': () => UI.utcPanel(), 'utc-close': () => UI.utcPanel(false),
     'utc-air': () => KM.utc.setOnAir(), 'utc-hideall': () => KM.utc.cmd('hideall'), 'utc-reload': () => { KM.utc.reload(); KM.toast('Renderer grafis UTC dimuat ulang'); },
-    'utc-window': () => { UI.utcPanel(false); const w = window.open('/utc', 'klm_utc_panel'); if (!w) KM.toast('Jendela diblokir', 'warn'); }
+    'utc-window': () => {
+      const sc = UI.utcMode() === 'score';
+      if (sc && !KM.score.port) return KM.toast('Scoreboard belum siap', 'warn');
+      UI.utcPanel(false);
+      const w = window.open(sc ? KM.score.url('/') : '/utc', sc ? 'klm_score_panel' : 'klm_utc_panel'); if (!w) KM.toast('Jendela diblokir', 'warn');
+    },
+    'score-air': () => KM.score.setOnAir(),
+    'score-arena': () => { if (!KM.score.port) return KM.toast('Scoreboard belum siap', 'warn'); const w = window.open(KM.score.url('/arena'), 'klm_score_arena'); if (!w) KM.toast('Jendela diblokir', 'warn'); }
   };
 
-  // ---------- workspace UTC KLM Acara (panel asli, lengkap) ----------
-  UI.utcPanel = function (show) {
+  // ---------- workspace UTC KLM (panel asli, lengkap): Acara | Scoreboard ----------
+  UI.utcMode = () => (KM.settings.utcMode === 'score' ? 'score' : 'acara');
+  function utcFrame(ws, mode) {
+    ws._frames = ws._frames || {};
+    let f = ws._frames[mode];
+    if (f) return f;
+    const src = mode === 'score' ? KM.score.url('/') : '/utc';
+    if (!src) return null;
+    f = document.createElement('iframe'); f.id = mode === 'score' ? 'scoreFrame' : 'utcFrame'; f.src = src;
+    f.allow = 'camera; microphone; display-capture; clipboard-write; fullscreen';
+    f.addEventListener('load', () => {
+      try { f.contentWindow.addEventListener('keydown', (e) => { if (e.key === 'F9') { e.preventDefault(); UI.utcPanel(false); } }); } catch (e) {}
+    });
+    ws.querySelector('.utc-body').appendChild(f); ws._frames[mode] = f; // dibiarkan hidup: state panel tidak hilang saat ditutup / ganti
+    if (mode === 'acara') ws._frame = f;
+    return f;
+  }
+  UI.utcPanel = function (show, mode) {
     const ws = $('#utcWs'); show = show == null ? ws.hidden : !!show;
-    if (show && !ws._frame) {
-      const f = document.createElement('iframe'); f.id = 'utcFrame'; f.src = '/utc'; f.allow = 'camera; microphone; display-capture; clipboard-write; fullscreen';
-      f.addEventListener('load', () => {
-        try { f.contentWindow.addEventListener('keydown', (e) => { if (e.key === 'F9') { e.preventDefault(); UI.utcPanel(false); } }); } catch (e) {}
-      });
-      ws.querySelector('.utc-body').appendChild(f); ws._frame = f; // dibiarkan hidup: state panel tidak hilang saat ditutup
+    if (mode) { KM.settings.utcMode = mode; KM.saveSettings(); }
+    const m = UI.utcMode();
+    if (show) {
+      const f = utcFrame(ws, m);
+      if (!f && m === 'score') { KM.toast('Scoreboard sedang dinyalakan… coba lagi sebentar', 'warn'); }
+      Object.entries(ws._frames || {}).forEach(([k, el]) => { el.hidden = k !== m; });
     }
     ws.hidden = !show;
+    ws.dataset.mode = m;
+    $$('[data-utcmode]', ws).forEach((b) => b.classList.toggle('act', b.dataset.utcmode === m));
     $('#app').classList.toggle('utc-mode', show);
-    if (show) { KM.utc.ensure(); try { ws._frame.contentWindow.focus(); } catch (e) {} }
+    if (show) {
+      if (m === 'acara') KM.utc.ensure(); else KM.score.ensure();
+      try { ws._frames[m].contentWindow.focus(); } catch (e) {}
+    }
     updateUtc();
   };
+  document.addEventListener('click', (e) => { const b = e.target.closest('[data-utcmode]'); if (b) UI.utcPanel(true, b.dataset.utcmode); });
+  function updateScore() {
+    const on = KM.score.onAir();
+    ['#bb-score', '#ws-score-air'].forEach((s) => { const b = $(s); if (b) b.classList.toggle('on', on); });
+    const l = $('#scoreLive'), st = KM.score.status;
+    if (l) {
+      if (!st || !st.port) l.textContent = 'Menyalakan scoreboard…';
+      else {
+        const ip = (KM._appInfo && KM._appInfo.ips && KM._appInfo.ips[0]) || '';
+        const c = st.clients || {};
+        l.innerHTML = 'Port <b>' + st.port + '</b> • panel ' + (c.control ? '<b>terbuka</b>' : 'belum dibuka') + (c.overlay ? ' • overlay ' + c.overlay : '') + (c.hp ? ' • HP ' + c.hp : '') +
+          (ip ? ' • HP: <b>http://' + KM.esc(typeof ip === 'string' ? ip : ip.address) + ':' + st.port + '/hp</b>' : '') + (st.migratedFrom ? ' • data lama dipindahkan' : '');
+      }
+    }
+    if (st && st.port && !$('#utcWs').hidden && UI.utcMode() === 'score' && !($('#utcWs')._frames || {}).score) UI.utcPanel(true);
+  }
+  KM.on('change', (w) => { if (w === 'score') updateScore(); });
   function updateUtc() {
     const on = KM.utc.onAir();
+    updateScore();
     ['#bb-utc', '#ws-utc-air'].forEach((s) => { const b = $(s); if (b) b.classList.toggle('on', on); });
     const l = $('#utcLive'); if (l) l.innerHTML = KM.utc.liveInfo();
     const ev = $('#utcEvent'), st = KM.utc.status;
@@ -160,7 +208,7 @@
   UI.renderCards = function () {
     const box = $('#inputs'); box.innerHTML = '';
     S.inputs.forEach((inp, idx) => {
-      if (!inp.rt.thumb) { inp.rt.thumb = h('canvas'); inp.rt.thumb.width = 256; inp.rt.thumb.height = 144; }
+      if (!inp.rt.thumb) { inp.rt.thumb = h('canvas'); inp.rt.thumb.width = 256; inp.rt.thumb.height = 144; thumbIO && thumbIO.observe(inp.rt.thumb); }
       const meter = h('i');
       const card = h('div.card', { draggable: true, 'data-id': inp.id },
         h('div.thumb', {
@@ -478,6 +526,7 @@
     $('#ver').textContent = 'v' + KM.version + (KM.isElectron ? '' : ' · web');
     const bl = $('#brandLogo'); if (bl) bl.replaceWith(KI.el('logo'));
     $('#bb-srt').addEventListener('contextmenu', (e) => { e.preventDefault(); KM.dialogs.settings('srt'); });
+    $('#bb-score').addEventListener('contextmenu', (e) => { e.preventDefault(); UI.utcPanel(true, 'score'); });
     renderTransSlots(); initTbar(); initShortcuts(); initDrop(); initSplitter();
     KM.$$('.dtabs button').forEach((b) => b.addEventListener('click', () => UI.dockTab(b.dataset.tab)));
     KM.$$('.dd > .mbtn').forEach((b) => b.addEventListener('click', () => b.parentElement.classList.toggle('open')));

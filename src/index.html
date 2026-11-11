@@ -35,7 +35,7 @@
           <button data-act="open-rec-folder"><i data-ic="folder-open"></i>Buka folder rekaman</button>
         </div>
       </div>
-      <button class="mbtn utcbtn" data-act="utc-panel" title="Panel lengkap UTC KLM Acara: lower third, title, running text, logo, lokasi, sosmed, opening/closing, preset (F9)"><i data-ic="clapper"></i>UTC KLM Acara</button>
+      <button class="mbtn utcbtn" data-act="utc-panel" title="Panel grafis UTC KLM: Acara (lower third, title, running text, logo, lokasi, sosmed, opening/closing) & Scoreboard olahraga (F9)"><i data-ic="clapper"></i>UTC KLM</button>
       <button class="mbtn" data-act="settings"><i data-ic="settings"></i>Pengaturan</button>
       <button class="mbtn" data-act="phone"><i data-ic="phone"></i><span>HP <span class="lbl-x">&amp; Jaringan</span></span></button>
       <button class="mbtn" data-act="help"><i data-ic="help"></i>Bantuan</button>
@@ -92,7 +92,7 @@
     <aside id="dock">
       <div class="dtabs">
         <button data-tab="audio" class="on"><i data-ic="sliders"></i>Audio</button>
-        <button data-tab="utc"><i data-ic="clapper"></i>UTC Acara</button>
+        <button data-tab="utc"><i data-ic="clapper"></i>UTC KLM</button>
         <button data-tab="title"><i data-ic="title"></i>Title Cepat</button>
         <button data-tab="replay"><i data-ic="rewind"></i>Replay</button>
         <button data-tab="phone"><i data-ic="phone"></i>KLMCAM</button>
@@ -113,12 +113,18 @@
 
   <section id="utcWs" hidden>
     <div class="utc-head">
-      <b><i data-ic="clapper"></i>UTC KLM Acara</b>
-      <select id="utcEvent" title="Jenis acara"></select>
-      <span class="muted" id="utcLive"></span>
+      <div class="utc-seg" role="tablist" title="Pilih aplikasi UTC">
+        <button data-utcmode="acara" role="tab"><i data-ic="clapper"></i>Acara</button>
+        <button data-utcmode="score" role="tab"><i data-ic="trophy"></i>Scoreboard</button>
+      </div>
+      <span class="utc-only-acara"><select id="utcEvent" title="Jenis acara"></select></span>
+      <span class="muted utc-only-acara" id="utcLive"></span>
+      <span class="muted utc-only-score" id="scoreLive"></span>
       <span class="grow"></span>
-      <button class="bb" data-act="utc-hideall" title="Sembunyikan semua grafis UTC"><i data-ic="ban"></i>Semua OFF</button>
-      <button class="bb utc" data-act="utc-air" id="ws-utc-air"><i class="dot"></i>UTC ON AIR</button>
+      <button class="bb utc-only-acara" data-act="utc-hideall" title="Sembunyikan semua grafis UTC Acara"><i data-ic="ban"></i>Semua OFF</button>
+      <button class="bb utc utc-only-acara" data-act="utc-air" id="ws-utc-air"><i class="dot"></i>UTC ON AIR</button>
+      <button class="bb utc utc-only-score" data-act="score-air" id="ws-score-air" title="Tampilkan / sembunyikan scoreboard di Program"><i class="dot"></i>SCORE ON AIR</button>
+      <button class="bb utc-only-score" data-act="score-arena" title="Buka layar arena / videotron (mis. di monitor ke-2)"><i data-ic="monitor"></i>Layar Arena</button>
       <button class="bb" data-act="utc-window" title="Buka panel di jendela sendiri (mis. di monitor ke-2)"><i data-ic="external"></i>Jendela</button>
       <button class="bb" data-act="utc-reload" title="Muat ulang renderer grafis"><i data-ic="refresh"></i></button>
       <button class="bb add" data-act="utc-close" title="Kembali ke daftar input (Esc / F9)"><i data-ic="grid"></i>Kembali ke Input</button>
@@ -139,6 +145,7 @@
     <button class="bb" data-act="ndi" id="bb-ndi" title="Output NDI (juga virtual camera via NDI Webcam)"><i class="dot"></i>NDI / VCam</button>
     <span class="sep"></span>
     <button class="bb utc" data-act="utc-air" id="bb-utc" title="Tampilkan / sembunyikan grafis UTC KLM Acara di Program (lapisan di atas Overlay 1–4)"><i class="dot"></i>UTC ON AIR</button>
+    <button class="bb utc" data-act="score-air" id="bb-score" title="Tampilkan / sembunyikan UTC KLM Scoreboard di Program (klik kanan: buka panel scoreboard)"><i class="dot"></i>SCORE</button>
     <span class="sep"></span>
     <div class="ovgrp">
       <span class="ovl-lbl">Overlay</span>

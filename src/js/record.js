@@ -3,6 +3,8 @@
 (function (KM) {
   const S = KM.state;
   const R = KM.rec = { recT0: 0, streamT0: 0, stats: null, mc: [] };
+  // fps tinggi butuh bitrate lebih besar agar gerakan tetap tajam (60 fps ≈ 1,5×, 120 fps = 2×)
+  R.fpsScale = () => { const f = KM.settings.fps || 30; return f > 30 ? Math.min(2, 0.5 + f / 60) : 1; };
 
   function pickMime(pref) {
     // utamakan H.264 (kompatibel dengan editor video), lalu AAC bila tersedia
@@ -47,7 +49,7 @@
     if (!mime) { KM.toast('Browser tidak mendukung perekaman', 'err'); return false; }
     const name = 'KLM-Mix-' + KM.stamp() + '.' + ext(mime);
     const w = await makeWriter(name, 'rec');
-    const mr = new MediaRecorder(mixStream(), { mimeType: mime, videoBitsPerSecond: KM.settings.recVideoKbps * 1000, audioBitsPerSecond: KM.settings.recAudioKbps * 1000 });
+    const mr = new MediaRecorder(mixStream(), { mimeType: mime, videoBitsPerSecond: Math.round(KM.settings.recVideoKbps * 1000 * R.fpsScale()), audioBitsPerSecond: KM.settings.recAudioKbps * 1000 });
     mr.ondataavailable = (e) => { if (e.data && e.data.size) w.write(e.data); };
     mr.onstop = async () => { const p = await w.close(); KM.toast('Rekaman tersimpan: ' + p, 'ok', 5000); R.lastRecording = p; KM.changed('rec'); };
     mr.onerror = (e) => KM.toast('Error rekam: ' + (e.error && e.error.message), 'err');
@@ -115,7 +117,7 @@
     if (encoder === 'auto') encoder = h264 ? 'copy' : (await R.detectEncoders()).best;
     if (encoder === 'copy' && !h264) encoder = (await R.detectEncoders()).best;
     const copy = encoder === 'copy';
-    const vbps = copy ? sc.videoBitrate * 1000 : Math.max(sc.videoBitrate * 2500, 8000000);
+    const vbps = copy ? sc.videoBitrate * 1000 : Math.round(Math.max(sc.videoBitrate * 2500, 8000000) * R.fpsScale());
     const cfg = { encoder, preset: sc.preset, videoBitrate: sc.videoBitrate, audioBitrate: sc.audioBitrate, fps: KM.settings.fps, destinations: dests };
     const r = await openHubOut('stream', { cfg }, (m) => {
       if (m.t === 'stats') { R.stats = m; KM.emit('stream-stats', m); }
@@ -184,7 +186,7 @@
     });
     if (!r.ok) { R.srtStatus = 'off'; KM.toast('SRT gagal: ' + r.msg, 'err', 6000); KM.changed('srt'); return false; }
     const copy = encoder === 'copy';
-    const vbps = copy ? c.videoBitrate * 1000 : Math.max(c.videoBitrate * 2500, 10000000);
+    const vbps = copy ? c.videoBitrate * 1000 : Math.round(Math.max(c.videoBitrate * 2500, 10000000) * R.fpsScale());
     R.srtWs = r.ws;
     R.srtRec = pipeRecorder(r.ws, mixStream('M'), h264 || 'video/webm;codecs=vp8,opus', vbps, 50);
     S.srt = true; R.srtT0 = Date.now(); R.srtEncoder = encoder;

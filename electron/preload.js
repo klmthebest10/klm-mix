@@ -6,7 +6,7 @@ const INVOKE = ['app:info', 'desktop:sources', 'dialog:open', 'dialog:save', 'di
   'app:relaunch', 'browser:open', 'browser:navigate', 'browser:reload', 'browser:show', 'browser:close',
   'fx:list', 'fx:read', 'fx:save', 'fx:open-folder'];
 const SEND = ['file:write-chunk', 'utc:start', 'utc:stop', 'utc:ack', 'utc:reload', 'utc:full', 'utc:pause', 'utc:resume'];
-const ON = ['utc:frame'];
+const ON = ['utc:frame', 'utc:tk'];
 
 contextBridge.exposeInMainWorld('klm', {
   isElectron: true,

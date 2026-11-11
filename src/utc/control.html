@@ -345,6 +345,8 @@ const klmHost = () => { for (const w of [window.parent !== window ? window.paren
 // tampilan menyatu: di dalam KLM Mix (iframe) monitor Program & switcher memakai milik KLM Mix di atasnya
 document.documentElement.classList.add('klmui');
 try { if (window.parent !== window && klmHost()) document.documentElement.classList.add('klm-embed'); } catch(e) {}
+// di dalam KLM Mix monitor Program panel tidak dipakai (Program milik mixer) → overlay tersembunyinya tidak dijalankan (lebih ringan)
+try { if (document.documentElement.classList.contains('klm-embed')) { const f = document.getElementById('pgm'); if (f) f.src = 'about:blank'; } } catch(e) {}
 const $ = s => document.querySelector(s);
 let S = null, INFO = { port: location.port, ips: [] };
 const ui = { tab: 'lt', sel: { lt: '', tt: '', loc: '', soc: '' }, ocKind: 'opening', n: 0, pending: false, bulk: false, presets: [] };

@@ -20,7 +20,9 @@ klm-mix/
 │   ├── ptz.js                # kontrol PTZ: VISCA over IP (Sony/PTZOptics/umum) & HTTP-CGI
 │   ├── utc.js                # server UTC KLM Acara (API sama persis dgn versi 9.0, preset/logo/video, impor data lama)
 │   ├── utc-switch.js         # switcher panel UTC: KLM Mix (bawaan) / OBS (websocket v5) / vMix
-│   ├── utc-osr.js            # render overlay UTC asli secara offscreen → lapisan UTC ON AIR
+│   ├── utc-osr.js            # render overlay UTC asli offscreen BERLAPIS (Acara, running text, logo, scoreboard)
+│   ├── osr-preload.js        # jembatan halaman overlay offscreen → mixer (running text native)
+│   ├── score.js              # server UTC KLM Scoreboard (port 7171, API & alamat sama dengan aplikasi aslinya)
 │   ├── gencert.js            # sertifikat HTTPS lokal (proses terpisah)
 │   └── ndi-worker.js         # NDI in/out (proses terpisah, butuh NDI Runtime gratis)
 ├── src/                      # aplikasi mixer (UI + mesin)
@@ -29,6 +31,7 @@ klm-mix/
 │   ├── css/app.css
 │   ├── vendor/qr.js          # generator QR offline
 │   ├── utc/                  # UTC KLM Acara 9.0 asli (panel kontrol, overlay, 12 font offline, ikon)
+│   ├── score/                # UTC KLM Scoreboard asli (panel, overlay, arena, turnamen, HP, 33 font offline)
 │   └── js/
 │       ├── core.js           # state, pengaturan, utilitas
 │       ├── engine.js         # render Preview/Program, transisi, overlay 1-4, FTB, layer, multiview
@@ -70,10 +73,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
    - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.4.0.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.4.0.exe` (tanpa instal)
+     - `KLM-Mix-Setup-1.5.0.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Mix-Portable-1.5.0.exe` (tanpa instal)
    - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
-3. Untuk rilis resmi: buat tag `v1.4.0` → file otomatis muncul di halaman **Releases**.
+3. Untuk rilis resmi: buat tag `v1.5.0` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
 
@@ -127,6 +130,13 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Skrip JavaScript** (pengganti VB.NET): `API.Function("Cut")`, `Sleep()`, `Input()`, jalankan dari tombol/shortcut/trigger/Stream Deck
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Efek audio bawaan** (pengganti VST): high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
+
+### Baru di v1.5
+- **Grafis UTC tetap mulus walau banyak tampil bersamaan**: overlay UTC dirender **berlapis** (Lower Third/Title/Lokasi/Sosmed/Opening • Running Text • Logo • Scoreboard), masing-masing renderer sendiri — yang disalin tiap frame hanya potongan yang berubah (diambil langsung, tanpa menyalin layar penuh), hanya kotak isinya yang digambar ke Program, lapisan kosong dijeda otomatis
+- **Running text native**: teks berjalan dikirim sekali sebagai gambar lalu **digulir oleh mixer setiap frame Program** (langkah per frame sama persis, sinkron jam) → tidak patah-patah walau banyak input, grafis atau resolusi tinggi. Masuk/keluar tetap memakai animasi asli; teks diedit saat tayang langsung berganti tanpa lompat
+- **UTC KLM Scoreboard (olahraga) menyatu** sebagai pilihan UTC: workspace **UTC KLM → Acara | Scoreboard** (F9), tombol **SCORE** (ON AIR) di bar bawah, kontrol cepat skor/jam/babak di tab dock **UTC KLM**, input **"Scoreboard UTC KLM"**, layar arena di monitor ke-2, aplikasi HP `/hp`. Alamat lama tetap sama (`http://IP:7171/overlay`, `/data.json`, `/data.xml`, `/api/cmd/home+1`) sehingga OBS/vMix/Companion lama tetap jalan. Data skor, turnamen & preset dari UTC KLM lama dipindahkan otomatis. API: `http://IP:8620/api/?Function=ScoreCmd&Value=home+1`
+- **60 fps (dan 50/90/120 fps)** untuk output, rekam, stream & SRT: jadwal frame presisi (akumulator) sehingga 60 fps tetap 60 fps di monitor 60/75/120/144 Hz, mode Seimbang tidak lagi mengunci 30 fps, bitrate rekaman/perantara otomatis naik untuk fps tinggi, kamera & layar baru otomatis mengikuti fps output
+- **Lebih ringan saat banyak input & resolusi tinggi**: monitor Preview ±30 fps saat output 50/60 fps (kecuali mode Kualitas), thumbnail yang tidak terlihat tidak digambar ulang, monitor Program tersembunyi di panel UTC tidak dijalankan
 
 ### Baru di v1.4
 - **SRT caller ke gateway / decoder TV** (Pengaturan → SRT / TV, tombol **SRT** di bar bawah): MPEG-TS siaran (H.264 GOP tetap tanpa B-frame, CBR + muxrate, AAC/MP2), latensi diatur, enkripsi AES-128/192/256, Stream ID, mode caller/listener/rendezvous, encoder GPU otomatis, **sambung ulang otomatis** bila gateway restart. Berjalan bersamaan dengan Stream. API: `StartSRT`, `StopSRT`, `StartStopSRT`
@@ -194,6 +204,7 @@ Strip per input: fader, VU stereo, mute, **Solo**, **Auto** (audio ikut video), 
 | HTTP (mixer, HP, API, WebSocket) | 8620 |
 | HTTPS (kamera & KLM Call di browser HP) | 8621 |
 | TCP API | 8622 |
+| UTC KLM Scoreboard (panel, overlay, HP `/hp`, data vMix) | 7171 (otomatis pindah bila terpakai) |
 | Terima RTMP (Stream Masuk) | 1935 |
 | Terima SRT (Stream Masuk) | 9000 (bisa diubah) |
 
@@ -208,4 +219,4 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.4.0
+KLM Mix 1.5.0

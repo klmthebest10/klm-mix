@@ -23,14 +23,14 @@ jobs:
         run: npm install --no-audit --no-fund
 
       # Uji nyata di Windows: aplikasi dibuka, grafis UTC KLM Acara harus benar-benar tampil di Program
-      - name: Smoke test (UTC KLM Acara menyatu)
+      - name: Smoke test (UTC Acara berlapis, running text native, Scoreboard, audio FX, SRT)
         shell: pwsh
         run: |
           $env:KLM_SMOKE = "$env:RUNNER_TEMP\smoke"
           $p = Start-Process -FilePath "node_modules\electron\dist\electron.exe" -ArgumentList "." -PassThru
           Write-Host "PID utama: $($p.Id)"
           $t = 0
-          while ($t -lt 120 -and (Get-Process -Id $p.Id -ErrorAction SilentlyContinue)) { Start-Sleep -Seconds 2; $t += 2 }
+          while ($t -lt 200 -and (Get-Process -Id $p.Id -ErrorAction SilentlyContinue)) { Start-Sleep -Seconds 2; $t += 2 }
           if (Get-Process -Id $p.Id -ErrorAction SilentlyContinue) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; Write-Host "::warning::Aplikasi tidak menutup sendiri (timeout)" } else { Write-Host "Aplikasi menutup normal setelah $t detik" }
           Get-Content "$env:KLM_SMOKE\smoke.log" -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 3

@@ -265,6 +265,7 @@
         h('div.live', { innerHTML: U.liveInfo() }),
         h('div.row', h('button.btn.pri', { style: { flex: 1 }, onclick: () => KM.ui.utcPanel(true) }, KI.el('clapper'), 'Buka Panel Lengkap', h('kbd', { style: { marginLeft: '4px', color: '#cfe2ff', borderColor: 'rgba(255,255,255,.3)', background: 'transparent' } }, 'F9')),
           h('button.btn', { title: 'Jadikan input KLM Mix (Overlay 1–4, layer, multiview)', onclick: () => { U.addInput(); KM.toast('Input "Grafis UTC KLM Acara" siap', 'ok'); } }, KI.el('plus'), 'Input'))),
+      scoreSec(),
       h('div.sec', h('h4', 'Tampilkan / sembunyikan'),
         h('div.grid', tg('lt', 'Lower Third'), tg('tt', 'Title'), tg('tk', 'Running Text'), tg('bug', 'Logo'), tg('loc', 'Lokasi'), tg('soc', 'Sosmed')),
         h('div.row', { style: { marginTop: '6px' } },
@@ -280,7 +281,25 @@
         h('p.muted', { style: { fontSize: '11px', marginTop: '6px' } }, 'Ubah teks, tema, animasi, posisi, logo, video opening/closing & simpan preset di Panel Lengkap. Bisa juga dari HP: ' + (KM.link.ips[0] ? 'http://' + KM.link.ips[0].address + ':' + (KM.link.ports.http || 8620) + '/utc' : '/utc'))))
     );
   }
-  KM.on('change', (w) => { if (w === 'utc' && DK.cur === 'utc') { clearTimeout(renderUtc.t); renderUtc.t = setTimeout(renderUtc, 60); } });
+  // UTC KLM Scoreboard: kontrol cepat (skor, jam, tampil) — panel lengkap di workspace UTC → Scoreboard
+  function scoreSec() {
+    const SC = KM.score, st = SC.status;
+    const c = (cmd, label, title, cls) => h('button.btn.sm' + (cls || ''), { title: title || '', onclick: async () => { const r = await SC.cmd(cmd); if (!r.ok) KM.toast(/belum dibuka/.test(r.msg) ? 'Buka panel Scoreboard dulu (workspace UTC → Scoreboard)' : 'Scoreboard: ' + r.msg, 'warn'); } }, label);
+    if (!st || !st.port) return h('div.sec', h('h4', 'Scoreboard olahraga'), h('p.muted', 'Menyalakan UTC KLM Scoreboard…'));
+    const sc = st.score || [0, 0];
+    return h('div.sec.scoreq', h('h4', 'Scoreboard olahraga'),
+      h('div.row',
+        h('button.btn.air' + (SC.onAir() ? '.on' : ''), { style: { flex: 1 }, onclick: () => SC.setOnAir(), title: 'Tampilkan / sembunyikan scoreboard di Program' }, KI.el(SC.onAir() ? 'radio' : 'eye'), SC.onAir() ? 'SCORE ON AIR' : 'Scoreboard tersembunyi'),
+        h('button.btn', { title: 'Buka panel lengkap scoreboard', onclick: () => KM.ui.utcPanel(true, 'score') }, KI.el('trophy'), 'Panel')),
+      h('div.sb', h('b', st.home), h('span.n', String(sc[0])), h('span.muted', ':'), h('span.n', String(sc[1])), h('b', st.away), h('span.muted', '• babak ' + st.period + (st.running ? ' • jam jalan' : ''))),
+      h('div.row', { style: { flexWrap: 'wrap', gap: '4px' } },
+        c('home+1', st.home + ' +1', 'Tambah skor tuan rumah', '.pri'), c('home-1', '−1', 'Kurangi skor tuan rumah'),
+        c('away+1', st.away + ' +1', 'Tambah skor tamu', '.pri'), c('away-1', '−1', 'Kurangi skor tamu'),
+        c('clock', st.running ? 'Jeda jam' : 'Mulai jam', 'Mulai / hentikan jam pertandingan'), c('next', 'Babak +', 'Babak berikutnya'),
+        c('overlay', st.visible ? 'Sembunyikan papan' : 'Tampilkan papan', 'Tampil / sembunyi papan skor di overlay'), c('undo', 'Undo', 'Batalkan langkah terakhir')),
+      st.control ? null : h('p.muted', { style: { fontSize: '11px', marginTop: '6px' } }, 'Tombol cepat aktif setelah panel Scoreboard dibuka (workspace UTC → Scoreboard, atau dari HP: /hp di port ' + st.port + ').'));
+  }
+  KM.on('change', (w) => { if ((w === 'utc' || w === 'score') && DK.cur === 'utc') { clearTimeout(renderUtc.t); renderUtc.t = setTimeout(renderUtc, 60); } });
 
   const R = { utc: renderUtc, ptz: () => KM.ptz.render(KM.$('#dock-ptz')), script: renderScripts, audio: renderAudio, title: renderTitle, replay: renderReplay, phone: renderPhone, playlist: renderPlaylist };
   DK.render = function (tab) { DK.cur = tab; try { R[tab](); } catch (e) { console.error('dock', e); } };

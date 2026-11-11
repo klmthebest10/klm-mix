@@ -42,7 +42,7 @@
   D.qr = (text) => h('div.qr', { html: window.KMQR ? KMQR.svg(text, { border: 2 }) : '' });
 
   // =================== TAMBAH INPUT ===================
-  const ORDER = ['video', 'image', 'list', 'camera', 'klmcam', 'stream', 'call', 'screen', 'utc', 'title', 'audio', 'audiofile', 'colour', 'bars', 'browser', 'virtualset', 'replay', 'urlvideo'];
+  const ORDER = ['video', 'image', 'list', 'camera', 'klmcam', 'stream', 'call', 'screen', 'utc', 'score', 'title', 'audio', 'audiofile', 'colour', 'bars', 'browser', 'virtualset', 'replay', 'urlvideo'];
   D.addInput = function (preset) {
     const form = h('div', { style: { marginTop: '12px' } });
     let current = null, creator = null;
@@ -69,6 +69,11 @@
       form.append(h('div.sec', h('p', 'Grafis asli UTC KLM Acara (lower third, title, running text, logo, lokasi, sosmed, opening/closing) sebagai input transparan — pakai untuk Overlay 1–4, layer PiP, atau multiview.'),
         h('p.muted', 'Tanpa input ini pun grafis UTC sudah tampil di Program lewat lapisan UTC ON AIR. Atur isinya di 🎬 UTC KLM Acara (F9).')));
       return () => { KM.utc.addInput(); };
+    },
+    score(form) {
+      form.append(h('div.sec', h('p', 'Papan skor UTC KLM Scoreboard (sepak bola, futsal, basket, voli, badminton, dll.) sebagai input transparan — pakai untuk Overlay 1–4, layer PiP, atau multiview.'),
+        h('p.muted', 'Tanpa input ini pun scoreboard bisa tampil di Program lewat tombol SCORE ON AIR. Atur skor, tim, jam & tampilan di UTC KLM → Scoreboard (F9), atau dari HP.')));
+      return () => { KM.score.addInput(); };
     },
     stream(form) {
       const o = { source: 'listen-rtmp', url: '', mode: 'copy', latency: 120, maxLag: 0.6, ndiName: '', ndiLow: false, key: 'klm' + Math.floor(Math.random() * 900 + 100) };
@@ -144,14 +149,15 @@
       return () => { if (!u.value) return false; KM.inputs.create('urlvideo', { title: 'Video URL', opts: { url: u.value } }); };
     },
     camera(form) {
-      const o = { deviceId: '', width: 1920, height: 1080, fps: 30, audioDeviceId: '' };
+      const dfps = KM.settings.fps >= 60 ? 60 : KM.settings.fps >= 50 ? 50 : KM.settings.fps === 25 ? 25 : 30; // ikuti frame rate output
+      const o = { deviceId: '', width: 1920, height: 1080, fps: dfps, audioDeviceId: '' };
       const vs = h('select.grow'), as = h('select.grow');
       listDevices('videoinput').then((l) => { vs.replaceChildren(...l.map((d, i) => h('option', { value: d.deviceId }, d.label || 'Kamera ' + (i + 1)))); o.deviceId = vs.value; });
       listDevices('audioinput').then((l) => { as.replaceChildren(h('option', { value: '' }, '— Tanpa audio —'), ...l.map((d, i) => h('option', { value: d.deviceId }, d.label || 'Mic ' + (i + 1)))); });
       vs.onchange = () => { o.deviceId = vs.value; }; as.onchange = () => { o.audioDeviceId = as.value; };
       form.append(row('Kamera / capture', vs),
         row('Resolusi', sel([['1280x720', '1280×720 (HD)'], ['1920x1080', '1920×1080 (Full HD)'], ['2560x1440', '2560×1440'], ['3840x2160', '3840×2160 (4K)']], '1920x1080', (v) => { const [w, hh] = v.split('x'); o.width = +w; o.height = +hh; }),
-          h('label', 'FPS'), sel([25, 30, 50, 60], 30, (v) => { o.fps = +v; })),
+          h('label', 'FPS'), sel([25, 30, 50, 60], dfps, (v) => { o.fps = +v; })),
         row('Audio (opsional)', as),
         h('p.muted', 'Mendukung webcam USB, capture card HDMI (Elgato, UGREEN, dll) dan OBS Virtual Camera.'));
       return () => { const n = vs.options[vs.selectedIndex]; KM.inputs.create('camera', { title: n ? n.textContent : 'Kamera', opts: Object.assign({}, o) }); };
@@ -166,7 +172,8 @@
       return () => { const n = as.options[as.selectedIndex]; KM.inputs.create('audio', { title: n ? n.textContent : 'Mic', opts: Object.assign({}, o) }); };
     },
     screen(form) {
-      const o = { sourceId: '', sysAudio: false, fps: 30 };
+      const sfps = KM.settings.fps >= 50 ? 60 : 30;
+      const o = { sourceId: '', sysAudio: false, fps: sfps };
       if (!KM.isElectron) {
         form.append(h('p', 'Browser akan menampilkan pilihan layar/jendela/tab saat ditambahkan.'), chk('Sertakan audio sistem/tab', false, (v) => { o.sysAudio = v; }));
         return () => { KM.inputs.create('screen', { title: 'Layar', opts: o }); };
@@ -176,7 +183,7 @@
       window.klm.invoke('desktop:sources').then((list) => {
         grid.replaceChildren(...list.map((s) => h('button.tile', { onclick: (e) => { o.sourceId = s.id; chosen = s.name; KM.$$('.tile', grid).forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); } }, h('img', { src: s.thumb }), h('span', s.name))));
       });
-      form.append(row('FPS', sel([15, 25, 30, 60], 30, (v) => { o.fps = +v; }), chk('Rekam audio sistem (khusus layar penuh)', false, (v) => { o.sysAudio = v; })), h('div', { style: { marginTop: '8px' } }, grid));
+      form.append(row('FPS', sel([15, 25, 30, 60], sfps, (v) => { o.fps = +v; }), chk('Rekam audio sistem (khusus layar penuh)', false, (v) => { o.sysAudio = v; })), h('div', { style: { marginTop: '8px' } }, grid));
       return () => { if (!o.sourceId) { KM.toast('Pilih layar/jendela'); return false; } KM.inputs.create('screen', { title: chosen || 'Layar', opts: o }); };
     },
     klmcam(form) {
@@ -553,8 +560,8 @@
         const card = (k, title, desc) => h('button.tile' + (cur === k ? '.on' : ''), { style: { alignItems: 'flex-start', textAlign: 'left' }, onclick: () => { KM.perf.apply(k); show('perf'); } }, h('b', { style: { fontSize: '15px', fontWeight: 700 } }, title), h('span', desc));
         return h('div', h('div.sec', h('h4', 'Mode performa'), h('div.tiles', { style: { gridTemplateColumns: 'repeat(3, 1fr)' } },
           card('hemat', '🍃 Hemat (PC kentang)', '720p 30fps, preview 33% & 15fps, thumbnail lambat, replay ringan. Paling ringan.'),
-          card('seimbang', '⚖ Seimbang', '1080p 30fps, preview 50%. Cocok untuk kebanyakan PC/laptop.'),
-          card('kualitas', '💎 Kualitas', 'Resolusi & fps tetap, preview penuh. Untuk PC dengan GPU kuat.'))),
+          card('seimbang', '⚖ Seimbang', '1080p, frame rate tetap (30/50/60 fps), preview 50%. Cocok untuk kebanyakan PC/laptop.'),
+          card('kualitas', '💎 Kualitas', 'Resolusi & fps tetap (sampai 4K / 120 fps), preview penuh. Untuk PC dengan GPU kuat.'))),
           h('div.sec', h('h4', 'Penghemat otomatis'),
             chk('Jeda preview & thumbnail saat jendela diminimize (program tetap jalan)', st.pauseHidden !== false, (v) => { st.pauseHidden = v; save(); }),
             chk('Matikan multiview saat tidak ditampilkan', true, () => {}),
@@ -593,10 +600,10 @@
         const res = st.width + 'x' + st.height;
         return h('div', h('div.sec', h('h4', 'Resolusi & frame rate output'),
           row('Resolusi', sel([['1280x720', '1280×720 HD'], ['1920x1080', '1920×1080 Full HD'], ['2560x1440', '2560×1440 QHD'], ['3840x2160', '3840×2160 4K (berat)'], ['1080x1920', '1080×1920 Vertikal (TikTok/Reels)'], ['720x1280', '720×1280 Vertikal ringan'], ['1080x1080', '1080×1080 Persegi']], res, (v) => { const [w, hh] = v.split('x'); st.width = +w; st.height = +hh; save(); KM.engine.resize(); KM.toast('Output: ' + v); })),
-          row('Frame rate', sel([24, 25, 30, 50, 60], st.fps, (v) => { st.fps = +v; save(); KM.engine.resize(); })),
+          row('Frame rate', sel([[24, '24 fps (film)'], [25, '25 fps (PAL)'], [30, '30 fps'], [50, '50 fps (PAL halus)'], [60, '60 fps (halus)'], [90, '90 fps (monitor 90 Hz+)'], [120, '120 fps (monitor 120 Hz+)']], st.fps, (v) => { st.fps = +v; save(); KM.engine.resize(); if (st.fps > 60) KM.toast('Di atas 60 fps hanya tercapai bila monitor ' + st.fps + ' Hz atau lebih.', 'info', 5000); })),
           row('Skala preview', sel([[0.33, '33% (ringan)'], [0.5, '50%'], [0.75, '75%'], [1, '100%']], st.previewScale, (v) => { st.previewScale = +v; save(); KM.engine.resize(); })),
           chk('Tukar Preview ↔ Program setelah transisi (seperti vMix)', st.swapPreview !== false, (v) => { st.swapPreview = v; save(); })),
-          h('p.muted', 'Gunakan 1080p30 untuk PC menengah. 60fps & 4K butuh GPU kuat.'));
+          h('p.muted', '50/60 fps membuat gerakan, running text & grafis jauh lebih halus di rekaman, stream, SRT & output. 1080p60 nyaman untuk PC menengah dengan GPU; 4K60 butuh GPU kuat. Bitrate rekaman otomatis dinaikkan untuk fps tinggi.'));
       },
       trans() {
         const inputs = [['', '— tidak ada —']].concat(S.inputs.filter((i) => KM.inputs.isPlayable(i)).map((i) => [i.id, KM.inputNum(i) + '. ' + i.title]));

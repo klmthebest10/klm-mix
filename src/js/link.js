@@ -63,6 +63,7 @@
       case 'sub': { const p = L.peers.get(m.from); if (p) p.sub = { mon: !!m.mon, inputs: !!m.inputs, rate: m.rate || 400 }; break; }
       case 'snap-input': sendInputThumbs(m.from); break;
       case 'utc-status': KM.utc && KM.utc.onStatus(m.status); break;
+      case 'score-status': KM.score && KM.score.onStatus(m.status); break;
       case 'utc-shot': { // gambar untuk switcher panel UTC (dibuka dari HP/peramban)
         let data = '';
         try {

@@ -61,6 +61,18 @@ function createMain() {
         }
       };
     }
+    const sc = server.score && server.score();
+    if (sc && sc.port() && String(sc.port()) === u.port && /^(127\.0\.0\.1|localhost)$/.test(u.hostname)) { // UTC KLM Scoreboard: panel / layar arena di jendela sendiri
+      const arena = /\/(arena|turnamen)$/.test(u.pathname);
+      const displays = screen.getAllDisplays(), d = arena && displays.length > 1 ? displays[1] : null;
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: Object.assign({
+          width: arena ? 1280 : 1440, height: arena ? 720 : 900, minWidth: 640, minHeight: 400, backgroundColor: '#090c13', autoHideMenuBar: true,
+          title: (arena ? 'Layar Arena' : 'UTC KLM Scoreboard') + ' • KLM Mix', icon: path.join(__dirname, '..', 'build', 'icon.png'), webPreferences: { backgroundThrottling: false }
+        }, d ? { x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height, fullscreen: true, frame: false } : {})
+      };
+    }
     if (u.pathname === '/utc' || u.pathname.startsWith('/utc/')) { // panel UTC KLM Acara di jendela sendiri (mis. monitor ke-2)
       return {
         action: 'allow',
@@ -185,7 +197,7 @@ app.whenReady().then(async () => {
     desktopCapturer.getSources({ types: ['screen'] }).then((s) => cb({ video: s[0], audio: 'loopback' })).catch(() => cb({}));
   });
   netInfo = await server.start();
-  utcOsr = setupUtcOsr({ port: () => netInfo.ports.http });
+  utcOsr = setupUtcOsr({ port: () => netInfo.ports.http, scorePort: () => { const sc = server.score(); return sc ? sc.port() : 0; } });
   createMain();
   if (process.env.KLM_SMOKE) smokeTest();
 });
@@ -241,8 +253,45 @@ function smokeTest() {
       const s = JSON.parse(st);
       if (!s.avail || !s.frames) { fail++; log('GAGAL: tidak ada frame overlay offscreen'); }
       if (!(s.px > 0.002)) { fail++; log('GAGAL: lapisan UTC kosong di Program'); }
-      const png = await js('new Promise(r => KM.engine.prog.toBlob(b => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); }, "image/png"))');
-      fs.writeFileSync(path.join(out, 'program.png'), Buffer.from(png.split(',')[1], 'base64'));
+      const progPng = async (name) => { const png = await js('new Promise(r => KM.engine.prog.toBlob(b => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); }, "image/png"))'); fs.writeFileSync(path.join(out, name), Buffer.from(png.split(',')[1], 'base64')); };
+      await progPng('program.png');
+      // --- lapisan terpisah + running text native ---
+      const li = JSON.parse(await js('JSON.stringify(KM.utc.layerInfo())'));
+      log('lapisan: ' + JSON.stringify(li.map((l) => [l.id, l.frames, l.native, l.bbox && [l.bbox.x, l.bbox.y, l.bbox.w, l.bbox.h]])));
+      const LI = Object.fromEntries(li.map((l) => [l.id, l]));
+      if (!LI.main.frames || !LI.tk.frames || !LI.logo.frames) { fail++; log('GAGAL: ada lapisan UTC yang tidak menerima frame'); }
+      if (!LI.tk.native) { fail++; log('GAGAL: running text tidak masuk mode native'); }
+      // kehalusan: langkah gulir per frame Program pada 60 fps
+      await js('KM.settings.fps = 60');
+      await wait(1500);
+      const sm = JSON.parse(await js(`new Promise((res) => { const a = [], t0 = performance.now(); const f = () => { const n = KM.utc.layers.tk.native; if (n && n.cur != null) a.push([performance.now(), n.cur]); };
+        KM.on('frame', f); setTimeout(() => { KM.off && KM.off('frame', f); const d = []; for (let i = 1; i < a.length; i++) d.push(a[i][1] - a[i - 1][1]);
+        const avg = d.reduce((x, y) => x + y, 0) / (d.length || 1), dev = Math.sqrt(d.reduce((x, y) => x + (y - avg) * (y - avg), 0) / (d.length || 1));
+        res(JSON.stringify({ frames: a.length, fps: KM.engine.fps, step: +avg.toFixed(3), dev: +dev.toFixed(3), min: +Math.min(...d).toFixed(2), max: +Math.max(...d).toFixed(2) })); }, 3000); })`));
+      log('running text 60fps: ' + JSON.stringify(sm));
+      await progPng('program-60fps.png');
+      await js('KM.settings.fps = 30');
+      // --- UTC KLM Scoreboard ---
+      log('scoreboard status: ' + await js('JSON.stringify(KM.score.status)'));
+      await js('KM.score.setOnAir(true)'); await wait(5000);
+      const sc = JSON.parse(await js('JSON.stringify({ frames: KM.utc.layers.score.frames, px: KM.score.coverage(), bbox: KM.utc.layers.score.bbox })'));
+      log('scoreboard lapisan: ' + JSON.stringify(sc));
+      if (!sc.frames || !(sc.px > 0.002)) { fail++; log('GAGAL: scoreboard tidak tampil di Program'); }
+      await progPng('program-score.png');
+      await js('KM.ui.utcPanel(true, "score")'); await wait(5000);
+      const scp = await js('JSON.stringify(KM.score.status && KM.score.status.clients)');
+      log('panel scoreboard: ' + scp);
+      if (!/control/.test(scp)) { fail++; log('GAGAL: panel scoreboard tidak terbuka'); }
+      const cmdr = await js('KM.score.cmd("home+1").then((r) => JSON.stringify(r))');
+      log('perintah skor: ' + cmdr); if (!/"ok":true/.test(cmdr)) fail++;
+      await js('KM.score.cmd("home-1")');
+      fs.writeFileSync(path.join(out, 'panel-score.png'), (await mainWin.webContents.capturePage()).toPNG());
+      await js('KM.ui.utcPanel(false, "acara"); KM.score.setOnAir(false)');
+      // running text kembali ke halaman saat disembunyikan
+      log('cmd ticker hide: ' + (await post('/utc/api/klm/cmd', { cmd: 'hide', target: 'ticker' })).slice(0, 40));
+      await wait(1500);
+      const nat = await js('!!KM.utc.layers.tk.native');
+      log('running text native setelah hide: ' + nat); if (nat) { fail++; log('GAGAL: mode native tidak berhenti saat running text disembunyikan'); }
       const shot = await mainWin.webContents.capturePage();
       fs.writeFileSync(path.join(out, 'window.png'), shot.toPNG());
       await js('KM.ui.utcPanel(true)'); await wait(4000);

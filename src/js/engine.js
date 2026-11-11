@@ -340,8 +340,8 @@
       const inp = S.inputs[(thumbCursor + k) % n];
       const cv = inp.rt.thumb; if (!cv || !cv.isConnected) continue;
       if (E.liveThumb(inp)) continue;
-      const moving = KM.inputs.isPlaying(inp) || inp.type === 'list' || inp.type === 'browser' || inp.type === 'utc' || inp.type === 'clock' || inp.type === 'title' || (inp.rt.anim);
-      if (now - (inp.rt.thumbAt || 0) < (moving ? fast : slow)) continue;
+      const moving = KM.inputs.isPlaying(inp) || inp.type === 'list' || inp.type === 'browser' || inp.type === 'utc' || inp.type === 'score' || inp.type === 'clock' || inp.type === 'title' || (inp.rt.anim);
+      if (now - (inp.rt.thumbAt || 0) < (cv._vis === false ? 3000 : moving ? fast : slow)) continue;
       inp.rt.thumbAt = now;
       const c = cv.getContext('2d');
       c.fillStyle = '#000'; c.fillRect(0, 0, cv.width, cv.height);
@@ -383,7 +383,9 @@
 
     // PREVIEW (dilewati saat jendela diminimize / mode hemat)
     const idle = document.hidden && KM.settings.pauseHidden !== false;
-    if (!idle && E.frame % (KM.settings.previewEvery || 1) === 0) {
+    // monitor Preview cukup ±30 fps saat output 50/60 fps (kecuali mode Kualitas) → beban render turun ±1/3
+    const pvEvery = Math.max(KM.settings.previewEvery || 1, KM.settings.fps > 30 && KM.settings.perf !== 'kualitas' ? Math.round(KM.settings.fps / 30) : 1);
+    if (!idle && E.frame % pvEvery === 0) {
       const v = E.vctx, pw = E.prev.width, ph = E.prev.height;
       v.globalAlpha = 1; v.fillStyle = '#000'; v.fillRect(0, 0, pw, ph);
       const pv = KM.getInput(S.previewId);
@@ -413,7 +415,7 @@
     if (KM.settings.idleSave === false) return true;
     if (S.recording || S.streaming || S.ndiOut || S.multicorder || S.srt || (KM.replay && KM.replay.enabled) || E.mvOn) return true;
     if (S.trans || S.ftb.v !== (S.ftb.on ? 1 : 0) || now - E.dirtyAt < 1500) return true;
-    if (KM.utc && now - (KM.utc.lastFrameAt || 0) < 800) return true;
+    if (KM.utc && (now - (KM.utc.lastFrameAt || 0) < 800 || KM.utc.animating())) return true;
     if (KM.playlist && KM.playlist.running) return true;
     if (S.inputs.some((i) => KM.inputTypes[i.type].playable && KM.inputs.isPlaying(i))) return true; // video yang diputar (juga untuk thumbnail-nya)
     if (movingInput(KM.getInput(S.programId)) || movingInput(KM.getInput(S.previewId))) return true;
@@ -421,15 +423,19 @@
     return false;
   };
   E.loop = function () {
-    let mv = true, mvAt = 0;
+    let mv = true, mvAt = 0, nextAt = 0, vs = 16.7, lastTick = 0;
+    // jadwal frame presisi (akumulator): 60 fps tetap 60 fps di monitor 60/75/120/144 Hz, 50 fps tetap 50 fps.
     const tick = () => {
       const now = KM.now();
+      if (lastTick) { const d = now - lastTick; if (d > 2 && d < 40) vs = vs * 0.95 + d * 0.05; } // perkiraan periode vsync
+      lastTick = now;
       if (now - mvAt > 250) { mvAt = now; mv = E.sceneMoving(); }
       E.quiet = !mv;
       const interval = mv ? 1000 / KM.settings.fps : 1000 / 6;
-      if (now - E.lastRender >= interval - 3) {
+      if (now >= nextAt - Math.min(vs * 0.5, interval * 0.5)) {
         try { E.render(); } catch (e) { console.error('render', e); }
         E.lastRender = now;
+        nextAt = (now - nextAt > interval || nextAt - now > interval) ? now + interval : nextAt + interval;
       }
     };
     const raf = () => { tick(); requestAnimationFrame(raf); };

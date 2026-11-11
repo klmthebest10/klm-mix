@@ -671,6 +671,9 @@ const K = window.KLM;
 const Q = new URLSearchParams(location.search);
 const MODE = Q.get('mode') || 'pgm';                  // pgm = siaran, pvw = pratinjau panel kontrol
 const ONLY = (Q.get('only') || 'lt,title,ticker,logo,loc,soc,oc').split(',');
+const NATIVE = Q.get('tkn') === '1' && !!(window.klmOsr && window.klmOsr.post);
+const NFPS = Math.max(10, Math.min(240, Number(Q.get('fps')) || 30));
+const EPOCH = () => performance.timeOrigin + performance.now();
 if ((MODE === 'pvw' || Q.get('bg')) && !Q.get('t')) document.body.classList.add('pv');
 addEventListener('message', e => { if (e.data && 'klmBg' in e.data) document.body.classList.toggle('pv', !!e.data.klmBg); });
 document.getElementById('gf').href = K.FONT_URL;
@@ -769,10 +772,14 @@ Layer.prototype.patch = function(w){
 };
 Layer.prototype.hide = function(){
   const n = this.node; this.node = null; if (!n) return 0;
-  n.dataset.a = this.out; n.style.setProperty('--d', this.outDur+'ms');
-  n.classList.remove('in'); void n.offsetWidth; n._state='out'; n.classList.add('out');
-  setTimeout(()=>n.remove(), this.outDur + 40);
-  return Math.round(this.outDur * 0.75);
+  const wait = n._klmOut ? n._klmOut() : 0;   // running text native: kembalikan ke halaman dulu
+  const go = () => {
+    n.dataset.a = this.out; n.style.setProperty('--d', this.outDur+'ms');
+    n.classList.remove('in'); void n.offsetWidth; n._state='out'; n.classList.add('out');
+  };
+  if (wait) { n._state = 'out'; setTimeout(go, wait); } else go();
+  setTimeout(()=>n.remove(), this.outDur + 40 + wait);
+  return Math.round(this.outDur * 0.75) + wait;
 };
 const L = { lt:new Layer(), tt:new Layer(), tk:new Layer(), loc:new Layer(), soc:new Layer() };
 
@@ -877,6 +884,106 @@ function tickerStart(n, run, speed, keep){
     anim.effect.updateTiming({ duration: Math.max(4000, w / speed * 1000) });
     anim.currentTime = (px % w) / speed * 1000;
   });
+  if (NATIVE) tkNative(n, vp, tr, runs, anim);
+}
+
+// ===== Running text native (khusus render offscreen KLM Mix) =====
+// Teks berjalan digambar sekali menjadi gambar (ubin), dikirim ke mixer, lalu digeser oleh mixer setiap
+// frame Program → gerak halus & stabil di 30/50/60 fps tanpa tergantung beban renderer ini.
+// Saat masuk & keluar (animasi), running text kembali digerakkan halaman ini seperti biasa.
+let TKN = null, tkSeq = 0;
+const tkOff = (st, t) => st.px0 + (t - st.E0) * st.speed / 1000;
+function tkShadows(v, k){
+  if (!v || v === 'none') return [];
+  const out = [], re = /(rgba?\([^)]*\)|#[0-9a-f]{3,8}|[a-z]+)?\s*(-?[\d.]+)px\s+(-?[\d.]+)px(?:\s+([\d.]+)px)?\s*(rgba?\([^)]*\)|#[0-9a-f]{3,8})?/gi;
+  let m; while ((m = re.exec(v))) out.push({ c: m[1] || m[5] || 'rgba(0,0,0,.5)', x: +m[2] * k, y: +m[3] * k, b: (+m[4] || 0) * k });
+  return out.reverse();
+}
+function tkLive(n, quiet){
+  const st = TKN; if (!st || st.node !== n || !st.on) return false;
+  st.on = false; clearInterval(st.geoT); clearTimeout(st.goT);
+  const tr = st.tr, anim = st.anim, d = anim.effect.getTiming().duration;
+  let px = tkOff(st, EPOCH()) % st.w; if (px < 0) px += st.w;
+  anim.currentTime = px / st.w * d; anim.play();
+  tr.style.visibility = ''; tr._px = st.oldPx;
+  n.querySelectorAll('.tk-track').forEach(t => { t.style.visibility = ''; });
+  if (!quiet) requestAnimationFrame(() => requestAnimationFrame(() => window.klmOsr.post({ k: 'live', id: st.id })));
+  return true;
+}
+function tkNative(n, vp, tr, runs, anim){
+  const prev = TKN && TKN.node === n && TKN.on ? TKN : null;   // isi diganti saat sedang native
+  if (prev) { clearInterval(prev.geoT); tr.style.visibility = 'hidden'; }
+  const id = ++tkSeq;
+  const go = async () => {
+    if (!tr.isConnected || n._state === 'out') return;
+    if (n._state === 'in') { setTimeout(go, 80); return; }
+    if (document.fonts && document.fonts.status !== 'loaded') { try { await document.fonts.ready; } catch (e) {} if (!tr.isConnected) return; }
+    await new Promise(r => requestAnimationFrame(r));
+    if (!tr.isConnected || n._state === 'out' || (TKN && TKN.id > id)) return;
+    const P = devicePixelRatio || 1, k = SCALE * P;
+    const vr = vp.getBoundingClientRect(), rr = runs[0].getBoundingClientRect();
+    const wF = rr.width * P, H = Math.ceil(vr.height * P), W = Math.ceil(wF);
+    if (!(wF > 4) || !H || W > 400000) { if (prev) tr.style.visibility = ''; return; }
+    // segmen teks dengan gaya hasil hitung browser (posisi persis seperti di layar)
+    const segs = [], range = document.createRange(), mc = document.createElement('canvas').getContext('2d');
+    const walker = document.createTreeWalker(runs[0], NodeFilter.SHOW_TEXT);
+    for (let tn; (tn = walker.nextNode());) {
+      if (!tn.nodeValue.trim()) continue;
+      const el = tn.parentElement, cs = getComputedStyle(el);
+      if (cs.webkitBackgroundClip === 'text' || cs.backgroundClip === 'text' || parseFloat(cs.webkitTextStrokeWidth) > 0 || (cs.webkitTextFillColor && cs.webkitTextFillColor !== cs.color)) { if (prev) tr.style.visibility = ''; return; } // gaya khusus → tetap mode biasa
+      range.selectNodeContents(tn);
+      const r = range.getClientRects()[0]; if (!r) continue;
+      let txt = tn.nodeValue;
+      if (cs.textTransform === 'uppercase') txt = txt.toUpperCase(); else if (cs.textTransform === 'lowercase') txt = txt.toLowerCase();
+      const fs = parseFloat(cs.fontSize) * k;
+      const font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + fs + 'px ' + cs.fontFamily;
+      mc.font = font; const ls = (parseFloat(cs.letterSpacing) || 0) * k; mc.letterSpacing = ls + 'px';
+      const m = mc.measureText(txt);
+      segs.push({ txt, font, ls, color: cs.color, sh: tkShadows(cs.textShadow, k), x: (r.left - rr.left) * P, wd: m.width, fs,
+        base: (r.top - vr.top) * P + (m.fontBoundingBoxAscent || fs * 0.8), u: /underline/.test(cs.textDecorationLine) });
+    }
+    if (!segs.length) { if (prev) tr.style.visibility = ''; return; }
+    const TW = 4096, tiles = [];
+    for (let x0 = 0; x0 < W; x0 += TW) {
+      const tw = Math.min(TW, W - x0), c = document.createElement('canvas'); c.width = tw; c.height = H;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.textBaseline = 'alphabetic';
+      for (const sg of segs) {
+        if (sg.x - x0 > tw + 60 || sg.x + sg.wd - x0 < -60) continue;
+        g.font = sg.font; g.letterSpacing = sg.ls + 'px'; g.fillStyle = sg.color;
+        for (const sh of sg.sh) { // bayangan saja (teks digeser jauh keluar kanvas)
+          g.shadowColor = sh.c; g.shadowOffsetX = sh.x + 100000; g.shadowOffsetY = sh.y; g.shadowBlur = sh.b;
+          g.fillText(sg.txt, sg.x - x0 - 100000, sg.base);
+        }
+        g.shadowColor = 'transparent'; g.shadowBlur = 0; g.shadowOffsetX = 0; g.shadowOffsetY = 0;
+        g.fillText(sg.txt, sg.x - x0, sg.base);
+        if (sg.u) g.fillRect(sg.x - x0, sg.base + sg.fs * 0.15, sg.wd, Math.max(1, sg.fs * 0.07));
+      }
+      tiles.push({ x: x0, w: tw, h: H, buf: new Uint8Array(g.getImageData(0, 0, tw, H).data.buffer) });
+    }
+    if (!tr.isConnected || n._state === 'out' || (TKN && TKN.id > id)) return;
+    const d = anim.effect.getTiming().duration;
+    let speed = wF / d * 1000;
+    const E0 = EPOCH();
+    let px0 = ((anim.currentTime || 0) % d) / d * wF;
+    if (prev && prev.on) { px0 = tkOff(prev, E0) % wF; prev.on = false; } // lanjut dari posisi yang sedang tayang
+    // langkah per frame mendekati bilangan bulat → bulatkan (teks tetap tajam, tiap frame bergeser sama persis)
+    const st0 = speed / NFPS, snap = Math.abs(st0 - Math.round(st0)) < 0.12 && Math.round(st0) >= 1;
+    if (snap) { speed = Math.round(st0) * NFPS; px0 = Math.round(px0); }
+    const at = E0 + 120;
+    const st = TKN = { id, node: n, tr, anim, w: wF, speed, snap, px0, E0, on: true, oldPx: tr._px };
+    const vpOf = () => { const b = vp.getBoundingClientRect(); return { x: b.left * P, y: b.top * P, w: b.width * P, h: b.height * P }; };
+    let vpNow = vpOf();
+    window.klmOsr.post({ k: 'strip', id, at, vp: vpNow, w: wF, speed, snap, px0, E0, tiles });
+    tr._px = () => { let p = tkOff(st, EPOCH()) % st.w; if (p < 0) p += st.w; return p / k; };
+    st.goT = setTimeout(() => { if (st.on) { anim.pause(); tr.style.visibility = 'hidden'; } }, Math.max(0, at - EPOCH()));
+    st.geoT = setInterval(() => { // posisi running text digeser (mis. tarik di pratinjau) → kabari mixer
+      if (!st.on || !vp.isConnected) return clearInterval(st.geoT);
+      const v = vpOf(); if (Math.abs(v.x - vpNow.x) + Math.abs(v.y - vpNow.y) + Math.abs(v.w - vpNow.w) + Math.abs(v.h - vpNow.h) > 0.5) { vpNow = v; window.klmOsr.post({ k: 'geo', id, vp: v }); }
+    }, 400);
+  };
+  setTimeout(go, 0);
+  n._klmOut = () => tkLive(n) ? 70 : 0;
 }
 setInterval(()=>{ const t = nowStr(); document.querySelectorAll('.tk-clock').forEach(e=>{ if (e.textContent !== t) e.textContent = t; }); }, 1000);
 

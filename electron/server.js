@@ -16,6 +16,7 @@ const path = require('path');
 const { WebSocketServer } = require('ws');
 const hub = require('./hub');
 const createUtc = require('./utc');
+const createScore = require('./score');
 
 const ROOT = path.join(__dirname, '..');
 const DEFAULTS = { httpPort: 8620, httpsPort: 8621, tcpPort: 8622 };
@@ -76,6 +77,8 @@ let tallyStr = '';
 let lastState = null;
 const tcpSubs = new Set();
 let utc = null; // UTC KLM Acara (menyatu)
+let score = null; // UTC KLM Scoreboard olahraga (menyatu, port sendiri)
+const scoreStatus = () => (score ? score.status() : { port: 0 });
 
 function send(ws, obj) { try { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); } catch (e) {} }
 function mixer() { const c = mixerId && clients.get(mixerId); return c ? c.ws : null; }
@@ -102,6 +105,7 @@ function onWsConnection(ws, req) {
       if (msg.role === 'mixer') {
         mixerId = id;
         if (utc) setTimeout(() => { utc.onMixerState(); send(ws, { t: 'utc-status', status: utc.status() }); }, 50);
+        setTimeout(() => send(ws, { t: 'score-status', status: scoreStatus() }), 60);
         // beri tahu mixer semua klien yang sudah ada
         for (const [cid, c] of clients) if (cid !== id && c.role !== 'unknown')
           send(ws, { t: 'peer-join', id: cid, role: c.role, name: c.name, slot: c.slot, ip: c.ip, meta: c.meta });
@@ -126,6 +130,7 @@ function onWsConnection(ws, req) {
         return;
       }
       if (msg.t === 'state') { lastState = msg; if (utc) utc.onMixerState(); }
+      if (msg.t === 'score-cmd') { const r = score ? score.cmd(msg.c) : { ok: false, error: 'Scoreboard tidak aktif' }; if (msg.reqId) send(ws, { t: 'score-cmd-res', reqId: msg.reqId, res: r }); return; }
       if (msg.t === 'utc-cmd' && utc) { const r = utc.klmCmd(msg.cmd || {}); if (msg.reqId) send(ws, { t: 'utc-cmd-res', reqId: msg.reqId, res: r }); return; }
       if (msg.to) { const c = clients.get(msg.to); if (c) send(c.ws, msg); return; }
       if (msg.bcast) { for (const [cid, c] of clients) if (cid !== id && (msg.bcast === 'all' || c.role === msg.bcast)) send(c.ws, msg); return; }
@@ -197,6 +202,11 @@ async function handleHttp(req, res, ports) {
       res.writeHead(r.ok === false ? 503 : 200, { 'Content-Type': 'text/xml; charset=utf-8' });
       return res.end(r.xml || '<vmix><error>' + esc(r.msg || 'Mixer belum siap') + '</error></vmix>');
     }
+    if (/^score(cmd)?$/i.test(fn)) {
+      const r = score ? score.cmd(u.searchParams.get('Value') || u.searchParams.get('value') || '') : { ok: false, error: 'Scoreboard tidak aktif' };
+      res.writeHead(r.ok ? 200 : 500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end(r.ok ? 'Function completed successfully.' : ('Error: ' + r.error));
+    }
     const params = {};
     for (const [k, v] of u.searchParams) if (k.toLowerCase() !== 'function') params[k] = v;
     const r = await callMixer({ t: 'fn', fn, params });
@@ -209,7 +219,7 @@ async function handleHttp(req, res, ports) {
   }
   if (p === '/info') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-    return res.end(JSON.stringify({ app: 'KLM Mix', version: require('../package.json').version, ips: localIPs(), ports, mixer: !!mixer() }));
+    return res.end(JSON.stringify({ app: 'KLM Mix', version: require('../package.json').version, ips: localIPs(), ports: Object.assign({ score: score ? score.port() : 0 }, ports), mixer: !!mixer() }));
   }
   if (utc && (p === '/utc' || p.startsWith('/utc/') || p.startsWith('/uploads/'))) return utc.handle(req, res, p, u.searchParams);
   if (p.startsWith('/hub/')) {
@@ -308,6 +318,14 @@ async function start(opts) {
     } catch (e) { console.warn('[KLM] UTC KLM Acara gagal dimuat:', e); }
     if (utc) utc.onState(() => { const m = mixer(); if (m) send(m, { t: 'utc-status', status: utc.status() }); });
   }
+  if (!score && !process.env.KLM_NO_SCORE) {
+    try {
+      score = createScore({ dataDir: path.join(configDir(), 'score'), pubDir: path.join(ROOT, 'src', 'score'), localIPs });
+      let t = null;
+      score.onChange(() => { clearTimeout(t); t = setTimeout(() => { const m = mixer(); if (m) send(m, { t: 'score-status', status: score.status() }); }, 300); });
+      score.start(cfg.scorePort).then(() => { const m = mixer(); if (m) send(m, { t: 'score-status', status: score.status() }); });
+    } catch (e) { console.warn('[KLM] Scoreboard gagal dimuat:', e); score = null; }
+  }
   const wssA = new WebSocketServer({ noServer: true });
   wssA.on('connection', onWsConnection);
   const upgrade = (req, socket, head) => {
@@ -336,13 +354,13 @@ async function start(opts) {
   ports.tcp = await listen(tcpServer, cfg.tcpPort);
 
   console.log(`[KLM Mix] HTTP :${ports.http}  HTTPS :${ports.https}  TCP :${ports.tcp}`);
-  for (const ip of localIPs()) console.log(`   Mixer   : http://${ip.address}:${ports.http}/\n   Menu HP : http://${ip.address}:${ports.http}/hp\n   KLMCAM  : ${ports.https ? `https://${ip.address}:${ports.https}` : `http://${ip.address}:${ports.http}`}/cam\n   Remote  : http://${ip.address}:${ports.http}/remote\n   UTC     : http://${ip.address}:${ports.http}/utc`);
+  for (const ip of localIPs()) console.log(`   Mixer   : http://${ip.address}:${ports.http}/\n   Menu HP : http://${ip.address}:${ports.http}/hp\n   KLMCAM  : ${ports.https ? `https://${ip.address}:${ports.https}` : `http://${ip.address}:${ports.http}`}/cam\n   Remote  : http://${ip.address}:${ports.http}/remote\n   UTC     : http://${ip.address}:${ports.http}/utc${score && score.port() ? `\n   Score   : http://${ip.address}:${score.port()}/  (HP: /hp)` : ''}`);
   return { ports, ips: localIPs() };
 }
 
-module.exports = { start, localIPs, loadConfig, saveConfig, configDir, hub, utc: () => utc };
+module.exports = { start, localIPs, loadConfig, saveConfig, configDir, hub, utc: () => utc, score: () => score };
 
-function cleanup() { try { hub.shutdown(); } catch (e) {} try { if (utc) utc.shutdown(); } catch (e) {} }
+function cleanup() { try { hub.shutdown(); } catch (e) {} try { if (utc) utc.shutdown(); } catch (e) {} try { if (score) score.shutdown(); } catch (e) {} }
 process.on('exit', cleanup);
 ['SIGINT', 'SIGTERM'].forEach((sig) => process.on(sig, () => { cleanup(); process.exit(0); }));
 
