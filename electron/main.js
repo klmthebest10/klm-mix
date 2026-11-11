@@ -257,7 +257,7 @@ function smokeTest() {
       log('saat dibuka (tanpa input UTC): ' + JSON.stringify(idle0));
       log('rincian muat halaman: ' + await js(`(() => { const n = performance.getEntriesByType('navigation')[0] || {}; const r = performance.getEntriesByType('resource');
         const fcp = (performance.getEntriesByType('paint').find((p) => p.name === 'first-contentful-paint') || {}).startTime;
-        const slow = r.slice().sort((a, b) => b.duration - a.duration).slice(0, 8).map((x) => x.name.replace(/^https?:\/\/[^/]+/, '') + ' @' + Math.round(x.startTime) + ' +' + Math.round(x.duration));
+        const slow = r.slice().sort((a, b) => b.duration - a.duration).slice(0, 8).map((x) => (() => { try { return new URL(x.name).pathname; } catch (e) { return x.name; } })() + ' @' + Math.round(x.startTime) + ' +' + Math.round(x.duration));
         return JSON.stringify({ origin: Math.round(performance.timeOrigin - ${T0}), req: Math.round(n.requestStart), resp: Math.round(n.responseStart), dom: Math.round(n.domInteractive), dcl: Math.round(n.domContentLoadedEventEnd), load: Math.round(n.loadEventEnd), fcp: Math.round(fcp || 0), n: r.length, slow }); })()`));
       if (idle0.osr.length) { fail++; log('GAGAL: renderer UTC menyala padahal belum ada input'); }
       // UTC Acara hadir lewat input
