@@ -166,11 +166,19 @@
     const RES = { same: null, '1080': [1920, 1080], '720': [1280, 720], '576': [1024, 576] };
     let wh = RES[c.res] || null;
     if (wh && KM.settings.height > KM.settings.width) wh = [wh[1], wh[0]];
-    const cfg = Object.assign({}, c, { encoder, fps: KM.settings.fps, width: wh ? wh[0] : 0, height: wh ? wh[1] : 0 });
+    // x264 (tanpa GPU): preset menyesuaikan jumlah core agar tetap realtime
+    const cores = navigator.hardwareConcurrency || 4;
+    const preset = c.preset && c.preset !== 'auto' && c.encoder === 'x264' ? c.preset : (cores >= 12 ? 'veryfast' : cores >= 6 ? 'superfast' : 'ultrafast');
+    const cfg = Object.assign({}, c, { encoder, preset, fps: KM.settings.fps, width: wh ? wh[0] : 0, height: wh ? wh[1] : 0 });
+    R.srtSlow = 0; R.srtWarned = false;
     R.srtStatus = 'menyambung'; R.srtMsg = ''; R.srtStats = null; R.srtLog = '';
     const r = await openHubOut('srt', { cfg }, (m) => {
       if (m.t === 'status') { R.srtStatus = m.status; R.srtMsg = m.msg; if (m.status === 'live') KM.toast('● SRT tersambung ke gateway — Program tayang realtime', 'ok', 4000); KM.changed('srt'); }
-      else if (m.t === 'stats') { R.srtStats = m; KM.emit('srt-stats', m); }
+      else if (m.t === 'stats') {
+        R.srtStats = m; KM.emit('srt-stats', m);
+        const sp = parseFloat(m.speed); R.srtSlow = sp && sp < 0.93 ? R.srtSlow + 1 : 0;
+        if (R.srtSlow >= 8 && !R.srtWarned) { R.srtWarned = true; KM.toast('SRT: encoder tidak kuat realtime (' + m.speed + '). Turunkan resolusi ke 720p / bitrate, atau pakai encoder GPU di Pengaturan → SRT / TV.', 'warn', 9000); }
+      }
       else if (m.t === 'log') { R.srtLog = (R.srtLog + m.msg).slice(-6000); }
       else if (m.t === 'closed' && S.srt) { R.stopSrt(true); KM.toast('Output SRT berhenti (hub media tertutup)', 'err', 6000); }
     });
