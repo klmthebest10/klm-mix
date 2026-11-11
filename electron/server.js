@@ -49,16 +49,21 @@ function localIPs() {
   }
   return out;
 }
-function getCert() {
+function readCert() {
   const dir = configDir();
-  const kp = path.join(dir, 'cert-key.pem'), cp = path.join(dir, 'cert.pem');
-  try { return { key: fs.readFileSync(kp), cert: fs.readFileSync(cp) }; } catch (e) {}
-  try {
-    const selfsigned = require('selfsigned');
-    const pems = selfsigned.generate([{ name: 'commonName', value: 'KLM Mix' }], { days: 3650, keySize: 2048, algorithm: 'sha256' });
-    fs.writeFileSync(kp, pems.private); fs.writeFileSync(cp, pems.cert);
-    return { key: pems.private, cert: pems.cert };
-  } catch (e) { console.warn('[KLM] HTTPS dinonaktifkan:', e.message); return null; }
+  try { return { key: fs.readFileSync(path.join(dir, 'cert-key.pem')), cert: fs.readFileSync(path.join(dir, 'cert.pem')) }; } catch (e) { return null; }
+}
+// Sertifikat dibuat sekali di proses terpisah (RSA 2048 di JS bisa memakan beberapa detik) → aplikasi tetap langsung terbuka.
+function makeCert() {
+  return new Promise((resolve) => {
+    try {
+      const { spawn } = require('child_process');
+      const p = spawn(process.execPath, [path.join(__dirname, 'gencert.js'), configDir()], { env: Object.assign({}, process.env, { ELECTRON_RUN_AS_NODE: '1' }), stdio: 'ignore', windowsHide: true });
+      const t = setTimeout(() => { try { p.kill(); } catch (e) {} resolve(null); }, 60000);
+      p.on('exit', () => { clearTimeout(t); resolve(readCert()); });
+      p.on('error', () => { clearTimeout(t); resolve(null); });
+    } catch (e) { resolve(null); }
+  });
 }
 
 // ---------- state relay ----------
@@ -318,12 +323,15 @@ async function start(opts) {
   httpServer.on('upgrade', upgrade);
   ports.http = await listen(httpServer, cfg.httpPort);
 
-  const cert = getCert();
-  if (cert) {
+  const startHttps = async (cert) => {
+    if (!cert) return console.warn('[KLM] HTTPS dinonaktifkan (sertifikat gagal dibuat)');
     const httpsServer = https.createServer(cert, (q, s) => handleHttp(q, s, ports).catch(() => {}));
     httpsServer.on('upgrade', upgrade);
     ports.https = await listen(httpsServer, cfg.httpsPort);
-  }
+  };
+  const cert = readCert();
+  if (cert) await startHttps(cert);
+  else makeCert().then(startHttps).then(() => { if (ports.https) console.log('[KLM Mix] HTTPS :' + ports.https + ' siap'); });
   const tcpServer = net.createServer(handleTcp);
   ports.tcp = await listen(tcpServer, cfg.tcpPort);
 

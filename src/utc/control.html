@@ -13,6 +13,7 @@
 <link rel="apple-touch-icon" href="/utc/icons/apple-180.png">
 <link rel="icon" type="image/png" href="/utc/icons/favicon-64.png">
 <link href="/utc/fonts/fonts.css" rel="stylesheet">
+<script src="/icons.js"></script>
 <style>
 :root{--bg:#0c0f15;--bg2:#121722;--card:#171d2a;--card2:#1d2434;--line:#273047;--tx:#e8ecf4;--mut:#8b95ab;--gold:#f2c45a;--red:#ff3b4f;--grn:#22c55e;--blu:#3b82f6;--r:12px}
 *{box-sizing:border-box}
@@ -294,6 +295,7 @@ img,video,iframe{max-width:100%}
   .air button b{font-size:12px}
 }
 </style>
+<link href="/utc/klm-embed.css" rel="stylesheet">
 </head>
 <body>
 <header>
@@ -340,10 +342,13 @@ img,video,iframe{max-width:100%}
 const K = window.KLM, esc = K.esc;
 const CID = 'c' + K.uid();
 const klmHost = () => { for (const w of [window.parent !== window ? window.parent : null, window.opener]) { try { if (w && w.KM && w.KM.engine) return w.KM; } catch(e) {} } return null; };
+// tampilan menyatu: di dalam KLM Mix (iframe) monitor Program & switcher memakai milik KLM Mix di atasnya
+document.documentElement.classList.add('klmui');
+try { if (window.parent !== window && klmHost()) document.documentElement.classList.add('klm-embed'); } catch(e) {}
 const $ = s => document.querySelector(s);
 let S = null, INFO = { port: location.port, ips: [] };
 const ui = { tab: 'lt', sel: { lt: '', tt: '', loc: '', soc: '' }, ocKind: 'opening', n: 0, pending: false, bulk: false, presets: [] };
-const TABS = [['lt','Lower Third'],['tt','Title'],['tk','Running Text'],['loc','Lokasi'],['soc','Sosial Media'],['oc','Opening/Closing'],['logo','Logo'],['theme','Tema & Warna'],['preset','Preset'],['sw','Switcher & Transisi'],['out','Output & Install']];
+const TABS = [['lt','Lower Third','rect','Grafis'],['tt','Title','title'],['tk','Running Text','type'],['loc','Lokasi','target'],['soc','Sosial Media','share'],['logo','Logo','image'],['oc','Opening/Closing','clapper'],['theme','Tema & Warna','palette','Gaya & Acara'],['preset','Preset','save'],['sw','Switcher & Transisi','switcher','Sistem'],['out','Output & Install','cast']];
 
 // ---------- tinggi header (untuk elemen sticky) ----------
 (function(){ const h = document.querySelector('header'); const set = () => document.documentElement.style.setProperty('--hh', h.offsetHeight + 'px');
@@ -424,7 +429,8 @@ function renderAll(){
   if (!S) return;
   const sel = $('#evsel');
   sel.innerHTML = K.EVENTS.map(e=>`<option value="${e.id}" ${e.id===S.eventType?'selected':''}>${esc(e.n)}</option>`).join('');
-  $('#tabs').innerHTML = TABS.map(t=>`<button class="${ui.tab===t[0]?'act':''}" data-tab="${t[0]}">${t[1]}</button>`).join('');
+  const ico = (n) => window.KI ? KI.svg(n) : '';
+  $('#tabs').innerHTML = TABS.map(t=>(t[3]?`<span class="tgrp">${t[3]}</span>`:'')+`<button class="${ui.tab===t[0]?'act':''}" data-tab="${t[0]}" title="${t[1]}">${ico(t[2])}<span>${t[1]}</span></button>`).join('');
   renderAir();
   const P = { lt:pLT, tt:pTT, tk:pTK, loc:pLoc, soc:pSoc, oc:pOC, logo:pLogo, theme:pTheme, preset:pPreset, sw:pSW, out:pOut }[ui.tab];
   $('#panel').innerHTML = P();

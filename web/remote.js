@@ -158,6 +158,7 @@
   function renderMore() {
     $('aRec').classList.toggle('live', !!S.rec); $('aRec').textContent = S.rec ? '■ Stop Rekam' : '● Rekam';
     $('aStream').classList.toggle('live', !!S.stream); $('aStream').textContent = S.stream ? '■ Stop Live' : '📡 Mulai Live';
+    if ($('aSrt')) { $('aSrt').classList.toggle('live', S.srt === 'live'); $('aSrt').textContent = S.srt ? (S.srt === 'live' ? '■ Stop SRT' : '⟳ SRT menyambung…') : '📺 SRT ke TV'; }
     $('aMc').classList.toggle('live', !!S.mc);
     const rb = $('aRpBuf'); rb.dataset.fn = S.replay.enabled ? 'ReplayStopRecording' : 'ReplayStartRecording'; rb.textContent = S.replay.enabled ? '■ Buffer OFF' : '● Buffer ON'; rb.classList.toggle('live', S.replay.enabled);
     $('aPl').classList.toggle('live', S.playlist.running);

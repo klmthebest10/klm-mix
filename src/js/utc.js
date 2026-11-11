@@ -81,22 +81,42 @@
   };
 
   // ---------- mulai render offscreen ----------
+  // Renderer offscreen baru dinyalakan saat grafis UTC benar-benar dipakai (tampil, ada input UTC, atau panel dibuka),
+  // dan dijeda otomatis bila 20 detik tidak ada grafis tampil → aplikasi lebih ringan saat dibuka & dipakai.
+  U.started = false; U.paused = false;
   U.start = function () {
     if (!KM.isElectron || !window.klm || !window.klm.send) { U.err = 'Lapisan UTC ON AIR hanya di versi PC (.exe). Di mode web, pakai alamat overlay di OBS/vMix.'; return; }
     if (!gl && !initGL()) return;
-    U.avail = true;
+    U.avail = true; U.started = true; U.paused = false;
     window.klm.send('utc:start', { w: KM.settings.width, h: KM.settings.height, fps: Math.min(60, KM.settings.fps || 30) });
   };
+  U.boot = function () { // dipanggil saat aplikasi dibuka: hanya menyiapkan, belum merender
+    if (!KM.isElectron || !window.klm || !window.klm.send) { U.err = 'Lapisan UTC ON AIR hanya di versi PC (.exe). Di mode web, pakai alamat overlay di OBS/vMix.'; return; }
+    U.avail = true;
+    if (S.inputs.some((i) => i.type === 'utc')) U.ensure();
+  };
+  U.ensure = function () {
+    if (!U.avail) return;
+    if (!U.started) U.start();
+    else if (U.paused) { U.paused = false; window.klm.send('utc:resume'); }
+    U.usedAt = KM.now();
+  };
+  setInterval(() => {
+    if (!U.started || U.paused) return;
+    const st = U.status, busy = !st || st.oc || Object.values(st.visible || {}).some(Boolean) || S.inputs.some((i) => i.type === 'utc') || (document.getElementById('utcWs') && !document.getElementById('utcWs').hidden);
+    if (busy) { U.usedAt = KM.now(); return; }
+    if (KM.now() - (U.usedAt || 0) > 20000) { U.paused = true; window.klm.send('utc:pause'); }
+  }, 2000);
   if (KM.isElectron && window.klm && window.klm.on) {
     window.klm.on('utc:frame', (f) => { try { U.pushFrame(f); } catch (e) { console.warn('utc frame', e); } window.klm.send('utc:ack'); });
   }
   U.reload = () => { if (U.avail) window.klm.send('utc:reload'); };
-  KM.on('resized', () => { if (U.avail) U.start(); });
+  KM.on('resized', () => { if (U.started) U.start(); });
 
   // ---------- input "Grafis UTC KLM Acara" ----------
   KM.inputTypes.utc = {
     label: 'Grafis UTC KLM Acara', icon: '🎬',
-    create(inp) { inp.rt.ready = true; if (!inp.opts.note) inp.opts.note = 'Lower third, title, running text, logo, lokasi, sosmed, opening/closing'; },
+    create(inp) { inp.rt.ready = true; setTimeout(() => U.ensure(), 0); if (!inp.opts.note) inp.opts.note = 'Lower third, title, running text, logo, lokasi, sosmed, opening/closing'; },
     source(inp) {
       if (has) return { src: cv, w: cv.width, h: cv.height };
       return KM.placeholder(inp, '🎬 UTC KLM Acara', U.avail ? 'Menunggu grafis…' : (U.err || 'Memuat…'));
@@ -104,6 +124,7 @@
   };
   U.addInput = () => {
     const ex = S.inputs.find((i) => i.type === 'utc');
+    U.ensure();
     if (ex) { KM.engine.setPreview(ex.id); return ex; }
     return KM.inputs.create('utc', { title: 'Grafis UTC KLM Acara' });
   };
@@ -111,6 +132,7 @@
   // ---------- status dari server (setiap perubahan di panel UTC) ----------
   U.onStatus = function (st) {
     const was = U.status; U.status = st;
+    if (st && (st.oc || Object.values(st.visible || {}).some(Boolean))) U.ensure();
     if (was && st && was.eventType !== st.eventType) idleUntil = KM.now() + 2000;
     if (!st || !Object.values(st.visible || {}).some(Boolean)) idleUntil = Math.max(idleUntil, KM.now() + 2500); // beri waktu animasi keluar
     syncAudio();
@@ -118,6 +140,7 @@
   };
   U.liveInfo = function () {
     if (!U.avail) return U.err || 'Memuat renderer…';
+    if (!U.started) return 'Renderer siap — menyala otomatis saat grafis ditampilkan';
     const st = U.status; if (!st) return 'Menunggu panel…';
     const names = { lt: 'Lower Third', tt: 'Title', tk: 'Running Text', bug: 'Logo', loc: 'Lokasi', soc: 'Sosial Media' };
     const on = Object.keys(names).filter((k) => st.visible && st.visible[k]).map((k) => names[k]);

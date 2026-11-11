@@ -88,5 +88,8 @@ module.exports = function setupUtcOsr(o) {
   ipcMain.on('utc:reload', () => { if (wc && !wc.isDestroyed()) { sentFull = false; wc.reloadIgnoringCache(); } });
   ipcMain.on('utc:full', () => { sentFull = false; if (wc && !wc.isDestroyed()) wc.invalidate(); });
   ipcMain.on('utc:ack', () => { inflight = false; pump(); });
+  // jeda saat tidak ada grafis tampil (hemat CPU/GPU); halaman tetap dimuat sehingga lanjut seketika
+  ipcMain.on('utc:pause', () => { if (wc && !wc.isDestroyed()) { try { wc.stopPainting(); } catch (e) {} } });
+  ipcMain.on('utc:resume', () => { if (wc && !wc.isDestroyed() && target) { sentFull = false; try { wc.startPainting(); wc.invalidate(); } catch (e) {} } });
   return { stop, active: () => !!target };
 };

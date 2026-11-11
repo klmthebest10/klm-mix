@@ -189,7 +189,7 @@
       })),
       previewId: S.previewId, programId: S.programId,
       overlays: S.overlays.map((o) => ({ inputId: o.inputId, on: o.phase === 'in' || o.phase === 'on' })),
-      ftb: S.ftb.on, rec: S.recording, stream: S.streaming, mc: S.multicorder,
+      ftb: S.ftb.on, rec: S.recording, stream: S.streaming, mc: S.multicorder, srt: S.srt ? KM.rec.srtStatus : '',
       transitions: KM.settings.transitions, tbar: S.tbar,
       master: A.master ? { vol: A.master.vol, mute: A.master.muted } : null,
       replay: { enabled: KM.replay.enabled, events: KM.replay.events.map((e) => ({ id: e.id, name: e.name, sec: e.sec })), playing: KM.replay.playing, speed: KM.replay.speed },

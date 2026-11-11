@@ -10,7 +10,7 @@ const { spawn, fork } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { WebSocketServer } = require('ws');
-const { buildFfmpegArgs } = require('./ffmpeg-args');
+const { buildFfmpegArgs, buildSrtArgs, srtUrl } = require('./ffmpeg-args');
 const ptz = require('./ptz');
 
 let cfgFn = () => ({});
@@ -165,10 +165,76 @@ const ndi = {
   data(buf) { if (this.w) try { this.w.send({ cmd: 'send-data', buf }); } catch (e) {} }
 };
 
+// ====================== SRT → gateway / decoder TV ======================
+// MediaRecorder (WebM) → ffmpeg → MPEG-TS SRT. Bila koneksi putus (gateway restart / jaringan), ffmpeg dijalankan ulang
+// otomatis: header WebM disimpan lalu disambung lagi mulai Cluster berikutnya (≤ 1 GOP), tanpa menghentikan mixer.
+const CLUSTER = Buffer.from([0x1f, 0x43, 0xb6, 0x75]);
+function srtSession(cfg, tell) {
+  const S = { header: null, pre: [], preLen: 0, proc: null, needSync: false, stopped: false, fails: 0, status: 'menyambung', t0: 0, log: '', live: false, bytes: 0 };
+  const setStatus = (st, msg) => { if (S.status !== st || msg) { S.status = st; tell({ t: 'status', status: st, msg: msg || '' }); } };
+  function reason() {
+    const L = S.log;
+    if (/Connection setup failure: connection timed out|timed out/i.test(L)) return 'Gateway tidak menjawab (cek IP/port/firewall)';
+    if (/rejected|REJ_/i.test(L)) return 'Ditolak gateway (cek passphrase / stream ID)';
+    if (/passphrase|BADSECRET|decrypt/i.test(L)) return 'Passphrase tidak cocok';
+    if (/address already in use|bind/i.test(L)) return 'Port sudah dipakai aplikasi lain';
+    if (/Connection refused|refused/i.test(L)) return 'Koneksi ditolak (gateway belum siap)';
+    if (/Protocol not found|srt.*not/i.test(L)) return 'ffmpeg ini tidak mendukung SRT';
+    return 'Koneksi terputus';
+  }
+  function run() {
+    if (S.stopped) return;
+    let p; try { p = spawn(ffmpegPath(), buildSrtArgs(cfg), { windowsHide: true }); } catch (e) { setStatus('error', e.message); return; }
+    S.proc = p; S.t0 = Date.now(); S.live = false; S.log = ''; S.needSync = !!S.header;
+    if (S.fails) setStatus('ulang', S.lastMsg); else setStatus(cfg.mode === 'listener' ? 'menunggu' : 'menyambung');
+    p.stdin.on('error', () => {});
+    p.stderr.on('data', (d) => {
+      const t = d.toString(); S.log = (S.log + t).slice(-4000);
+      const x = /frame=\s*(\d+).*?fps=\s*([\d.]+).*?size=\s*(\S+).*?bitrate=\s*([\d.]+\w+\/s).*?speed=\s*([\d.]+x)/.exec(t);
+      if (x) { if (!S.live) { S.live = true; S.fails = 0; setStatus('live'); } tell({ t: 'stats', frame: +x[1], fps: +x[2], size: x[3], bitrate: x[4], speed: x[5] }); }
+      else tell({ t: 'log', msg: t.slice(0, 400) });
+    });
+    p.on('error', (e) => { S.log += '\n' + e.message; });
+    p.on('close', () => {
+      S.proc = null;
+      if (S.stopped) return;
+      S.fails++;
+      const wait = Math.min(5000, 700 * S.fails);
+      S.lastMsg = reason() + ' — menyambung ulang otomatis';
+      setStatus('ulang', S.lastMsg);
+      setTimeout(run, wait);
+    });
+  }
+  function write(buf) { if (S.proc && S.proc.stdin.writable && S.proc.stdin.writableLength < 32e6) S.proc.stdin.write(buf); }
+  run();
+  tell({ t: 'started', url: srtUrl(cfg) });
+  return {
+    data(buf) {
+      S.bytes += buf.length;
+      if (!S.header) { // kumpulkan header WebM (EBML + Segment + Tracks) sampai Cluster pertama
+        S.pre.push(buf); S.preLen += buf.length;
+        const all = Buffer.concat(S.pre); const i = all.indexOf(CLUSTER);
+        if (i > 0) { S.header = all.subarray(0, i); S.pre = []; write(all); }
+        else if (S.preLen > 4e6) { S.header = Buffer.alloc(0); write(all); S.pre = []; }
+        return;
+      }
+      if (S.needSync) { // ffmpeg baru: kirim header lalu mulai dari Cluster berikutnya
+        const i = buf.indexOf(CLUSTER); if (i < 0) return;
+        S.needSync = false; write(S.header); write(buf.subarray(i)); return;
+      }
+      write(buf);
+    },
+    stop() {
+      S.stopped = true;
+      const p = S.proc; if (p) { try { p.stdin.end(); } catch (e) {} setTimeout(() => { try { p.kill('SIGKILL'); } catch (e) {} }, 2500); }
+    }
+  };
+}
+
 // ====================== OUTPUT via WebSocket ======================
 const wssOut = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
 wssOut.on('connection', (ws) => {
-  let proc = null, kind = null;
+  let proc = null, kind = null, srt = null;
   const tell = (o) => { try { ws.send(JSON.stringify(o)); } catch (e) {} };
   ws.on('message', async (data, isBinary) => {
     if (!isBinary) {
@@ -186,6 +252,8 @@ wssOut.on('connection', (ws) => {
         proc.on('close', (code) => { tell({ t: 'ended', code }); proc = null; });
         proc.on('error', (e) => tell({ t: 'error', msg: 'ffmpeg: ' + e.message }));
         tell({ t: 'started', args: args.join(' ').replace(/(rtmps?:\/\/[^\s|]*\/)[^\s|]+/g, '$1••••') });
+      } else if (kind === 'srt') {
+        srt = srtSession(m.cfg || {}, tell);
       } else if (kind === 'ndi') {
         const r = await ndi.call({ cmd: 'send', opts: m.opts });
         tell(r.ok ? { t: 'started' } : { t: 'error', msg: r.msg });
@@ -193,11 +261,13 @@ wssOut.on('connection', (ws) => {
       return;
     }
     if (kind === 'stream' && proc && proc.stdin.writable) proc.stdin.write(data);
+    else if (kind === 'srt' && srt) srt.data(data);
     else if (kind === 'ndi') ndi.data(data);
   });
   ws.on('close', () => {
     if (proc) { try { proc.stdin.end(); } catch (e) {} const p = proc; setTimeout(() => { try { p.kill('SIGKILL'); } catch (e) {} }, 4000); }
     if (kind === 'ndi') ndi.call({ cmd: 'send-stop' });
+    if (srt) srt.stop();
   });
 });
 

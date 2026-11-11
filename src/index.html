@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KLM Mix</title>
 <meta name="color-scheme" content="dark">
-<link rel="icon" href="/build/icon.png">
+<link rel="icon" href="/icon-192.png">
 <link rel="stylesheet" href="/src/css/app.css">
 </head>
 <body>
@@ -47,6 +47,7 @@
       <span class="st" id="st-perf" title="Mode performa (klik untuk ganti)"></span>
       <span class="st rec" id="st-rec" hidden></span>
       <span class="st live" id="st-live" hidden></span>
+      <span class="st srt" id="st-srt" hidden></span>
       <span class="st clock" id="st-clock">00:00:00</span>
     </div>
   </header>
@@ -110,11 +111,27 @@
     </aside>
   </section>
 
+  <section id="utcWs" hidden>
+    <div class="utc-head">
+      <b><i data-ic="clapper"></i>UTC KLM Acara</b>
+      <select id="utcEvent" title="Jenis acara"></select>
+      <span class="muted" id="utcLive"></span>
+      <span class="grow"></span>
+      <button class="bb" data-act="utc-hideall" title="Sembunyikan semua grafis UTC"><i data-ic="ban"></i>Semua OFF</button>
+      <button class="bb utc" data-act="utc-air" id="ws-utc-air"><i class="dot"></i>UTC ON AIR</button>
+      <button class="bb" data-act="utc-window" title="Buka panel di jendela sendiri (mis. di monitor ke-2)"><i data-ic="external"></i>Jendela</button>
+      <button class="bb" data-act="utc-reload" title="Muat ulang renderer grafis"><i data-ic="refresh"></i></button>
+      <button class="bb add" data-act="utc-close" title="Kembali ke daftar input (Esc / F9)"><i data-ic="grid"></i>Kembali ke Input</button>
+    </div>
+    <div class="utc-body"></div>
+  </section>
+
   <footer id="bottombar">
     <button class="bb add" data-act="add-input" title="Tambah input (Ctrl+I)"><i data-ic="plus"></i>Tambah Input</button>
     <span class="sep"></span>
     <button class="bb" data-act="record" id="bb-rec" title="Mulai / hentikan rekaman Program"><i class="dot"></i>Rekam</button>
     <button class="bb" data-act="stream" id="bb-stream" title="Mulai / hentikan streaming"><i class="dot"></i>Stream</button>
+    <button class="bb srt" data-act="srt" id="bb-srt" title="Kirim Program realtime ke gateway / decoder TV lewat SRT (klik kanan: pengaturan)"><i class="dot"></i>SRT</button>
     <button class="bb" data-act="external" id="bb-ext" title="Output ke monitor / proyektor"><i class="dot"></i>External</button>
     <button class="bb" data-act="multicorder" id="bb-mc" title="Rekam beberapa input terpisah"><i class="dot"></i>MultiCorder</button>
     <button class="bb" data-act="playlist" id="bb-pl" title="Jalankan playlist"><i class="dot"></i>PlayList</button>
@@ -136,17 +153,6 @@
     <button class="bb ghost" data-act="settings-stream" title="Pengaturan streaming"><i data-ic="settings"></i>Stream</button>
   </footer>
 </div>
-<div id="utcWs" hidden>
-  <div class="utc-head">
-    <b><i data-ic="clapper"></i>UTC KLM Acara</b><span class="muted" id="utcLive"></span>
-    <span class="grow"></span>
-    <button class="bb utc" data-act="utc-air" id="ws-utc-air"><i class="dot"></i>UTC ON AIR</button>
-    <button class="bb" data-act="utc-window" title="Buka panel di jendela sendiri (mis. di monitor ke-2)"><i data-ic="external"></i>Jendela terpisah</button>
-    <button class="bb" data-act="utc-reload" title="Muat ulang renderer grafis"><i data-ic="refresh"></i></button>
-    <button class="bb add" data-act="utc-close" title="Kembali ke mixer (Esc / F9)"><i data-ic="arrow-left"></i>Kembali ke Mixer</button>
-  </div>
-  <div class="utc-body"></div>
-</div>
 <div id="modal-root"></div>
 
 <script src="/icons.js"></script>
@@ -156,6 +162,7 @@
 <script src="/src/js/effects.js"></script>
 <script src="/src/js/titles.js"></script>
 <script src="/src/js/inputs.js"></script>
+<script src="/src/js/audiofx.js"></script>
 <script src="/src/js/audio.js"></script>
 <script src="/src/js/engine.js"></script>
 <script src="/src/js/record.js"></script>

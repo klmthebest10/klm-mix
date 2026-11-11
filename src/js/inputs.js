@@ -30,9 +30,23 @@
   }
   KM.placeholder = placeholder;
 
+  // Video sumber ditempel ke wadah tersembunyi di dokumen: Chromium memperlakukan video yang terlepas dari DOM
+  // dengan prioritas rendah (frame bisa tertunda/patah-patah). Wadah 2x2 px tetap "terlihat" sehingga decoding penuh.
+  let pool = null;
+  function mediaPool() {
+    if (!pool || !pool.isConnected) {
+      pool = document.createElement('div'); pool.id = 'mediaPool';
+      pool.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;overflow:hidden;opacity:.01;pointer-events:none;z-index:-1';
+      (document.body || document.documentElement).appendChild(pool);
+    }
+    return pool;
+  }
+  KM.mediaPool = mediaPool;
   function videoEl() {
     const v = document.createElement('video');
     v.playsInline = true; v.preload = 'auto'; v.crossOrigin = 'anonymous'; v.disablePictureInPicture = true;
+    v.style.cssText = 'width:2px;height:2px';
+    try { mediaPool().appendChild(v); } catch (e) {}
     return v;
   }
   function streamVideo(stream) {
@@ -238,7 +252,7 @@
       KM.link && KM.link.bindCams();
     },
     setStream(inp, stream) {
-      if (inp.rt.el) { try { inp.rt.el.srcObject = null; } catch (e) {} }
+      if (inp.rt.el) { try { inp.rt.el.srcObject = null; inp.rt.el.remove(); } catch (e) {} }
       inp.rt.stream = stream;
       inp.rt.el = stream ? streamVideo(stream) : null;
       if (stream && stream.getAudioTracks().length) KM.audio && KM.audio.attach(inp, true);
@@ -470,7 +484,7 @@
       try { t.destroy && t.destroy(inp); } catch (e) {}
       const rt = inp.rt;
       if (rt.stream) rt.stream.getTracks().forEach((tr) => tr.stop());
-      if (rt.el) { try { rt.el.pause && rt.el.pause(); rt.el.removeAttribute('src'); rt.el.srcObject = null; rt.el.load && rt.el.load(); } catch (e) {} }
+      if (rt.el) { try { rt.el.pause && rt.el.pause(); rt.el.removeAttribute('src'); rt.el.srcObject = null; rt.el.load && rt.el.load(); rt.el.remove && rt.el.remove(); } catch (e) {} }
       KM.audio && KM.audio.detach(inp);
       S.inputs.splice(S.inputs.indexOf(inp), 1);
       S.inputs.forEach((o) => { o.layers = o.layers.filter((l) => l.inputId !== inp.id); });

@@ -21,6 +21,7 @@ klm-mix/
 │   ├── utc.js                # server UTC KLM Acara (API sama persis dgn versi 9.0, preset/logo/video, impor data lama)
 │   ├── utc-switch.js         # switcher panel UTC: KLM Mix (bawaan) / OBS (websocket v5) / vMix
 │   ├── utc-osr.js            # render overlay UTC asli secara offscreen → lapisan UTC ON AIR
+│   ├── gencert.js            # sertifikat HTTPS lokal (proses terpisah)
 │   └── ndi-worker.js         # NDI in/out (proses terpisah, butuh NDI Runtime gratis)
 ├── src/                      # aplikasi mixer (UI + mesin)
 │   ├── index.html            # tampilan utama
@@ -33,13 +34,14 @@ klm-mix/
 │       ├── engine.js         # render Preview/Program, transisi, overlay 1-4, FTB, layer, multiview
 │       ├── effects.js        # GPU: koreksi warna, chroma key, luma key
 │       ├── inputs.js         # semua jenis input
+│       ├── audiofx.js        # rak efek & plugin audio (18 efek, preset, plugin eksternal)
 │       ├── utc.js            # UTC KLM Acara menyatu: lapisan UTC ON AIR (WebGL), input UTC, audio opening/closing
 │       ├── titles.js         # Title Cepat kanvas (16 template, 8 tema)
 │       ├── audio.js          # mixer audio (EQ, kompresor, gate, delay, bus M/A/B, solo, auto)
 │       ├── record.js         # rekam, streaming, MultiCorder, snapshot
 │       ├── replay.js         # instant replay + playlist
 │       ├── link.js           # KLMCAM WebRTC, tally, remote HP
-│       ├── api.js            # 223 fungsi API (nama sama dengan vMix, + UTC*)
+│       ├── api.js            # 226 fungsi API (nama sama dengan vMix, + UTC*, SRT)
 │       ├── ptz.js            # panel PTZ fisik + PTZ virtual
 │       ├── script.js         # skrip JavaScript, trigger per input, shortcut kustom
 │       ├── designer.js       # Title Designer (desain title bebas) + impor CSV
@@ -68,10 +70,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
    - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.3.0.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.3.0.exe` (tanpa instal)
+     - `KLM-Mix-Setup-1.4.0.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Mix-Portable-1.4.0.exe` (tanpa instal)
    - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
-3. Untuk rilis resmi: buat tag `v1.3.0` → file otomatis muncul di halaman **Releases**.
+3. Untuk rilis resmi: buat tag `v1.4.0` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
 
@@ -125,6 +127,14 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Skrip JavaScript** (pengganti VB.NET): `API.Function("Cut")`, `Sleep()`, `Input()`, jalankan dari tombol/shortcut/trigger/Stream Deck
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Efek audio bawaan** (pengganti VST): high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
+
+### Baru di v1.4
+- **SRT caller ke gateway / decoder TV** (Pengaturan → SRT / TV, tombol **SRT** di bar bawah): MPEG-TS siaran (H.264 GOP tetap tanpa B-frame, CBR + muxrate, AAC/MP2), latensi diatur, enkripsi AES-128/192/256, Stream ID, mode caller/listener/rendezvous, encoder GPU otomatis, **sambung ulang otomatis** bila gateway restart. Berjalan bersamaan dengan Stream. API: `StartSRT`, `StopSRT`, `StartStopSRT`
+- **Efek & plugin audio lengkap**: rak efek per input & Master (tombol **FX** di mixer) — 18 efek bawaan (EQ parametrik, filter, penghilang dengung 50 Hz, kompresor, limiter, gate, peredam bising, de-esser, AGC, reverb ruang/masjid, delay, chorus, flanger, tremolo, saturasi, pitch, stereo width, gain/phase), preset rantai (Vokal Siaran, Ceramah, Qiraah/Adzan, Podcast, Master Siaran…), preset sendiri, **plugin eksternal** (.js format KLM & impulse response .wav) — lihat [docs/PLUGIN-AUDIO.md](docs/PLUGIN-AUDIO.md)
+- **UTC KLM Acara menyatu**: panel muncul di bawah monitor Preview/Program (monitor & transisi tetap terlihat), tata letak 3 kolom (tombol tayang • navigasi • editor), tema KLM Mix, pilihan acara & "Semua OFF" di header
+- **Kamera di daftar input mulus** (frame penuh, langsung dari stream kamera) — sebelumnya diperbarui ±2–3 kali/detik
+- **Lebih ringan**: adegan diam otomatis dirender hemat (kembali penuh saat ada gerakan/rekam/stream), renderer grafis UTC baru menyala saat dipakai & jeda saat tidak ada grafis, sertifikat HTTPS dibuat di latar belakang (pembukaan pertama tidak tertahan), video sumber tidak di-throttle Chromium
+- **Lebih tahan galat**: setiap modul dinyalakan terpisah — bila satu gagal, aplikasi tetap jalan
 
 ### Tampilan profesional (v1.3)
 - Sistem desain baru: font **Plus Jakarta Sans** (offline), palet grafit gelap ruang kontrol, warna tally standar (Preview hijau, Program/LIVE merah, Overlay kuning)
@@ -198,4 +208,4 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.3.0
+KLM Mix 1.4.0

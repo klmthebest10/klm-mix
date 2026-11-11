@@ -327,19 +327,31 @@
   }
 
   // ---------- thumbnail ----------
+  // Sumber live (kamera, KLMCAM, layar, tamu) tampil langsung dari stream-nya di kartu (mulus, nyaris tanpa beban).
+  // Sisanya digambar ulang berdasarkan waktu: media yang sedang diputar sering, gambar diam jarang. Dibatasi anggaran waktu per frame.
+  E.liveThumb = (inp) => !!(inp.rt.stream && inp.rt.stream.getVideoTracks().some((t) => t.readyState === 'live') && !KM.inputTypes[inp.type].noVideo);
   let thumbCursor = 0;
-  function updateThumbs() {
+  function updateThumbs(now) {
     const n = S.inputs.length; if (!n) return;
-    const per = Math.min(n, KM.settings.thumbsPer || 2);
-    for (let k = 0; k < per; k++) {
-      const inp = S.inputs[(thumbCursor++) % n];
-      const cv = inp.rt.thumb; if (!cv) continue;
+    const mode = KM.settings.perf || 'seimbang';
+    const fast = 1000 / (mode === 'hemat' ? 6 : mode === 'kualitas' ? 20 : 12), slow = mode === 'hemat' ? 2000 : 900;
+    const budget = mode === 'hemat' ? 2 : 4, t0 = performance.now();
+    for (let k = 0; k < n; k++) {
+      const inp = S.inputs[(thumbCursor + k) % n];
+      const cv = inp.rt.thumb; if (!cv || !cv.isConnected) continue;
+      if (E.liveThumb(inp)) continue;
+      const moving = KM.inputs.isPlaying(inp) || inp.type === 'list' || inp.type === 'browser' || inp.type === 'utc' || inp.type === 'clock' || inp.type === 'title' || (inp.rt.anim);
+      if (now - (inp.rt.thumbAt || 0) < (moving ? fast : slow)) continue;
+      inp.rt.thumbAt = now;
       const c = cv.getContext('2d');
       c.fillStyle = '#000'; c.fillRect(0, 0, cv.width, cv.height);
-      if (KM.inputTypes[inp.type].noVideo) {
-        const s = KM.inputs.source(inp); if (s) c.drawImage(s.src, 0, 0, cv.width, cv.height);
-      } else drawInputRect(c, inp, 0, 0, cv.width, cv.height, 0);
+      try {
+        if (KM.inputTypes[inp.type].noVideo) { const s = KM.inputs.source(inp); if (s) c.drawImage(s.src, 0, 0, cv.width, cv.height); }
+        else drawInputRect(c, inp, 0, 0, cv.width, cv.height, 0);
+      } catch (e) {}
+      if (performance.now() - t0 > budget) { thumbCursor = (thumbCursor + k + 1) % n; return; }
     }
+    thumbCursor = (thumbCursor + 1) % n;
   }
 
   // ---------- loop render ----------
@@ -378,7 +390,7 @@
       if (pv) drawInputRect(v, pv, 0, 0, pw, ph, 0);
     }
 
-    if (!idle && E.frame % (KM.settings.thumbEvery || 4) === 0) updateThumbs();
+    if (!idle) updateThumbs(now);
     if (E.mvOn && (++mvTick % 2 === 0)) drawMultiview();
     KM.replay && KM.replay.capture();
     KM.emit('frame', E.frame);
@@ -387,9 +399,34 @@
     if (now - fpsT >= 1000) { E.fps = Math.round(fpsCount * 1000 / (now - fpsT)); fpsCount = 0; fpsT = now; KM.emit('fps', E.fps); }
   };
 
+  // ---------- mode diam: adegan statis tanpa output aktif → render 6 fps (hemat CPU/GPU/baterai) ----------
+  const STATIC_T = { colour: 1, image: 1, bars: 1, audio: 1 };
+  E.dirtyAt = 0;
+  KM.on('change', () => { E.dirtyAt = KM.now(); });
+  function movingInput(inp) {
+    if (!inp) return false;
+    if (!STATIC_T[inp.type] || (inp.layers && inp.layers.some((l) => l && l.on && l.inputId))) return true;
+    return inp.type === 'image' && /\.gif($|\?)/i.test(inp.opts && inp.opts.path || '');
+  }
+  E.sceneMoving = function () {
+    const now = KM.now();
+    if (KM.settings.idleSave === false) return true;
+    if (S.recording || S.streaming || S.ndiOut || S.multicorder || S.srt || (KM.replay && KM.replay.enabled) || E.mvOn) return true;
+    if (S.trans || S.ftb.v !== (S.ftb.on ? 1 : 0) || now - E.dirtyAt < 1500) return true;
+    if (KM.utc && now - (KM.utc.lastFrameAt || 0) < 800) return true;
+    if (KM.playlist && KM.playlist.running) return true;
+    if (S.inputs.some((i) => KM.inputTypes[i.type].playable && KM.inputs.isPlaying(i))) return true; // video yang diputar (juga untuk thumbnail-nya)
+    if (movingInput(KM.getInput(S.programId)) || movingInput(KM.getInput(S.previewId))) return true;
+    if ((S.overlays || []).some((o) => o && o.phase !== 'off' && (o.phase !== 'on' || movingInput(KM.getInput(o.inputId))))) return true;
+    return false;
+  };
   E.loop = function () {
+    let mv = true, mvAt = 0;
     const tick = () => {
-      const now = KM.now(), interval = 1000 / KM.settings.fps;
+      const now = KM.now();
+      if (now - mvAt > 250) { mvAt = now; mv = E.sceneMoving(); }
+      E.quiet = !mv;
+      const interval = mv ? 1000 / KM.settings.fps : 1000 / 6;
       if (now - E.lastRender >= interval - 3) {
         try { E.render(); } catch (e) { console.error('render', e); }
         E.lastRender = now;

@@ -122,6 +122,7 @@
 
     // ---- rekam / stream / output ----
     StartRecording: () => KM.rec.startRecording(), StopRecording: () => KM.rec.stopRecording(), StartStopRecording: () => KM.rec.toggleRecording(),
+    StartSRT: () => KM.rec.startSrt(), StopSRT: () => KM.rec.stopSrt(), StartStopSRT: () => KM.rec.toggleSrt(),
     StartStreaming: () => KM.rec.startStreaming(), StopStreaming: () => KM.rec.stopStreaming(), StartStopStreaming: () => KM.rec.toggleStreaming(),
     StartMultiCorder: () => KM.rec.startMultiCorder(), StopMultiCorder: () => KM.rec.stopMultiCorder(), StartStopMultiCorder: () => KM.rec.toggleMultiCorder(),
     Snapshot: () => KM.rec.snapshot(), SnapshotInput: (p) => KM.rec.snapshot(need(inp(p)).id),

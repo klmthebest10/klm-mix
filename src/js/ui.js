@@ -70,14 +70,14 @@
     stinger2: () => KM.engine.transition('stinger2', 0),
     ftb: () => KM.engine.ftb(),
     record: () => KM.rec.toggleRecording(),
-    stream: () => KM.rec.toggleStreaming(),
+    stream: () => KM.rec.toggleStreaming(), srt: () => KM.rec.toggleSrt(), 'settings-srt': () => KM.dialogs.settings('srt'),
     multicorder: () => KM.rec.toggleMultiCorder(),
     playlist: () => { UI.dockTab('playlist'); KM.playlist.running ? KM.playlist.stop() : KM.playlist.start(); },
     'replay-toggle': () => { UI.dockTab('replay'); KM.replay.setEnabled(); },
     'ovl-off': () => KM.engine.overlayAllOff(),
     ndi: async () => { if (S.ndiOut) return KM.rec.stopNdi(); const r = await KM.rec.startNdi(); if (!r) KM.dialogs.settings('ndi'); },
     'utc-panel': () => UI.utcPanel(), 'utc-close': () => UI.utcPanel(false),
-    'utc-air': () => KM.utc.setOnAir(), 'utc-reload': () => { KM.utc.reload(); KM.toast('Renderer grafis UTC dimuat ulang'); },
+    'utc-air': () => KM.utc.setOnAir(), 'utc-hideall': () => KM.utc.cmd('hideall'), 'utc-reload': () => { KM.utc.reload(); KM.toast('Renderer grafis UTC dimuat ulang'); },
     'utc-window': () => { UI.utcPanel(false); const w = window.open('/utc', 'klm_utc_panel'); if (!w) KM.toast('Jendela diblokir', 'warn'); }
   };
 
@@ -92,13 +92,20 @@
       ws.querySelector('.utc-body').appendChild(f); ws._frame = f; // dibiarkan hidup: state panel tidak hilang saat ditutup
     }
     ws.hidden = !show;
-    if (show) { try { ws._frame.contentWindow.focus(); } catch (e) {} }
+    $('#app').classList.toggle('utc-mode', show);
+    if (show) { KM.utc.ensure(); try { ws._frame.contentWindow.focus(); } catch (e) {} }
     updateUtc();
   };
   function updateUtc() {
     const on = KM.utc.onAir();
     ['#bb-utc', '#ws-utc-air'].forEach((s) => { const b = $(s); if (b) b.classList.toggle('on', on); });
     const l = $('#utcLive'); if (l) l.innerHTML = KM.utc.liveInfo();
+    const ev = $('#utcEvent'), st = KM.utc.status;
+    if (ev && st && st.events) {
+      const sig = st.events.map((e) => e.id).join();
+      if (ev._sig !== sig) { ev._sig = sig; ev.replaceChildren(...st.events.map((e) => h('option', { value: e.id }, e.n))); ev.onchange = () => KM.utc.cmd('event', '', { name: ev.value }); }
+      if (document.activeElement !== ev) ev.value = st.eventType;
+    }
   }
   KM.on('change', (w) => { if (w === 'utc') updateUtc(); });
   document.addEventListener('click', (e) => {
@@ -177,6 +184,7 @@
       });
       box.appendChild(card);
     });
+    UI.syncLiveThumbs();
     if (!S.inputs.length) box.appendChild(emptyState());
     else box.appendChild(h('div.card.add', { onclick: () => KM.dialogs.addInput(), title: 'Tambah input (Ctrl+I)' }, KI.el('plus'), 'Tambah Input'));
     const c = $('#inCount'); if (c) c.textContent = S.inputs.length;
@@ -200,6 +208,19 @@
         h('button.btn', { onclick: () => UI.openProject() }, KI.el('folder-open'), 'Buka proyek'),
         h('button.btn', { onclick: () => UI.restoreAutosave(true) }, KI.el('rotate-ccw'), 'Pulihkan sesi terakhir')));
   }
+
+  // tampilan live mulus untuk kamera/KLMCAM/layar di kartu input (memakai stream yang sama, tanpa decode ulang)
+  function syncLiveThumb(card) {
+    const inp = card._inp; if (!inp) return;
+    const th = card.querySelector('.thumb'); if (!th) return;
+    let v = th.querySelector('video.live');
+    const st = KM.engine.liveThumb(inp) ? inp.rt.stream : null;
+    if (!st) { if (v) { v.srcObject = null; v.remove(); } return; }
+    if (!v) { v = document.createElement('video'); v.className = 'live'; v.muted = true; v.playsInline = true; v.autoplay = true; v.disablePictureInPicture = true; th.insertBefore(v, th.firstChild.nextSibling); }
+    if (v._st !== st) { v._st = st; v.srcObject = new MediaStream(st.getVideoTracks()); v.play().catch(() => {}); }
+    v.style.transform = inp.opts && inp.opts.mirror ? 'scaleX(-1)' : '';
+  }
+  UI.syncLiveThumbs = () => KM.$$('#inputs .card[data-id]').forEach(syncLiveThumb);
 
   UI.updateCards = function () {
     KM.$$('#inputs .card[data-id]').forEach((card) => {
@@ -276,14 +297,18 @@
     $('#st-res').innerHTML = KI.svg('monitor') + KM.settings.width + '×' + KM.settings.height + '<b>' + KM.settings.fps + 'p</b>';
     $('#st-perf').textContent = KM.perf.label();
     $('#bb-ndi').classList.toggle('on', !!S.ndiOut);
+    const bs = $('#bb-srt'); bs.classList.toggle('on', !!S.srt && KM.rec.srtStatus === 'live'); bs.classList.toggle('wait', !!S.srt && KM.rec.srtStatus !== 'live');
     updateUtc();
   }
   const setHTML = (el, v) => { if (el._v !== v) { el._v = v; el.innerHTML = v; } };
   function tickStatus() {
     const d = new Date();
     $('#st-clock').textContent = KM.pad(d.getHours()) + ':' + KM.pad(d.getMinutes()) + ':' + KM.pad(d.getSeconds());
-    setHTML($('#st-fps'), KI.svg('activity') + '<b>' + KM.engine.fps + '</b> fps');
+    setHTML($('#st-fps'), KM.engine.quiet ? KI.svg('leaf') + '<b>' + KM.settings.fps + '</b> fps · diam' : KI.svg('activity') + '<b>' + KM.engine.fps + '</b> fps');
+    $('#st-fps').title = KM.engine.quiet ? 'Adegan diam: render dihemat otomatis (kembali penuh begitu ada gerakan, rekam, atau streaming)' : 'Frame per detik mixer';
     const r = $('#st-rec'); r.hidden = !S.recording; if (S.recording) setHTML(r, KI.svg('rec') + 'REC ' + KM.fmtTime(KM.rec.recTime()));
+    const sr = $('#st-srt'); sr.hidden = !S.srt;
+    if (S.srt) { const live = KM.rec.srtStatus === 'live', s = KM.rec.srtStats; sr.classList.toggle('wait', !live); setHTML(sr, KI.svg('cast') + 'SRT ' + (live ? KM.fmtTime(KM.rec.srtTime()) + (s ? ' · ' + s.bitrate : '') : ({ ulang: 'menyambung ulang', menunggu: 'menunggu' }[KM.rec.srtStatus] || 'menyambung'))); sr.title = KM.rec.srtMsg || 'Output SRT ke gateway TV'; }
     const l = $('#st-live'); l.hidden = !S.streaming;
     if (S.streaming) { const s = KM.rec.stats; setHTML(l, KI.svg('radio') + 'LIVE ' + KM.fmtTime(KM.rec.streamTime()) + (s ? ' · ' + s.bitrate : '')); }
     let cams = 0, rems = 0; for (const p of KM.link.peers.values()) { if (p.role === 'camera') cams++; else if (p.role === 'remote') rems++; }
@@ -452,6 +477,7 @@
   UI.init = function () {
     $('#ver').textContent = 'v' + KM.version + (KM.isElectron ? '' : ' · web');
     const bl = $('#brandLogo'); if (bl) bl.replaceWith(KI.el('logo'));
+    $('#bb-srt').addEventListener('contextmenu', (e) => { e.preventDefault(); KM.dialogs.settings('srt'); });
     renderTransSlots(); initTbar(); initShortcuts(); initDrop(); initSplitter();
     KM.$$('.dtabs button').forEach((b) => b.addEventListener('click', () => UI.dockTab(b.dataset.tab)));
     KM.$$('.dd > .mbtn').forEach((b) => b.addEventListener('click', () => b.parentElement.classList.toggle('open')));
@@ -473,7 +499,8 @@
     setInterval(() => { if (!document.hidden) tickCards(); }, 100);
     setInterval(UI.autosave, 10000);
     // tampilkan status play terbaru
-    setInterval(() => KM.$$('#inputs .card[data-id]').forEach((c) => { const b = c.querySelector('.cb.play'); if (b && c._inp) { const t = KM.inputs.isPlaying(c._inp) ? 'pause' : 'play'; if (b._t !== t) { b._t = t; b.replaceChildren(KI.el(t)); } } }), 500);
+    KM.on('change', (w) => { if (w === 'input') setTimeout(UI.syncLiveThumbs, 50); });
+    setInterval(() => KM.$$('#inputs .card[data-id]').forEach((c) => { syncLiveThumb(c); const b = c.querySelector('.cb.play'); if (b && c._inp) { const t = KM.inputs.isPlaying(c._inp) ? 'pause' : 'play'; if (b._t !== t) { b._t = t; b.replaceChildren(KI.el(t)); } } }), 500);
     // layar pembuka
     setTimeout(() => { const sp = $('#splash'); if (sp) { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); } }, 450);
   };

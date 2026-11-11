@@ -205,6 +205,7 @@ module.exports = function createUtc(o) {
     const ocv = ev.oc || {};
     const oc = ocv.active && ocv[ocv.active] ? { kind: ocv.active, run: ocv.run, done: !!ocv.done, video: ocv[ocv.active].type === 'video' && ocv[ocv.active].video ? ocv[ocv.active].video.url : '', sound: ocv[ocv.active].sound !== false, volume: ocv[ocv.active].volume == null ? 100 : ocv[ocv.active].volume } : null;
     return {
+      events: K ? K.EVENTS.map((e) => ({ id: e.id, n: e.n })) : [],
       eventType: state.eventType, eventName: K ? (K.EVENTS.find((e) => e.id === state.eventType) || {}).n || state.eventType : state.eventType,
       visible: vis, active: { lt: act('lt'), tt: act('tt'), loc: act('loc'), soc: act('soc') },
       lists: { lt: (ev.lt && ev.lt.items || []).map((x) => ({ id: x.id, label: x.label, name: x.name, role: x.role })), tt: (ev.tt && ev.tt.items || []).map((x) => ({ id: x.id, label: x.label, title: x.title })) },

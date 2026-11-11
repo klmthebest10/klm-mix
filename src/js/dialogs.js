@@ -420,7 +420,11 @@
     },
     audio(inp) {
       const a = inp.audio, ap = () => KM.audio.apply(inp);
+      const fxn = (a.fx || []).filter((x) => x.on !== false && KM.afx.defs[x.type]);
       return h('div',
+        h('div.sec', h('h4', '🎚 Efek & plugin audio'),
+          h('div.row', h('span.grow', fxn.length ? fxn.map((x) => KM.afx.defs[x.type].name).join(' → ') : h('span.muted', 'Belum ada efek — tambah EQ parametrik, kompresor, de-esser, reverb, AGC, peredam bising, plugin eksternal…')),
+            h('button.btn.pri', { onclick: () => KM.afx.open(inp) }, '🎚 Buka rak efek'))),
         h('div.sec', h('h4', 'Level & routing'),
           h('div.kv', ...slider('Volume', 0, 100, 1, () => a.vol, (v) => { KM.audio.set(inp, 'vol', v); }, (v) => v + '%'),
             ...slider('Gain', -24, 24, 0.5, () => a.gain, (v) => { a.gain = v; ap(); }, (v) => v + ' dB'),
@@ -539,7 +543,7 @@
   // =================== PENGATURAN APLIKASI ===================
   D.settings = function (tab) {
     const st = KM.settings;
-    const tabs = [['perf', 'Performa'], ['output', 'Output'], ['trans', 'Transisi & Overlay'], ['rec', 'Rekam'], ['stream', 'Streaming'], ['ndi', 'NDI & VCam'], ['audio', 'Audio'], ['replay', 'Replay'], ['keys', 'Shortcut'], ['net', 'Jaringan & HP'], ['about', 'Tentang']];
+    const tabs = [['perf', 'Performa'], ['output', 'Output'], ['trans', 'Transisi & Overlay'], ['rec', 'Rekam'], ['stream', 'Streaming'], ['srt', 'SRT / TV'], ['ndi', 'NDI & VCam'], ['audio', 'Audio'], ['replay', 'Replay'], ['keys', 'Shortcut'], ['net', 'Jaringan & HP'], ['about', 'Tentang']];
     const content = h('div');
     const tabBar = h('div.tabs', tabs.map(([k, l]) => h('button', { 'data-k': k, onclick: () => show(k) }, l)));
     const save = () => KM.saveSettings();
@@ -637,6 +641,47 @@
           h('p.muted', 'Bisa live ke 3 platform sekaligus (YouTube + Facebook + lainnya). Jika internet lemah, turunkan bitrate.'),
           KM.rec.log ? h('details', h('summary', 'Log ffmpeg'), h('pre', { style: { maxHeight: '200px', overflow: 'auto', fontSize: '11px', userSelect: 'text' } }, KM.rec.log)) : null);
       },
+      srt() {
+        const c = KM.rec.srtCfg(), R = KM.rec;
+        const inp = (k, attrs, cast) => h('input', Object.assign({ value: c[k] == null ? '' : c[k], onchange: (e) => { c[k] = cast ? cast(e.target.value) : e.target.value; save(); upd(); } }, attrs || {}));
+        const urlBox = h('div.urlbox');
+        const stBox = h('div.row');
+        const upd = () => {
+          const host = c.mode === 'listener' ? '0.0.0.0' : (c.host || '…');
+          urlBox.textContent = 'srt://' + host + ':' + c.port + '?mode=' + c.mode + '&latency=' + c.latency * 1000 + (c.streamid ? '&streamid=' + c.streamid : '') + (c.passphrase ? '  🔒 AES-' + (c.pbkeylen * 8) : '');
+          const live = R.srtStatus === 'live', lbl = { off: 'Tidak aktif', menyambung: 'Menyambung…', menunggu: 'Menunggu gateway…', ulang: 'Menyambung ulang', live: 'TERSAMBUNG', error: 'Error' }[R.srtStatus] || R.srtStatus;
+          const s = R.srtStats;
+          stBox.replaceChildren(...[
+            h('span.pill' + (live ? '.ok' : S.srt ? '.warn' : ''), lbl),
+            S.srt && s ? h('span.muted', s.bitrate + ' • ' + s.fps + ' fps • ' + s.speed + ' • ' + KM.fmtTime(R.srtTime())) : null,
+            R.srtMsg ? h('span.muted', R.srtMsg) : null, h('span.grow'),
+            h('button.btn' + (S.srt ? '.red' : '.pri'), { onclick: async () => { await R.toggleSrt(); setTimeout(upd, 100); } }, S.srt ? '■ Hentikan SRT' : '▶ Mulai SRT')].filter(Boolean));
+        };
+        const tick = setInterval(() => { if (!document.body.contains(urlBox)) return clearInterval(tick); upd(); }, 1000);
+        const encInfo = h('span.muted', '');
+        KM.rec.detectEncoders().then((e) => { encInfo.textContent = 'GPU encoder: ' + (['nvenc', 'qsv', 'amf'].filter((k) => e[k]).map((k) => ({ nvenc: 'NVIDIA', qsv: 'Intel', amf: 'AMD' }[k])).join(', ') || 'tidak ada (pakai x264)'); });
+        upd();
+        return h('div',
+          !KM.isElectron ? h('div.sec', h('p', '⚠ Output SRT memerlukan versi PC (.exe) — memakai ffmpeg bawaan.')) : null,
+          h('div.sec', h('h4', '📡 Status SRT'), stBox, h('div', { style: { marginTop: '10px' } }, urlBox),
+            h('p.muted', 'Program dikirim realtime ke gateway / decoder TV (Haivision, Kiloview, Magewell, Matrox, vMix, OBS, Wowza, dll). Berjalan terpisah dari tombol Stream — bisa bersamaan.')),
+          h('div.sec', h('h4', 'Koneksi'),
+            row('Mode', sel([['caller', 'Caller — KLM Mix menyambung ke gateway (umum)'], ['listener', 'Listener — gateway menyambung ke PC ini'], ['rendezvous', 'Rendezvous']], c.mode, (v) => { c.mode = v; save(); show('srt'); })),
+            c.mode !== 'listener' ? row('IP / host gateway', inp('host', { placeholder: 'contoh: 192.168.1.50 atau gateway.tvku.id', class: 'grow' }), h('label', 'Port'), inp('port', { type: 'number', style: { width: '90px' } }, (v) => +v || 9000))
+              : row('Port di PC ini', inp('port', { type: 'number', style: { width: '90px' } }, (v) => +v || 9000), h('span.muted', 'Gateway menyambung ke srt://' + ((KM.link.ips[0] || {}).address || 'IP-PC') + ':' + c.port)),
+            row('Latensi', sel([[80, '80 ms (LAN)'], [120, '120 ms'], [200, '200 ms (disarankan)'], [500, '500 ms'], [1000, '1 detik (internet)'], [2000, '2 detik (jaringan buruk)']], c.latency, (v) => { c.latency = +v; save(); upd(); }), h('label', 'Stream ID'), inp('streamid', { placeholder: 'opsional, mis. #!::r=live/tv1,m=publish', class: 'grow' })),
+            row('Passphrase', inp('passphrase', { type: 'password', placeholder: 'kosong = tanpa enkripsi (10–79 karakter)', class: 'grow', autocomplete: 'off' }), sel([[16, 'AES-128'], [24, 'AES-192'], [32, 'AES-256']], c.pbkeylen, (v) => { c.pbkeylen = +v; save(); upd(); }))),
+          h('div.sec', h('h4', 'Video & audio siaran'), encInfo,
+            row('Encoder', sel([['auto', 'Auto — GPU bila ada (disarankan)'], ['x264', 'x264 (CPU)'], ['nvenc', 'NVIDIA NVENC'], ['qsv', 'Intel QuickSync'], ['amf', 'AMD AMF'], ['copy', 'Copy H.264 (paling ringan, timing kurang stabil)']], c.encoder, (v) => { c.encoder = v; save(); })),
+            row('Bitrate video', sel([[3000, '3 Mbps'], [4500, '4.5 Mbps'], [6000, '6 Mbps (1080p, disarankan)'], [8000, '8 Mbps'], [10000, '10 Mbps'], [15000, '15 Mbps (LAN)'], [20000, '20 Mbps (LAN)']], c.videoBitrate, (v) => { c.videoBitrate = +v; save(); }),
+              h('label', 'Resolusi'), sel([['same', 'Sama dengan output'], ['1080', '1920×1080'], ['720', '1280×720'], ['576', '1024×576']], c.res, (v) => { c.res = v; save(); })),
+            row('Audio', sel([['aac', 'AAC (umum)'], ['mp2', 'MPEG-1 Layer II (decoder siaran lama)']], c.audioCodec, (v) => { c.audioCodec = v; save(); }), sel([[128, '128 kbps'], [192, '192 kbps'], [256, '256 kbps'], [320, '320 kbps']], c.audioBitrate, (v) => { c.audioBitrate = +v; save(); }),
+              h('label', 'GOP'), sel([[0.5, '0,5 dtk'], [1, '1 dtk (cepat pulih)'], [2, '2 dtk']], c.gop, (v) => { c.gop = +v; save(); })),
+            chk('CBR + muxrate MPEG-TS tetap (wajib untuk banyak decoder hardware / modulator)', c.cbr !== false, (v) => { c.cbr = v; save(); }),
+            chk('Mulai SRT otomatis saat KLM Mix dibuka', !!c.autoStart, (v) => { c.autoStart = v; save(); }),
+            h('p.muted', 'Putus koneksi (gateway restart / jaringan) disambung ulang otomatis tanpa menghentikan mixer. Video dikirim dengan GOP tetap tanpa B-frame agar decoder TV cepat mengunci gambar.')),
+          R.srtLog ? h('details', h('summary', 'Log ffmpeg SRT'), h('pre', { style: { maxHeight: '200px', overflow: 'auto', fontSize: '11px', userSelect: 'text' } }, R.srtLog)) : null);
+      },
       audio() {
         const out = h('select.grow');
         listDevices('audiooutput').then((l) => out.replaceChildren(h('option', { value: '' }, 'Default sistem'), ...l.map((d) => h('option', { value: d.deviceId, selected: d.deviceId === st.audioOutDevice }, d.label || d.deviceId))));
@@ -645,6 +690,7 @@
           chk('Dengarkan audio master di PC', st.monitorAudio, (v) => { KM.audio.setMonitor(v); save(); }),
           row('Perangkat output', out),
           chk('Limiter master (cegah suara pecah)', st.masterLimiter !== false, (v) => { KM.audio.setLimiter(v); save(); }),
+          h('div.row', h('button.btn', { onclick: () => KM.afx.open('master') }, '🎚 Rak efek Master'), KM.isElectron ? h('button.btn', { onclick: () => window.klm.invoke('fx:open-folder') }, '📂 Folder plugin audio') : null, h('span.muted', 'Efek per input: tombol FX di mixer.')),
           ...['A', 'B'].map((b) => { const s2 = h('select.grow'); listDevices('audiooutput').then((l) => s2.replaceChildren(h('option', { value: '' }, '— tidak dikirim —'), ...l.map((d) => h('option', { value: d.deviceId, selected: d.deviceId === (st.busDevice || {})[b] }, d.label || d.deviceId)))); s2.onchange = () => { KM.audio.setBusDevice(b, s2.value); save(); }; return row('Output Bus ' + b, s2); }),
           (() => { const dk = st.duck || (st.duck = { on: false, thr: -35, depth: -15, hold: 600 }); return h('div', { style: { marginTop: '10px' } }, chk('Auto-ducking (musik turun saat mic bicara)', dk.on, (v) => { dk.on = v; save(); }),
             h('div.kv', ...slider('Ambang mic', -60, -10, 1, () => dk.thr, (v) => { dk.thr = v; save(); }, (v) => v + ' dB'), ...slider('Turunkan', -40, -3, 1, () => dk.depth, (v) => { dk.depth = v; save(); }, (v) => v + ' dB'), ...slider('Tahan', 100, 3000, 50, () => dk.hold, (v) => { dk.hold = v; save(); }, (v) => v + ' ms')),

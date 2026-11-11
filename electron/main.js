@@ -128,6 +128,23 @@ ipcMain.handle('file:close-writer', (e, id) => new Promise((res) => {
 }));
 ipcMain.handle('shell:show', (e, p) => { shell.showItemInFolder(p); return true; });
 ipcMain.handle('shell:open', (e, p) => shell.openPath(p));
+// ---- plugin audio eksternal (folder: <data>/plugins) ----
+const fxDir = () => { const d = path.join(server.configDir(), 'plugins'); try { fs.mkdirSync(d, { recursive: true }); } catch (e) {} return d; };
+const fxKind = (n) => (/\.(m?js)$/i.test(n) ? 'js' : /\.(wav|flac|mp3|ogg|aiff?)$/i.test(n) ? 'ir' : null);
+ipcMain.handle('fx:list', () => {
+  const d = fxDir();
+  return fs.readdirSync(d).filter((n) => fxKind(n)).sort().map((n) => ({ name: n, path: path.join(d, n), kind: fxKind(n), size: fs.statSync(path.join(d, n)).size }));
+});
+ipcMain.handle('fx:read', (e, p, mode) => {
+  const f = path.resolve(p); if (!f.startsWith(path.resolve(fxDir()) + path.sep)) throw new Error('di luar folder plugin');
+  if (mode === 'text') return fs.readFileSync(f, 'utf8');
+  const b = fs.readFileSync(f); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+});
+ipcMain.handle('fx:save', (e, name, data) => {
+  const n = path.basename(String(name)).replace(/[^\w.\- ]+/g, '_'); if (!fxKind(n)) throw new Error('format tidak didukung');
+  fs.writeFileSync(path.join(fxDir(), n), typeof data === 'string' ? data : Buffer.from(data)); return true;
+});
+ipcMain.handle('fx:open-folder', () => shell.openPath(fxDir()));
 
 ipcMain.handle('server:get', () => server.loadConfig());
 ipcMain.handle('server:set', (e, cfg) => { server.saveConfig(Object.assign(server.loadConfig(), cfg)); return true; });
@@ -232,6 +249,32 @@ function smokeTest() {
       const ok = await js('(() => { try { const f = document.querySelector("#utcFrame"); return !!(f && f.contentDocument && f.contentDocument.querySelector("#panel, .tabs, header")); } catch (e) { return "err " + e.message; } })()');
       log('panel UTC dimuat: ' + ok); if (ok !== true) fail++;
       fs.writeFileSync(path.join(out, 'panel.png'), (await mainWin.webContents.capturePage()).toPNG());
+      await js('KM.ui.utcPanel(false)');
+      // --- efek audio: rantai preset "Vokal Siaran" pada tone uji ---
+      const fx = await js(`(async () => { const inp = KM.inputs.create('bars', { title: 'Tone', opts: { tone: true } }); await new Promise((r) => setTimeout(r, 800));
+        inp.audio.fx = KM.afx.presetChain('Vokal Siaran'); const st = KM.audio.strips.get(inp.id); await st.rack.sync(inp.audio.fx); await new Promise((r) => setTimeout(r, 1200));
+        const m = KM.audio.readMeter(st.meter); return JSON.stringify({ n: st.rack.inst.size, db: Math.round(KM.audio.toDb(Math.max(m.peakL, m.peakR))), ctx: KM.audio.ctx.state }); })()`);
+      log('efek audio: ' + fx);
+      { const f = JSON.parse(fx); if (f.n !== 6) { fail++; log('GAGAL: rak efek tidak lengkap'); } }
+      // --- SRT caller ke "gateway" lokal (ffmpeg listener) ---
+      try {
+        const { spawn } = require('child_process');
+        const ts = path.join(out, 'srt-gateway.ts');
+        const gw = spawn(server.hub.ffmpegPath(), ['-hide_banner', '-y', '-i', 'srt://0.0.0.0:9310?mode=listener&latency=200000', '-c', 'copy', '-f', 'mpegts', ts], { windowsHide: true });
+        let gwLog = ''; gw.stderr.on('data', (d) => { gwLog = (gwLog + d).slice(-4000); });
+        await wait(1200);
+        await js(`Object.assign(KM.settings.srt, { mode: 'caller', host: '127.0.0.1', port: 9310, latency: 200, encoder: 'auto', videoBitrate: 4500, res: '720', passphrase: '' }); KM.rec.startSrt()`);
+        let st = '';
+        for (let i = 0; i < 15; i++) { await wait(1000); st = await js('KM.rec.srtStatus + " " + JSON.stringify(KM.rec.srtStats || {})'); if (st.startsWith('live') && i > 5) break; }
+        log('SRT status: ' + st + ' encoder=' + await js('KM.rec.srtEncoder'));
+        await js('KM.rec.stopSrt(true)'); await wait(2500);
+        try { gw.kill(); } catch (e) {}
+        await wait(800);
+        const size = fs.existsSync(ts) ? fs.statSync(ts).size : 0;
+        const info = (gwLog.match(/Stream #0:\d.*/g) || []).join(' | ');
+        log('SRT diterima gateway: ' + size + ' byte — ' + info);
+        if (!st.startsWith('live') || size < 100000) { fail++; log('GAGAL: SRT tidak sampai ke gateway. Log srt: ' + (await js('KM.rec.srtLog')).slice(-600)); }
+      } catch (e) { fail++; log('GAGAL SRT: ' + e.message); }
     } catch (e) { fail++; log('ERROR ' + (e && e.stack || e)); }
     log(fail ? 'HASIL: GAGAL (' + fail + ')' : 'HASIL: OK');
     app.on('will-quit', () => log('will-quit')); app.on('quit', () => log('quit'));

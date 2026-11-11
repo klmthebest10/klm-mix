@@ -35,7 +35,8 @@
         master: true, vol: bus.vol, meter: bus.meter, onVol: (v) => A.setBusVol(b, v),
         buttons: [cb('M', bus.muted, 'mute', 'Mute', () => { A.setBusMute(b); renderAudio(); }),
           b === 'M' ? cb('🎧', KM.settings.monitorAudio, 'solo', 'Monitor headphone', () => { A.setMonitor(!KM.settings.monitorAudio); KM.saveSettings(); renderAudio(); }) : h('span'),
-          h('span')]
+          h('span')],
+        gear: b === 'M' ? h('button.cb.fx' + ((KM.settings.masterFx || []).some((x) => x.on !== false) ? '.on' : ''), { style: { width: '100%' }, title: 'Rak efek Master (EQ, kompresor, limiter siaran…)', onclick: () => KM.afx.open('master') }, 'FX Master' + ((KM.settings.masterFx || []).length ? ' ' + KM.settings.masterFx.length : '')) : null
       });
     };
     mx.append(busStrip('M', 'MASTER'), busStrip('A', 'Bus A'), busStrip('B', 'Bus B'));
@@ -49,7 +50,8 @@
           cb('S', a.solo, 'solo', 'Solo (dengar di headphone saja)', () => { KM.audio.set(inp, 'solo', !a.solo); renderAudio(); }),
           cb('A', a.auto, 'auto', 'Auto: audio ikut video (hanya bunyi saat di Program)', () => { KM.audio.set(inp, 'auto', !a.auto); renderAudio(); })],
         buses: [tog('M', 'Kirim ke Master'), tog('A', 'Kirim ke Bus A'), tog('B', 'Kirim ke Bus B')],
-        gear: h('button.cb', { style: { width: '100%' }, title: 'EQ, kompresor, gate, delay', onclick: () => KM.dialogs.inputSettings(inp, 'audio') }, '⚙ EQ/FX')
+        gear: h('div.sb2', h('button.cb.fx' + ((a.fx || []).some((x) => x.on !== false) ? '.on' : ''), { title: 'Rak efek & plugin: ' + ((a.fx || []).map((x) => (KM.afx.defs[x.type] || {}).name).filter(Boolean).join(' → ') || 'kosong'), onclick: () => KM.afx.open(inp) }, 'FX' + ((a.fx || []).length ? ' ' + a.fx.length : '')),
+          h('button.cb', { title: 'Pengaturan audio input (EQ dasar, gate, delay, routing)', onclick: () => KM.dialogs.inputSettings(inp, 'audio') }, KI.el('settings')))
       }));
     });
     const ua = KM.utc && KM.utc.audioStrip(), ust = ua && A.strips.get(ua.id);

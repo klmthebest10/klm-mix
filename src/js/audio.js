@@ -31,10 +31,11 @@
     ctx = A.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive', sampleRate: 48000 });
     const bus = (name) => {
       const g = ctx.createGain(); const mute = ctx.createGain();
-      if (name === 'M') { // limiter master (cegah suara pecah/clipping)
+      if (name === 'M') { // rak efek master → limiter master (cegah suara pecah/clipping)
+        const rack = A.masterRack = KM.afx.rack(ctx); g.connect(rack.input);
         const lim = ctx.createDynamicsCompressor(); lim.threshold.value = -1.5; lim.knee.value = 0; lim.ratio.value = 20; lim.attack.value = 0.002; lim.release.value = 0.08;
         const wet = ctx.createGain(), dry = ctx.createGain();
-        g.connect(lim); lim.connect(wet); wet.connect(mute); g.connect(dry); dry.connect(mute);
+        rack.output.connect(lim); lim.connect(wet); wet.connect(mute); rack.output.connect(dry); dry.connect(mute);
         A.limiter = { wet, dry };
       } else g.connect(mute);
       const dest = ctx.createMediaStreamDestination(); dest.channelCount = 2;
@@ -59,6 +60,8 @@
     ['click', 'keydown', 'pointerdown'].forEach((e) => window.addEventListener(e, resume, { capture: true }));
     A.ready = true;
     setInterval(A.updateAuto, 40);
+    // plugin eksternal dulu, lalu rantai efek master
+    KM.afx.ready = KM.afx.loadAll().catch(() => {}).then(() => A.masterRack.sync(KM.settings.masterFx || []));
   };
 
   function impulse(sec, decay) {
@@ -132,13 +135,15 @@
     hi.connect(comp); comp.connect(compWet); hi.connect(compBypass);
     const gatePre = ctx.createGain(); compWet.connect(gatePre); compBypass.connect(gatePre);
     const gateMeter = ctx.createAnalyser(); gateMeter.fftSize = 512; gatePre.connect(gateMeter);
-    gatePre.connect(gate); gate.connect(delay); delay.connect(pan); pan.connect(fader); fader.connect(live); live.connect(duck); duck.connect(mute); mute.connect(out);
+    const rack = KM.afx.rack(ctx);
+    gatePre.connect(gate); gate.connect(rack.input); rack.output.connect(delay); delay.connect(pan); pan.connect(fader); fader.connect(live); live.connect(duck); duck.connect(mute); mute.connect(out);
     out.connect(toRv); toRv.connect(A.reverb);
     out.connect(toM); out.connect(toA); out.connect(toB); out.connect(toSolo);
     toM.connect(A.master.gain); toM.connect(A.mmBus); toA.connect(A.busA.gain); toB.connect(A.busB.gain); toSolo.connect(A.soloBus);
-    st = { inp, src, trim, hpf, duck, toRv, duckVal: 1, lo, mid, hi, comp, compWet, compBypass, gate, gateMeter, gateBuf: new Float32Array(512), delay, pan, fader, live, mute, out, toM, toA, toB, toSolo, meter: meterNodes(out), liveVal: 1 };
+    st = { inp, src, rack, trim, hpf, duck, toRv, duckVal: 1, lo, mid, hi, comp, compWet, compBypass, gate, gateMeter, gateBuf: new Float32Array(512), delay, pan, fader, live, mute, out, toM, toA, toB, toSolo, meter: meterNodes(out), liveVal: 1 };
     A.strips.set(inp.id, st);
     A.apply(inp);
+    if (inp.audio.fx && inp.audio.fx.length) Promise.resolve(KM.afx.ready).then(() => rack.sync(inp.audio.fx));
     if (inp.rt.mm && !inp.rt.mm.linked) linkMM(inp);
     KM.changed('audio');
     return st;

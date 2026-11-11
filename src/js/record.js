@@ -151,6 +151,51 @@
   };
   R.toggleStreaming = () => (S.streaming ? R.stopStreaming() : R.startStreaming());
 
+  // ---------- SRT CALLER → GATEWAY / DECODER TV (realtime) ----------
+  R.srtStatus = 'off'; R.srtMsg = ''; R.srtStats = null; R.srtLog = '';
+  R.srtCfg = () => KM.settings.srt || (KM.settings.srt = {});
+  R.startSrt = async function () {
+    if (S.srt) return true;
+    const c = R.srtCfg();
+    if (c.mode !== 'listener' && !String(c.host || '').trim()) { KM.toast('Isi IP / host gateway SRT dulu', 'warn'); KM.dialogs.settings('srt'); return false; }
+    if (c.passphrase && (c.passphrase.length < 10 || c.passphrase.length > 79)) { KM.toast('Passphrase SRT harus 10–79 karakter', 'warn'); KM.dialogs.settings('srt'); return false; }
+    const h264 = H264_WEBM.find((m) => MediaRecorder.isTypeSupported(m));
+    let encoder = c.encoder || 'auto';
+    if (encoder === 'auto') { const e = await R.detectEncoders(); encoder = e.nvenc ? 'nvenc' : e.qsv ? 'qsv' : e.amf ? 'amf' : 'x264'; }
+    if (encoder === 'copy' && !h264) encoder = 'x264';
+    const RES = { same: null, '1080': [1920, 1080], '720': [1280, 720], '576': [1024, 576] };
+    let wh = RES[c.res] || null;
+    if (wh && KM.settings.height > KM.settings.width) wh = [wh[1], wh[0]];
+    const cfg = Object.assign({}, c, { encoder, fps: KM.settings.fps, width: wh ? wh[0] : 0, height: wh ? wh[1] : 0 });
+    R.srtStatus = 'menyambung'; R.srtMsg = ''; R.srtStats = null; R.srtLog = '';
+    const r = await openHubOut('srt', { cfg }, (m) => {
+      if (m.t === 'status') { R.srtStatus = m.status; R.srtMsg = m.msg; if (m.status === 'live') KM.toast('● SRT tersambung ke gateway — Program tayang realtime', 'ok', 4000); KM.changed('srt'); }
+      else if (m.t === 'stats') { R.srtStats = m; KM.emit('srt-stats', m); }
+      else if (m.t === 'log') { R.srtLog = (R.srtLog + m.msg).slice(-6000); }
+      else if (m.t === 'closed' && S.srt) { R.stopSrt(true); KM.toast('Output SRT berhenti (hub media tertutup)', 'err', 6000); }
+    });
+    if (!r.ok) { R.srtStatus = 'off'; KM.toast('SRT gagal: ' + r.msg, 'err', 6000); KM.changed('srt'); return false; }
+    const copy = encoder === 'copy';
+    const vbps = copy ? c.videoBitrate * 1000 : Math.max(c.videoBitrate * 2500, 10000000);
+    R.srtWs = r.ws;
+    R.srtRec = pipeRecorder(r.ws, mixStream('M'), h264 || 'video/webm;codecs=vp8,opus', vbps, 50);
+    S.srt = true; R.srtT0 = Date.now(); R.srtEncoder = encoder;
+    KM.toast('SRT ' + (c.mode === 'listener' ? 'menunggu gateway di port ' + c.port : 'menyambung ke ' + c.host + ':' + c.port) + '…', 'rec', 3500);
+    KM.changed('srt');
+    return true;
+  };
+  R.stopSrt = function (silent) {
+    if (!S.srt) return true;
+    S.srt = false; R.srtStatus = 'off'; R.srtStats = null;
+    try { R.srtRec.stop(); } catch (e) {}
+    setTimeout(() => { try { R.srtWs && R.srtWs.close(); } catch (e) {} R.srtWs = null; }, 300);
+    if (silent !== true) KM.toast('Output SRT dihentikan');
+    KM.changed('srt');
+    return true;
+  };
+  R.toggleSrt = () => (S.srt ? R.stopSrt() : R.startSrt());
+  R.srtTime = () => (S.srt ? (Date.now() - R.srtT0) / 1000 : 0);
+
   // ---------- OUTPUT NDI (juga = Virtual Camera lewat "NDI Webcam") ----------
   R.startNdi = async function (name) {
     if (S.ndiOut) return true;

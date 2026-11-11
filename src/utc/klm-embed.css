@@ -1,0 +1,79 @@
+/* UTC KLM Acara × KLM Mix — tema & tata letak menyatu
+ * html.klmui      : tema KLM Mix (warna, font, sudut, kontrol) — juga di HP / jendela terpisah
+ * html.klm-embed  : di dalam KLM Mix: monitor Program & switcher dipakai dari mixer di atasnya,
+ *                   panel jadi 3 kolom ringkas: tombol tayang | navigasi | editor
+ */
+html.klmui {
+  --bg: #0f1115; --bg2: #14171c; --card: #191d23; --card2: #20252d; --line: #2a303a;
+  --tx: #eceff4; --mut: #a7afbd; --gold: #f08a24; --red: #f2453d; --grn: #1ec26b; --blu: #3d8bff; --r: 8px;
+}
+html.klmui body { font: 500 13.5px/1.45 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+html.klmui .ki { width: 1.15em; height: 1.15em; vertical-align: -.22em; flex: none; }
+html.klmui .ki-gap { margin-right: .4em; }
+html.klmui button { border-radius: 6px; padding: 7px 12px; font-weight: 700; border-color: #323946; background: #20252d; }
+html.klmui button:hover { background: #282e38; border-color: #414a5a; }
+html.klmui input, html.klmui select, html.klmui textarea { border-radius: 6px; background: #0f1115; border-color: #323946; }
+html.klmui input:focus, html.klmui select:focus, html.klmui textarea:focus { border-color: #3d8bff; box-shadow: 0 0 0 3px rgba(61, 139, 255, .14); }
+html.klmui input[type=checkbox], html.klmui input[type=range] { accent-color: #3d8bff; }
+html.klmui header { background: #0a0c0f; border-bottom-color: #252a33; padding: 8px 14px; }
+html.klmui .brand i { background: linear-gradient(135deg, #ff4b3e, #ffb11f); box-shadow: 0 2px 10px rgba(255, 90, 50, .3); color: #fff; border-radius: 9px; }
+html.klmui .evsel { background: #14171c; border-color: #414a5a; font-weight: 800; }
+html.klmui .box { background: #191d23; border-color: #252a33; border-radius: 10px; }
+html.klmui .box h3 { font-size: 14px; font-weight: 800; }
+html.klmui .box h4 { font-size: 10.5px; font-weight: 800; letter-spacing: 1px; color: #8790a0; }
+html.klmui .item { background: #14171c; border-color: #2a303a; border-radius: 10px; }
+html.klmui .item.sel { border-color: #3d8bff; box-shadow: inset 0 0 0 1px #3d8bff; }
+html.klmui .item.onair { border-color: var(--red); box-shadow: 0 0 0 1px var(--red), 0 0 18px rgba(242, 69, 61, .18); }
+html.klmui .ih .num { background: #0f1115; color: #ffb35c; border-radius: 6px; }
+html.klmui .take { background: linear-gradient(180deg, #1aa75d, #12814a); border-color: #22c76f; border-radius: 8px; font-size: 13px; }
+html.klmui .item.onair .take { background: linear-gradient(180deg, #d93a33, #a5221d); border-color: #ff6a62; }
+html.klmui .chip { border-radius: 6px; background: #14171c; }
+html.klmui .chip.act { background: rgba(240, 138, 36, .14); border-color: #f08a24; color: #ffc078; }
+html.klmui .seg { border-radius: 7px; border-color: #323946; }
+html.klmui .seg button { background: #14171c; }
+html.klmui .seg button.act { background: #f08a24; color: #1a0f03; }
+html.klmui .scr { border-radius: 10px; border-color: #252a33; }
+html.klmui .scr-h { font-size: 10.5px; letter-spacing: 1.4px; padding: 6px 10px; }
+html.klmui .scr-h.pvw { background: linear-gradient(90deg, rgba(30, 194, 107, .2), #14171c); color: #7ce8ab; }
+html.klmui .scr-h.pgm { background: linear-gradient(90deg, rgba(242, 69, 61, .22), #14171c); color: #ff9f99; }
+html.klmui .air button { border-radius: 8px; background: #14171c; padding: 11px 6px; }
+html.klmui .air button.on { background: linear-gradient(180deg, #d93a33, #a5221d); border-color: #ff6a62; box-shadow: 0 0 14px rgba(242, 69, 61, .3); }
+html.klmui .btn-red { background: #3a1517; border-color: #7a2a2a; color: #ffd6d3; }
+html.klmui .btn-red:hover { background: #f2453d; color: #fff; }
+
+/* navigasi tab ber-ikon */
+html.klmui .tabs { gap: 4px; align-items: center; }
+html.klmui .tabs .tgrp { display: none; }
+html.klmui .tabs button { display: inline-flex; align-items: center; gap: 7px; border-radius: 7px; padding: 7px 12px; background: transparent; border-color: transparent; color: #a7afbd; }
+html.klmui .tabs button .ki { width: 15px; height: 15px; }
+html.klmui .tabs button:hover { background: #20252d; color: #fff; }
+html.klmui .tabs button.act { background: rgba(240, 138, 36, .14); color: #ffc078; border-color: rgba(240, 138, 36, .5); }
+
+/* ================= menyatu di dalam KLM Mix ================= */
+html.klm-embed header { display: none; }
+html.klm-embed main { grid-template-columns: 340px 196px minmax(0, 1fr); gap: 12px; padding: 12px; height: 100vh; align-items: stretch; }
+html.klm-embed main > section:last-child { display: contents; }
+/* kolom kiri: pratinjau grafis + tombol tayang */
+html.klm-embed .mon { position: static; overflow: auto; gap: 10px; min-height: 0; padding-right: 2px; }
+html.klm-embed .mon #mswitch, html.klm-embed .mon #scrPgm, html.klm-embed .mon .swbar { display: none !important; }
+html.klm-embed .mon #scrPvw { display: block !important; }
+html.klm-embed .mon .istrip button { min-width: 74px; padding: 6px 8px; font-size: 11.5px; }
+html.klm-embed .air { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+html.klm-embed .air button { padding: 10px 4px; font-size: 10.5px; }
+html.klm-embed .air button b { font-size: 12.5px; }
+html.klm-embed .ocair { grid-template-columns: 1fr 1fr auto; gap: 6px; }
+html.klm-embed .ocair button { padding: 9px 8px; font-size: 11.5px; }
+/* kolom tengah: navigasi vertikal berkelompok */
+html.klm-embed .tabs { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 2px; margin: 0; overflow: auto; background: #14171c; border: 1px solid #252a33; border-radius: 10px; padding: 8px; min-height: 0; }
+html.klm-embed .tabs .tgrp { display: block; font-size: 10px; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase; color: #6f7888; padding: 10px 8px 4px; }
+html.klm-embed .tabs .tgrp:first-child { padding-top: 2px; }
+html.klm-embed .tabs button { justify-content: flex-start; padding: 8px 10px; font-size: 12.5px; width: 100%; text-align: left; }
+html.klm-embed .tabs button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* kolom kanan: editor */
+html.klm-embed .panel { overflow: auto; min-height: 0; padding-right: 4px; gap: 12px; }
+html.klm-embed .toast { bottom: 18px; }
+@media (max-width: 1250px) {
+  html.klm-embed main { grid-template-columns: 300px 56px minmax(0, 1fr); }
+  html.klm-embed .tabs .tgrp, html.klm-embed .tabs button span { display: none; }
+  html.klm-embed .tabs button { justify-content: center; padding: 9px 0; }
+}

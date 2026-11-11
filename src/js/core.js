@@ -2,7 +2,7 @@
 'use strict';
 window.KM = window.KM || {};
 (function (KM) {
-  KM.version = '1.3.0';
+  KM.version = '1.4.0';
   KM.isElectron = !!(window.klm && window.klm.isElectron);
 
   // ---------- event bus ----------
@@ -66,6 +66,7 @@ window.KM = window.KM || {};
         { enabled: false, name: 'Custom', url: '', key: '' }
       ]
     },
+    srt: { mode: 'caller', host: '', port: 9000, latency: 200, passphrase: '', pbkeylen: 16, streamid: '', encoder: 'auto', preset: 'veryfast', videoBitrate: 6000, audioBitrate: 192, audioCodec: 'aac', res: 'same', gop: 1, cbr: true, autoStart: false },
     replay: { source: 'program', seconds: 15, width: 640, height: 360 },
     transitions: [
       { type: 'fade', dur: 500 }, { type: 'merge', dur: 800 }, { type: 'wipe', dur: 700 }, { type: 'zoom', dur: 600 }
@@ -83,6 +84,7 @@ window.KM = window.KM || {};
       const out = Object.assign(KM.deepClone(DEFAULT_SETTINGS), s);
       out.stream = Object.assign(KM.deepClone(DEFAULT_SETTINGS.stream), s.stream || {});
       out.replay = Object.assign(KM.deepClone(DEFAULT_SETTINGS.replay), s.replay || {});
+      out.srt = Object.assign(KM.deepClone(DEFAULT_SETTINGS.srt), s.srt || {});
       return out;
     } catch (e) { return KM.deepClone(DEFAULT_SETTINGS); }
   }
