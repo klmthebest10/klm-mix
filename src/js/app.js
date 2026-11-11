@@ -13,7 +13,11 @@
   const hideSplash = () => { const sp = document.getElementById('splash'); if (sp && !sp.classList.contains('done')) { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); } };
   setTimeout(hideSplash, 8000); // pengaman terakhir
   window.addEventListener('error', (e) => { if (KM.toast && e && e.message && !/ResizeObserver/.test(e.message)) console.warn('[KLM] ' + e.message); });
-  window.addEventListener('DOMContentLoaded', async () => {
+  // layar pembuka tergambar dulu (1 frame), baru modul dinyalakan → jendela langsung tampil, tidak terasa macet
+  let booted = false;
+  const afterPaint = (fn) => { const go = () => { if (!booted) { booted = true; fn(); } }; requestAnimationFrame(() => setTimeout(go, 0)); setTimeout(go, 250); };
+  window.addEventListener('DOMContentLoaded', () => afterPaint(boot));
+  async function boot() {
     step('audio', () => KM.audio.init());
     step('engine', () => KM.engine.init(KM.$('#pgm'), KM.$('#pvw')));
     step('utc', () => KM.utc.boot());
@@ -32,5 +36,5 @@
     window.addEventListener('beforeunload', () => { try { KM.ui.autosave(); } catch (e) {} });
     KM.readyAt = performance.timeOrigin + performance.now();
     console.log('%cKLM Mix ' + KM.version + ' siap', 'color:#22c55e;font-weight:bold');
-  });
+  }
 })(window.KM);
