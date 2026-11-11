@@ -30,6 +30,7 @@
       if (p && p.inputs && p.inputs.length) setTimeout(() => KM.ui.restoreAutosave(), 600);
     } catch (e) {}
     window.addEventListener('beforeunload', () => { try { KM.ui.autosave(); } catch (e) {} });
+    KM.readyAt = performance.timeOrigin + performance.now();
     console.log('%cKLM Mix ' + KM.version + ' siap', 'color:#22c55e;font-weight:bold');
   });
 })(window.KM);

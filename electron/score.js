@@ -108,8 +108,18 @@ module.exports = function createScore(opts) {
       return fs.readFile(path.join(PUB, p === '/icon-512.png' ? 'icon-512.png' : 'icon-192.png'), (e, b) => e ? send(res, 404, '', 'text/plain') : send(res, 200, b, 'image/png', { 'Cache-Control': 'public, max-age=604800' }));
     }
     if (VIEWS.has(p)) {
-      return fs.readFile(APP_FILE, (err, buf) => err ? send(res, 500, 'index.html tidak ditemukan', 'text/plain') : send(res, 200, buf, 'text/html; charset=utf-8'));
+      const control = p === '/' || p === '/control' || p === '/index.html';
+      return fs.readFile(APP_FILE, (err, buf) => {
+        if (err) return send(res, 500, 'index.html tidak ditemukan', 'text/plain');
+        if (control && opts.mixPort) { // panel kontrol: tampilkan fitur KLM Mix (ON AIR, CUT/AUTO, REC/LIVE, monitor Program)
+          const inj = '<script>window.KLM_MIX={app:"score",port:' + (opts.mixPort() || 8620) + '};</script><script src="/klm-bridge.js" defer></script>';
+          const html = buf.toString('utf8'), i = html.lastIndexOf('</body>');
+          buf = Buffer.from(i >= 0 ? html.slice(0, i) + inj + html.slice(i) : html + inj);
+        }
+        send(res, 200, buf, 'text/html; charset=utf-8');
+      });
     }
+    if (p === '/klm-bridge.js' && opts.bridgeFile) return fs.readFile(opts.bridgeFile, (e, b) => e ? send(res, 404, '', 'text/plain') : send(res, 200, b, 'text/javascript; charset=utf-8'));
     if (p === '/fonts-builtin/builtin.css') return send(res, 200, '/* huruf ada di fonts/fonts.css */', 'text/css; charset=utf-8', { 'Cache-Control': 'public, max-age=86400' });
     if (p === '/api/ping') return json(res, { app: 'UTC KLM', host: 'KLM Mix', now: Date.now(), port: PORT, ips: lan(), nets: lan().map((ip) => ({ ip, name: '', virt: false })), clients: clients.size });
     if (p === '/api/state' && req.method === 'GET') return json(res, { state });
@@ -151,7 +161,7 @@ module.exports = function createScore(opts) {
       } catch (e) { return json(res, { ok: false, error: String(e.message || e) }, 400); }
     }
     if (p === '/api/flat' && req.method === 'POST') {
-      try { const body = JSON.parse(await readBody(req, 256 * 1024)); if (body && body.flat) flat = body.flat; return json(res, { ok: true }); } catch (e) { return json(res, { ok: false }, 400); }
+      try { const body = JSON.parse(await readBody(req, 256 * 1024)); if (body && body.flat) { const ch = body.flat.Clock !== flat.Clock || body.flat.PeriodLong !== flat.PeriodLong; flat = body.flat; if (ch) emit(); } return json(res, { ok: true }); } catch (e) { return json(res, { ok: false }, 400); }
     }
     if (p.startsWith('/api/cmd')) {
       const r = cmd(url.searchParams.get('c') || p.slice('/api/cmd/'.length));
@@ -254,7 +264,12 @@ module.exports = function createScore(opts) {
       visible: !!(st.ov && st.ov.visible), sport: st.sport || '', title: (st.match && st.match.title) || '',
       home: t[0] ? (t[0].short || t[0].name || 'HOME') : 'HOME', away: t[1] ? (t[1].short || t[1].name || 'AWAY') : 'AWAY',
       score: Array.isArray(st.score) ? st.score : [0, 0], period: st.period || 1, running: !!(st.clock && st.clock.running),
-      extra: !!((st.lower && st.lower.on) || (st.ticker && st.ticker.on) || st.popup || st.gfx) };
+      extra: !!((st.lower && st.lower.on) || (st.ticker && st.ticker.on) || st.popup || st.gfx),
+      lower: !!(st.lower && st.lower.on), ticker: !!(st.ticker && st.ticker.on),
+      homeColor: t[0] && t[0].color, awayColor: t[1] && t[1].color,
+      fouls: Array.isArray(st.fouls) ? st.fouls : [0, 0], to: Array.isArray(st.to) ? st.to : [0, 0],
+      cards: Array.isArray(st.cards) ? st.cards.map((c) => ({ y: (c && c.y) || 0, r: (c && c.r) || 0 })) : [{}, {}],
+      clockText: flat.Clock || '', periodText: flat.PeriodLong || '' };
   }
   return {
     start, cmd, status, port: () => PORT,

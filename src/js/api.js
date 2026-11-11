@@ -207,7 +207,11 @@
     UTCHideAll: () => utc('hideall'), UTCOpening: () => utc('opening'), UTCClosing: () => utc('closing'), UTCOpeningClosingOff: () => utc('ocoff'),
     UTCEvent: (p) => utc('event', '', { name: p.Value }), UTCPreset: (p) => utc('preset', '', { name: p.Value }),
     UTCOnAir: () => { KM.utc.setOnAir(); return true; }, UTCOnAirOn: () => { KM.utc.setOnAir(true); return true; }, UTCOnAirOff: () => { KM.utc.setOnAir(false); return true; },
-    UTCReload: () => { KM.utc.reload(); return true; }
+    UTCReload: () => { KM.utc.reload(); return true; },
+    UTCAddInput: () => { KM.utc.addInput(); return true; },
+    // ---- UTC Score ----
+    ScoreOnAir: () => { KM.score.setOnAir(); return true; }, ScoreOnAirOn: () => { KM.score.setOnAir(true); return true; }, ScoreOnAirOff: () => { KM.score.setOnAir(false); return true; },
+    ScoreAddInput: () => { KM.score.addInput(); return true; }
   };
   async function utc(cmd, target, extra) {
     const r = await KM.utc.cmd(cmd, target, extra);

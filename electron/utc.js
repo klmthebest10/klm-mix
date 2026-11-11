@@ -167,6 +167,21 @@ module.exports = function createUtc(o) {
         const f = String(c.field || c.Name || 'name'); it[f] = String(c.text != null ? c.text : '');
         break;
       }
+      case 'tkset': { // ganti pesan running text: items [{id?, title, text (boleh banyak baris), on}], badge, speed, show
+        if (!ev.tk) return { ok: false, msg: 'Running text tidak tersedia' };
+        if (Array.isArray(c.items)) {
+          const old = new Map(items('tk').map((x) => [x.id, x]));
+          ev.tk.items = c.items.slice(0, 100).map((x) => {
+            const o = (x && old.get(x.id)) || {};
+            return Object.assign({}, o, { id: o.id || (K ? K.uid() : 'tk' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+              title: String((x && x.title) || '').slice(0, 80), text: String((x && x.text) || '').slice(0, 8000), on: !(x && x.on === false) });
+          });
+        }
+        if (c.badge != null) ev.tk.badge = String(c.badge).slice(0, 40);
+        if (c.speed != null && isFinite(+c.speed)) ev.tk.speed = Math.max(30, Math.min(400, +c.speed));
+        if (c.show != null) ev.tk.visible = !!c.show;
+        break;
+      }
       case 'hideall':
         ['lt', 'tt', 'tk', 'bug', 'loc', 'soc'].forEach((k) => { if (ev[k]) ev[k].visible = false; });
         ev.oc.active = null; ev.oc.done = false;
@@ -209,7 +224,9 @@ module.exports = function createUtc(o) {
       eventType: state.eventType, eventName: K ? (K.EVENTS.find((e) => e.id === state.eventType) || {}).n || state.eventType : state.eventType,
       visible: vis, active: { lt: act('lt'), tt: act('tt'), loc: act('loc'), soc: act('soc') },
       lists: { lt: (ev.lt && ev.lt.items || []).map((x) => ({ id: x.id, label: x.label, name: x.name, role: x.role })), tt: (ev.tt && ev.tt.items || []).map((x) => ({ id: x.id, label: x.label, title: x.title })) },
-      activeId: { lt: ev.lt && ev.lt.activeId, tt: ev.tt && ev.tt.activeId },
+      activeId: { lt: ev.lt && ev.lt.activeId, tt: ev.tt && ev.tt.activeId, loc: ev.loc && ev.loc.activeId, soc: ev.soc && ev.soc.activeId },
+      tk: ev.tk ? { badge: ev.tk.badge || '', speed: ev.tk.speed || 120, items: (ev.tk.items || []).map((x) => ({ id: x.id, title: x.title || '', text: x.text || '', on: !!x.on })) } : null,
+      ll: { loc: (ev.loc && ev.loc.items || []).map((x) => ({ id: x.id, label: x.label, place: x.place })), soc: (ev.soc && ev.soc.items || []).map((x) => ({ id: x.id, label: x.label, handle: x.handle })) },
       oc, rev
     };
   }

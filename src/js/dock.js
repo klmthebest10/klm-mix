@@ -1,4 +1,5 @@
-/* KLM Mix - panel kanan: Mixer Audio, Title UTC KLM Acara, Instant Replay, KLMCAM & HP, Playlist */
+/* KLM Mix - panel samping: Mixer Audio, UTC Acara, UTC Score, KLMCAM, Title, Replay, Playlist, PTZ, Skrip
+ * Tab UTC Acara / UTC Score / KLMCAM hanya muncul bila inputnya sudah ditambahkan. */
 'use strict';
 (function (KM) {
   const h = KM.h, S = KM.state;
@@ -176,29 +177,40 @@
   }
 
   // =================== KLMCAM & HP ===================
+  // =================== KLMCAM (muncul bila ada input KLMCAM) ===================
   function renderPhone() {
     const box = KM.$('#dock-phone'), L = KM.link, urls = KM.dialogs.phoneUrls();
-    const cams = [...L.peers.values()].filter((p) => p.role === 'camera');
-    const rems = [...L.peers.values()].filter((p) => p.role === 'remote');
+    const ae = document.activeElement; if (ae && box.contains(ae) && /INPUT|SELECT/.test(ae.tagName)) return; // sedang menggeser zoom / memilih
+    const cams = S.inputs.filter((i) => i.type === 'klmcam');
     const u = urls[0] || {};
-    box.replaceChildren(
-      h('div.sec', h('h4', '📱 Hubungkan HP — scan QR (Wi-Fi sama)'),
-        h('div.row', { style: { alignItems: 'flex-start' } }, KM.dialogs.qr(u.hp || ''), h('div.grow',
-          h('p', { style: { margin: '0 0 6px' } }, 'Menu HP (pilih Kamera / Remote / Title):'), ...urls.map((x) => h('div.urlbox', x.hp)),
-          h('p', { style: { margin: '8px 0 4px' } }, 'Langsung kamera (HTTPS):'), ...urls.map((x) => h('div.urlbox', x.cam)),
-          h('p.muted', 'Atau pakai aplikasi KLM Mix .apk → masukkan IP: ' + urls.map((x) => x.ip).join(' / '))))),
-      h('div.sec', h('h4', 'Kamera KLMCAM (' + cams.length + ')'),
-        cams.length ? h('div.list', cams.map((p) => {
-          const inp = S.inputs.find((i) => i.rt.camId === p.id);
-          const tl = inp ? KM.engine.tallyOf(inp) : 'off';
-          return h('div.li' + (tl === 'program' ? '.on' : ''),
-            h('span', '📱'), h('span.grow', 'Slot ' + p.slot + ' • ' + (p.name || p.ip) + (p.info ? ` • ${p.info.w}×${p.info.h}@${p.info.fps}` : '') + (p.info && p.info.battery != null ? ' • 🔋' + p.info.battery + '%' : '')),
-            h('span.pill' + (p.state === 'connected' ? '.ok' : '.warn'), p.state || 'menunggu'),
-            inp ? h('button.btn.sm', { title: 'Ke preview', onclick: () => KM.engine.setPreview(inp.id) }, 'PVW') : h('button.btn.sm', { onclick: () => KM.inputs.create('klmcam', { title: 'KLMCAM ' + p.slot, opts: { slot: p.slot } }) }, '＋ Input'),
-            inp ? h('button.btn.sm', { title: 'Kontrol kamera', onclick: () => KM.dialogs.inputSettings(inp) }, '⚙') : null);
-        })) : h('p.muted', 'Belum ada HP kamera terhubung.')),
-      h('div.sec', h('h4', 'Remote / kontrol HP (' + rems.length + ')'),
-        rems.length ? h('div.list', rems.map((p) => h('div.li', h('span', '🎛'), h('span.grow', (p.name || 'Remote') + ' • ' + p.ip)))) : h('p.muted', 'Buka ' + (u.remote || '/remote') + ' di HP untuk mengontrol switcher, overlay, title & audio dari HP.')));
+    const QS = [['720p30', '720p 30'], ['720p60', '720p 60'], ['1080p30', '1080p 30'], ['1080p60', '1080p 60']];
+    const card = (inp) => {
+      const peer = inp.rt.camId ? L.peers.get(inp.rt.camId) : null, tl = KM.engine.tallyOf(inp), o = inp.opts;
+      const z = h('input', { type: 'range', min: 1, max: 10, step: 0.1, value: inp.rt.zoom || 1, title: 'Zoom', oninput: () => { inp.rt.zoom = +z.value; L.camControl(inp, 'zoom', +z.value); zv.textContent = (+z.value).toFixed(1) + '×'; } });
+      const zv = h('span.muted', (inp.rt.zoom || 1).toFixed(1) + '×');
+      const q = h('select', { title: 'Kualitas video HP', onchange: () => { o.quality = q.value; L.camControl(inp, 'quality', q.value); } }, QS.map(([v, l]) => h('option', { value: v, selected: v === o.quality }, l)));
+      return h('div.sec.camq' + (tl === 'program' ? '.pgm' : tl === 'preview' ? '.pvw' : ''),
+        h('div.row', h('b.grow', KM.inputNum(inp) + '. ' + inp.title),
+          h('span.pill' + (peer ? '.ok' : '.warn'), peer ? 'Terhubung' : 'Menunggu HP slot ' + o.slot)),
+        peer ? h('p.muted', { style: { margin: '4px 0 8px', fontSize: '11.5px' } }, (peer.name || peer.ip) + (peer.info ? ` • ${peer.info.w}×${peer.info.h} @${peer.info.fps}fps` : '') + (peer.info && peer.info.battery != null ? ' • 🔋 ' + peer.info.battery + '%' : '')) : null,
+        h('div.row', { style: { gap: '4px', flexWrap: 'wrap' } },
+          h('button.btn.sm' + (tl === 'preview' ? '.pri' : ''), { onclick: () => KM.engine.setPreview(inp.id), title: 'Ke Preview' }, 'PVW'),
+          h('button.btn.sm' + (tl === 'program' ? '.red' : ''), { onclick: () => KM.engine.cut(inp.id), title: 'Cut ke Program' }, 'CUT'),
+          h('button.btn.sm', { onclick: () => L.camControl(inp, 'switch', 1), title: 'Ganti kamera depan/belakang' }, '🔄 Balik'),
+          h('button.btn.sm' + (inp.rt.torch ? '.pri' : ''), { onclick: () => { inp.rt.torch = !inp.rt.torch; L.camControl(inp, 'torch', inp.rt.torch); renderPhone(); }, title: 'Senter' }, '🔦'),
+          h('button.btn.sm', { onclick: () => L.camControl(inp, 'focus', 'auto'), title: 'Fokus otomatis' }, '🎯 Fokus'),
+          h('button.btn.sm', { onclick: () => L.restartCam(inp), title: 'Sambung ulang' }, '↻'),
+          h('button.btn.sm', { onclick: () => KM.dialogs.inputSettings(inp), title: 'Pengaturan lengkap' }, '⚙')),
+        h('div.row', { style: { marginTop: '6px', gap: '8px' } }, h('span.muted', 'Zoom'), z, zv, q));
+    };
+    box.replaceChildren(h('div.utcq',
+      cams.length ? cams.map(card) : h('div.sec', h('p.muted', 'Belum ada input KLMCAM.')),
+      h('div.sec', h('div.row', h('button.btn.pri', { style: { flex: 1 }, onclick: () => KM.dialogs.addInput('klmcam') }, KI.el('plus'), 'Tambah KLMCAM'))),
+      h('details.sec', h('summary', '📱 Hubungkan HP — scan QR (Wi-Fi sama)'),
+        h('div.row', { style: { alignItems: 'flex-start', marginTop: '8px' } }, KM.dialogs.qr(u.cam || u.hp || ''), h('div.grow',
+          h('p', { style: { margin: '0 0 6px' } }, 'Kamera langsung (HTTPS):'), ...urls.map((x) => h('div.urlbox', x.cam)),
+          h('p', { style: { margin: '8px 0 4px' } }, 'Menu HP:'), ...urls.map((x) => h('div.urlbox', x.hp)),
+          h('p.muted', 'Atau aplikasi KLM Mix .apk → mode Kamera → IP: ' + urls.map((x) => x.ip).join(' / ') + ' • pilih slot yang sama.'))))));
   }
 
   // =================== PLAYLIST ===================
@@ -247,25 +259,55 @@
 
   // =================== UTC KLM ACARA (kontrol cepat) ===================
   let utcPresets = null;
-  function renderUtc() {
-    const box = KM.$('#dock-utc'), U = KM.utc, st = U.status || {}, vis = st.visible || {};
-    const run = async (cmd, target, extra) => { const r = await U.cmd(cmd, target, extra); if (!r.ok) KM.toast(r.msg || 'Gagal', 'warn'); };
+  // =================== UTC ACARA (muncul bila ada input UTC Acara) ===================
+  let tkDraft = null, acPending = false;
+  const typingIn = (box) => { const a = document.activeElement; return a && box.contains(a) && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.type !== 'range' && a.type !== 'checkbox'; };
+  function renderAcara() {
+    const box = KM.$('#dock-acara'), U = KM.utc, st = U.status || {}, vis = st.visible || {};
+    let spv = null;
+    if (typingIn(box)) { acPending = true; return; } // jangan ganggu yang sedang mengetik
+    acPending = false;
+    const run = async (cmd, target, extra) => { const r = await U.cmd(cmd, target, extra); if (!r.ok) KM.toast(r.msg || 'Gagal', 'warn'); return r; };
     const TI = { lt: 'rect', tt: 'title', tk: 'type', bug: 'image', loc: 'target', soc: 'share' };
     const tg = (k, label) => h('button.tg' + (vis[k] ? '.on' : ''), { title: (vis[k] ? 'Sembunyikan ' : 'Tampilkan ') + label, onclick: () => run('toggle', k) }, KI.el(TI[k]), label);
-    const items = (k, list, actId, lbl) => list && list.length ? h('div.sec', h('h4', lbl),
-      h('div.row', h('button.btn.sm', { title: 'Sebelumnya', onclick: () => run('prev', k, { show: true }) }, KI.el('chev-left'), 'Sebelumnya'), h('button.btn.sm', { title: 'Berikutnya', onclick: () => run('next', k, { show: true }) }, 'Berikutnya', KI.el('chev-right')),
-        h('span.grow'), h('span.muted', { style: { fontSize: '11px' } }, 'klik = pilih & tampilkan')),
-      h('div.items', list.map((x, i) => h('button.btn.sm' + (x.id === actId ? '.act' : ''), { title: [x.label, x.name || x.title, x.role].filter(Boolean).join(' • '), onclick: () => run('select', k, { name: String(i + 1) }) }, (i + 1) + '. ' + (x.name || x.title || x.label || '—'))))) : null;
+    const items = (k, list, actId, lbl, nameOf) => list && list.length ? h('div.sec', h('h4', lbl, vis[k] ? h('span.pill.ok', { style: { marginLeft: '6px' } }, 'TAMPIL') : null),
+      h('div.row', h('button.btn.sm', { title: 'Sebelumnya', onclick: () => run('prev', k, { show: true }) }, KI.el('chev-left')), h('button.btn.sm', { title: 'Berikutnya', onclick: () => run('next', k, { show: true }) }, KI.el('chev-right')),
+        h('button.btn.sm' + (vis[k] ? '.red' : ''), { onclick: () => run('toggle', k) }, vis[k] ? 'Sembunyikan' : 'Tampilkan'),
+        h('span.grow'), h('span.muted', { style: { fontSize: '11px' } }, 'klik nama = pilih & tampilkan')),
+      h('div.items', list.map((x, i) => h('button.btn.sm' + (x.id === actId ? '.act' : ''), { title: [x.label, nameOf(x)].filter(Boolean).join(' • '), onclick: () => run('select', k, { name: String(i + 1) }) }, (i + 1) + '. ' + (nameOf(x) || x.label || '—'))))) : null;
     const presetSel = h('select', { style: { flex: 1 } }, h('option', { value: '' }, utcPresets ? (utcPresets.length ? '— pilih preset —' : '(belum ada preset)') : 'memuat…'),
       (utcPresets || []).map((p) => h('option', { value: p.name }, p.name)));
-    if (!utcPresets) fetch('/utc/api/presets').then((r) => r.json()).then((l) => { utcPresets = l; if (DK.cur === 'utc') renderUtc(); }).catch(() => { utcPresets = []; });
+    if (!utcPresets) fetch('/utc/api/presets').then((r) => r.json()).then((l) => { utcPresets = l; if (DK.cur === 'acara') renderAcara(); }).catch(() => { utcPresets = []; });
+    const evSel = h('select', { style: { flex: 1 }, title: 'Jenis acara', onchange: () => run('event', '', { name: evSel.value }) }, (st.events || []).map((e) => h('option', { value: e.id, selected: e.id === st.eventType }, e.n)));
+    // ---- running text: judul + banyak baris, edit & simpan dari sini ----
+    if (st.tk && (!tkDraft || !tkDraft.dirty)) tkDraft = { dirty: false, badge: st.tk.badge, speed: st.tk.speed, items: st.tk.items.map((x) => Object.assign({}, x)) };
+    const dirty = () => { if (tkDraft) { tkDraft.dirty = true; saveBar.classList.add('dirty'); } };
+    const saveTk = async (show) => {
+      const r = await run('tkset', '', { items: tkDraft.items, badge: tkDraft.badge, speed: tkDraft.speed, show: show ? true : undefined });
+      if (r && r.ok) { tkDraft.dirty = false; KM.toast(show ? 'Running text disimpan & ditampilkan' : 'Running text disimpan', 'ok'); renderAcara(); }
+    };
+    const saveBar = h('div.row.tksave', { style: { marginTop: '8px' } },
+      h('button.btn.pri', { onclick: () => saveTk(true), title: 'Simpan lalu tampilkan running text' }, KI.el('play'), 'Simpan & Tampilkan'),
+      h('button.btn', { onclick: () => saveTk(false) }, KI.el('save'), 'Simpan'),
+      h('button.btn', { title: 'Batalkan perubahan', onclick: () => { tkDraft = null; renderAcara(); } }, 'Batal'));
+    const tkSec = tkDraft ? h('div.sec.tkq', h('h4', 'Running Text', vis.tk ? h('span.pill.ok', { style: { marginLeft: '6px' } }, 'TAMPIL') : null),
+      h('div.row', h('label.muted', { style: { width: '74px' } }, 'Label kiri'), h('input', { style: { flex: 1 }, value: tkDraft.badge || '', placeholder: 'INFO', oninput: (e) => { tkDraft.badge = e.target.value; dirty(); } }),
+        h('button.btn.sm' + (vis.tk ? '.red' : ''), { onclick: () => run('toggle', 'tk') }, vis.tk ? 'Sembunyikan' : 'Tampilkan')),
+      h('div.tkl', tkDraft.items.map((it, i) => h('div.tki' + (it.on ? '' : '.off'),
+        h('div.row', h('input', { type: 'checkbox', checked: it.on, title: 'Ikut berjalan', onchange: (e) => { it.on = e.target.checked; dirty(); e.target.closest('.tki').classList.toggle('off', !it.on); } }),
+          h('input.ttl', { style: { flex: 1 }, value: it.title || '', placeholder: 'Judul pesan ' + (i + 1) + ' (opsional)', oninput: (e) => { it.title = e.target.value; dirty(); } }),
+          h('button.btn.sm', { title: 'Naik', disabled: i === 0, onclick: () => { tkDraft.items.splice(i - 1, 0, tkDraft.items.splice(i, 1)[0]); dirty(); renderAcara(); } }, '↑'),
+          h('button.btn.sm', { title: 'Hapus pesan', onclick: () => { tkDraft.items.splice(i, 1); dirty(); renderAcara(); } }, '✕')),
+        h('textarea', { rows: Math.min(6, Math.max(2, String(it.text || '').split('\n').length)), value: it.text || '', placeholder: 'Isi teks — boleh banyak baris (Enter = baris baru, tiap baris berjalan berurutan)', oninput: (e) => { it.text = e.target.value; dirty(); } })))),
+      h('div.row', { style: { marginTop: '6px' } }, h('button.btn.sm', { onclick: () => { tkDraft.items.push({ title: '', text: '', on: true }); dirty(); renderAcara(); } }, KI.el('plus'), 'Tambah pesan'), h('span.grow'),
+        h('span.muted', 'Kecepatan'), h('input', { type: 'range', min: 30, max: 400, step: 5, value: tkDraft.speed || 120, style: { width: '110px' }, oninput: (e) => { tkDraft.speed = +e.target.value; dirty(); spv.textContent = e.target.value; } }), spv = h('span.muted', String(tkDraft.speed || 120))),
+      saveBar) : null;
+    if (tkDraft && tkDraft.dirty) saveBar.classList.add('dirty');
     box.replaceChildren(h('div.utcq',
       h('div.sec',
-        h('button.btn.air' + (U.onAir() ? '.on' : ''), { onclick: () => U.setOnAir(), title: 'Tampilkan / sembunyikan semua grafis UTC dari Program' }, KI.el(U.onAir() ? 'radio' : 'eye'), U.onAir() ? 'UTC ON AIR di Program' : 'UTC tidak tayang — klik untuk menayangkan'),
+        h('button.btn.air' + (U.onAir() ? '.on' : ''), { onclick: () => U.setOnAir(), title: 'Tampilkan / sembunyikan grafis UTC Acara di atas Program' }, KI.el(U.onAir() ? 'radio' : 'eye'), U.onAir() ? 'UTC ACARA ON AIR' : 'UTC Acara tidak tayang — klik untuk tayang'),
         h('div.live', { innerHTML: U.liveInfo() }),
-        h('div.row', h('button.btn.pri', { style: { flex: 1 }, onclick: () => KM.ui.utcPanel(true) }, KI.el('clapper'), 'Buka Panel Lengkap', h('kbd', { style: { marginLeft: '4px', color: '#cfe2ff', borderColor: 'rgba(255,255,255,.3)', background: 'transparent' } }, 'F9')),
-          h('button.btn', { title: 'Jadikan input KLM Mix (Overlay 1–4, layer, multiview)', onclick: () => { U.addInput(); KM.toast('Input "Grafis UTC KLM Acara" siap', 'ok'); } }, KI.el('plus'), 'Input'))),
-      scoreSec(),
+        h('div.row', evSel, h('button.btn.pri', { onclick: () => KM.ui.utcPanel(true, 'acara'), title: 'Panel lengkap: atur, edit, simpan, tambah & ubah (F9)' }, KI.el('clapper'), 'Panel lengkap'))),
       h('div.sec', h('h4', 'Tampilkan / sembunyikan'),
         h('div.grid', tg('lt', 'Lower Third'), tg('tt', 'Title'), tg('tk', 'Running Text'), tg('bug', 'Logo'), tg('loc', 'Lokasi'), tg('soc', 'Sosmed')),
         h('div.row', { style: { marginTop: '6px' } },
@@ -273,35 +315,75 @@
           h('button.btn.sm' + (st.oc && st.oc.kind === 'closing' ? '.pri' : ''), { onclick: () => run('closing') }, KI.el('moon'), 'Closing'),
           st.oc ? h('button.btn.sm', { onclick: () => run('ocoff') }, KI.el('x'), 'Hentikan') : null,
           h('span.grow'), h('button.btn.sm.red', { title: 'Sembunyikan semua grafis', onclick: () => run('hideall') }, KI.el('ban'), 'Semua OFF'))),
-      items('lt', st.lists && st.lists.lt, st.activeId && st.activeId.lt, 'Lower Third'),
-      items('tt', st.lists && st.lists.tt, st.activeId && st.activeId.tt, 'Title'),
+      items('lt', st.lists && st.lists.lt, st.activeId && st.activeId.lt, 'Lower Third', (x) => x.name),
+      items('tt', st.lists && st.lists.tt, st.activeId && st.activeId.tt, 'Title', (x) => x.title),
+      tkSec,
+      items('loc', st.ll && st.ll.loc, st.activeId && st.activeId.loc, 'Lokasi', (x) => x.place),
+      items('soc', st.ll && st.ll.soc, st.activeId && st.activeId.soc, 'Sosial Media', (x) => x.label + (x.handle ? ' • ' + x.handle : '')),
       h('div.sec', h('h4', 'Preset acara'),
-        h('div.row', presetSel, h('button.btn', { onclick: async () => { if (!presetSel.value) return; await run('preset', '', { name: presetSel.value }); KM.toast('Preset dimuat: ' + presetSel.value, 'ok'); } }, KI.el('download'), 'Muat'),
-          h('button.btn', { title: 'Muat ulang daftar', onclick: () => { utcPresets = null; renderUtc(); } }, KI.el('refresh'))),
-        h('p.muted', { style: { fontSize: '11px', marginTop: '6px' } }, 'Ubah teks, tema, animasi, posisi, logo, video opening/closing & simpan preset di Panel Lengkap. Bisa juga dari HP: ' + (KM.link.ips[0] ? 'http://' + KM.link.ips[0].address + ':' + (KM.link.ports.http || 8620) + '/utc' : '/utc'))))
-    );
+        h('div.row', presetSel, h('button.btn', { onclick: async () => { if (!presetSel.value) return; await run('preset', '', { name: presetSel.value }); tkDraft = null; KM.toast('Preset dimuat: ' + presetSel.value, 'ok'); } }, KI.el('download'), 'Muat'),
+          h('button.btn', { title: 'Muat ulang daftar', onclick: () => { utcPresets = null; renderAcara(); } }, KI.el('refresh'))),
+        h('p.muted', { style: { fontSize: '11px', marginTop: '6px' } }, 'Tema, animasi, posisi, logo, video opening/closing & simpan preset ada di Panel lengkap. Dari HP: ' + (KM.link.ips[0] ? 'http://' + KM.link.ips[0].address + ':' + (KM.link.ports.http || 8620) + '/utc' : '/utc')))));
   }
-  // UTC KLM Scoreboard: kontrol cepat (skor, jam, tampil) — panel lengkap di workspace UTC → Scoreboard
-  function scoreSec() {
-    const SC = KM.score, st = SC.status;
-    const c = (cmd, label, title, cls) => h('button.btn.sm' + (cls || ''), { title: title || '', onclick: async () => { const r = await SC.cmd(cmd); if (!r.ok) KM.toast(/belum dibuka/.test(r.msg) ? 'Buka panel Scoreboard dulu (workspace UTC → Scoreboard)' : 'Scoreboard: ' + r.msg, 'warn'); } }, label);
-    if (!st || !st.port) return h('div.sec', h('h4', 'Scoreboard olahraga'), h('p.muted', 'Menyalakan UTC KLM Scoreboard…'));
-    const sc = st.score || [0, 0];
-    return h('div.sec.scoreq', h('h4', 'Scoreboard olahraga'),
-      h('div.row',
-        h('button.btn.air' + (SC.onAir() ? '.on' : ''), { style: { flex: 1 }, onclick: () => SC.setOnAir(), title: 'Tampilkan / sembunyikan scoreboard di Program' }, KI.el(SC.onAir() ? 'radio' : 'eye'), SC.onAir() ? 'SCORE ON AIR' : 'Scoreboard tersembunyi'),
-        h('button.btn', { title: 'Buka panel lengkap scoreboard', onclick: () => KM.ui.utcPanel(true, 'score') }, KI.el('trophy'), 'Panel')),
-      h('div.sb', h('b', st.home), h('span.n', String(sc[0])), h('span.muted', ':'), h('span.n', String(sc[1])), h('b', st.away), h('span.muted', '• babak ' + st.period + (st.running ? ' • jam jalan' : ''))),
-      h('div.row', { style: { flexWrap: 'wrap', gap: '4px' } },
-        c('home+1', st.home + ' +1', 'Tambah skor tuan rumah', '.pri'), c('home-1', '−1', 'Kurangi skor tuan rumah'),
-        c('away+1', st.away + ' +1', 'Tambah skor tamu', '.pri'), c('away-1', '−1', 'Kurangi skor tamu'),
-        c('clock', st.running ? 'Jeda jam' : 'Mulai jam', 'Mulai / hentikan jam pertandingan'), c('next', 'Babak +', 'Babak berikutnya'),
-        c('overlay', st.visible ? 'Sembunyikan papan' : 'Tampilkan papan', 'Tampil / sembunyi papan skor di overlay'), c('undo', 'Undo', 'Batalkan langkah terakhir')),
-      st.control ? null : h('p.muted', { style: { fontSize: '11px', marginTop: '6px' } }, 'Tombol cepat aktif setelah panel Scoreboard dibuka (workspace UTC → Scoreboard, atau dari HP: /hp di port ' + st.port + ').'));
-  }
-  KM.on('change', (w) => { if ((w === 'utc' || w === 'score') && DK.cur === 'utc') { clearTimeout(renderUtc.t); renderUtc.t = setTimeout(renderUtc, 60); } });
+  KM.$('#dock-acara') && KM.$('#dock-acara').addEventListener('focusout', () => setTimeout(() => { if (acPending && DK.cur === 'acara') renderAcara(); }, 120));
 
-  const R = { utc: renderUtc, ptz: () => KM.ptz.render(KM.$('#dock-ptz')), script: renderScripts, audio: renderAudio, title: renderTitle, replay: renderReplay, phone: renderPhone, playlist: renderPlaylist };
+  // =================== UTC SCORE (muncul bila ada input UTC Score) ===================
+  function renderScore() {
+    const box = KM.$('#dock-score'), SC = KM.score, st = SC.status;
+    const c = (cmd, label, title, cls) => h('button.btn.sm' + (cls || ''), { title: title || '', onclick: async () => { const r = await SC.cmd(cmd); if (!r.ok) KM.toast(/belum dibuka/.test(r.msg) ? 'Panel UTC Score sedang dimuat… coba lagi sebentar' : 'UTC Score: ' + r.msg, 'warn'); } }, label);
+    const head = h('div.sec',
+      h('button.btn.air' + (SC.onAir() ? '.on' : ''), { onclick: () => SC.setOnAir(), title: 'Tampilkan / sembunyikan scoreboard di atas Program' }, KI.el(SC.onAir() ? 'radio' : 'eye'), SC.onAir() ? 'UTC SCORE ON AIR' : 'UTC Score tidak tayang — klik untuk tayang'),
+      h('div.row', { style: { marginTop: '8px' } },
+        h('button.btn.pri', { style: { flex: 1 }, onclick: () => KM.ui.utcPanel(true, 'score'), title: 'Panel lengkap: tim, logo, warna, aturan, turnamen, preset (F9)' }, KI.el('trophy'), 'Panel lengkap'),
+        h('button.btn', { title: 'Layar arena / videotron (monitor ke-2)', onclick: () => { if (SC.port) window.open(SC.url('/arena'), 'klm_score_arena'); } }, KI.el('monitor'), 'Arena')));
+    if (!st || !st.port) { box.replaceChildren(h('div.utcq', head, h('div.sec', h('p.muted', 'Menyalakan UTC Score…')))); return; }
+    const sp = st.sport || 'football', sc = st.score || [0, 0], fo = st.fouls || [0, 0], to = st.to || [0, 0], cd = st.cards || [{}, {}];
+    const team = (i) => h('div.tm', h('i', { style: { background: (i ? st.awayColor : st.homeColor) || (i ? '#1D5FD1' : '#D62839') } }), h('b', i ? st.away : st.home));
+    const SPN = { football: 'Sepak Bola', futsal: 'Futsal', volleyball: 'Bola Voli', basketball: 'Bola Basket', badminton: 'Bulu Tangkis' };
+    const spSel = h('select', { title: 'Cabang olahraga', onchange: () => SC.cmd('sport-' + spSel.value) }, Object.entries(SPN).map(([k, n]) => h('option', { value: k, selected: k === sp }, n)));
+    const rally = sp === 'volleyball' || sp === 'badminton';
+    const side = (k, i) => h('div.col',
+      c(k + '+1', '+1', 'Tambah skor ' + (i ? st.away : st.home), '.pri.big'),
+      sp === 'basketball' ? h('div.row', c(k + '+2', '+2', 'Dua angka'), c(k + '+3', '+3', 'Tiga angka')) : null,
+      c(k + '-1', '−1', 'Kurangi skor'));
+    box.replaceChildren(h('div.utcq.scoreq', head,
+      h('div.sec',
+        h('div.sbx', team(0), h('div.scr', h('span.n', String(sc[0])), h('span.d', ':'), h('span.n', String(sc[1]))), team(1)),
+        h('div.sbm', h('span', st.periodText || ('Babak ' + st.period)), st.clockText ? h('b' + (st.running ? '.run' : ''), st.clockText) : null, h('span.grow'), spSel),
+        h('div.sides', side('home', 0), side('away', 1))),
+      h('div.sec', h('h4', rally ? 'Set & servis' : 'Jam pertandingan'),
+        h('div.row', { style: { flexWrap: 'wrap', gap: '4px' } },
+          rally ? null : c('clock', st.running ? '⏸ Jeda jam' : '▶ Mulai jam', 'Mulai / hentikan jam', st.running ? '.red' : '.pri'),
+          rally ? null : c('reset', 'Reset jam', 'Reset jam babak ini'),
+          rally ? null : c('clock-1', '−1 dtk'), rally ? null : c('clock+1', '+1 dtk'),
+          c('prev', rally ? 'Set −' : 'Babak −', 'Babak / set sebelumnya'), c('next', rally ? 'Set +' : 'Babak +', 'Babak / set berikutnya'),
+          sp === 'football' ? c('added+1', '+1 mnt tambahan', 'Tambah waktu tambahan') : null,
+          sp === 'basketball' ? c('shot24', 'Shot 24') : null, sp === 'basketball' ? c('shot14', 'Shot 14') : null, sp === 'basketball' ? c('poss', 'Possession ⇄') : null,
+          rally ? c('serve-home', 'Servis ' + st.home) : null, rally ? c('serve-away', 'Servis ' + st.away) : null)),
+      rally ? null : h('div.sec', h('h4', 'Foul, kartu & timeout'),
+        h('div.ftab',
+          h('span'), h('b', st.home), h('b', st.away),
+          h('span.muted', 'Foul'), h('div.row', c('foul-home', '+' + ' (' + (fo[0] || 0) + ')'), c('foul-home-', '−')), h('div.row', c('foul-away', '+' + ' (' + (fo[1] || 0) + ')'), c('foul-away-', '−')),
+          sp === 'football' || sp === 'futsal' ? [h('span.muted', 'Kuning'), h('div.row', c('yellow-home', '🟨 +' + ((cd[0] && cd[0].y) || 0))), h('div.row', c('yellow-away', '🟨 +' + ((cd[1] && cd[1].y) || 0)))] : null,
+          sp === 'football' || sp === 'futsal' ? [h('span.muted', 'Merah'), h('div.row', c('red-home', '🟥 +' + ((cd[0] && cd[0].r) || 0))), h('div.row', c('red-away', '🟥 +' + ((cd[1] && cd[1].r) || 0)))] : null,
+          sp !== 'football' ? [h('span.muted', 'Timeout'), h('div.row', c('to-home', '+ (' + (to[0] || 0) + ')')), h('div.row', c('to-away', '+ (' + (to[1] || 0) + ')'))] : null,
+          sp === 'football' || sp === 'futsal' ? [h('span.muted', 'Ganti pemain'), h('div.row', c('sub-home', '⇄')), h('div.row', c('sub-away', '⇄'))] : null)),
+      h('div.sec', h('h4', 'Tampilan'),
+        h('div.row', { style: { flexWrap: 'wrap', gap: '4px' } },
+          c('overlay', st.visible ? 'Sembunyikan papan skor' : 'Tampilkan papan skor', 'Papan skor di overlay', st.visible ? '.red' : '.pri'),
+          c('lower', (st.lower ? '■ ' : '') + 'Lower', 'Lower third scoreboard'), c('ticker', (st.ticker ? '■ ' : '') + 'Ticker', 'Running text scoreboard'),
+          rally ? null : c('goalpopup-home', 'GOL ' + st.home, 'Popup gol tuan rumah'), rally ? null : c('goalpopup-away', 'GOL ' + st.away, 'Popup gol tamu'),
+          c('scorepopup', 'Popup skor'), c('clearpopup', 'Tutup popup'),
+          c('swap', '⇄ Tukar sisi', 'Tukar posisi tim'), c('undo', '↶ Undo', 'Batalkan langkah terakhir'))),
+      h('p.muted', { style: { fontSize: '11px', margin: '0 2px 8px' } }, 'Dari HP: http://' + ((KM.link.ips[0] && KM.link.ips[0].address) || location.hostname) + ':' + st.port + '/hp • data vMix/OBS: :' + st.port + '/data.json')));
+  }
+  KM.on('change', (w) => {
+    if (w === 'utc' && DK.cur === 'acara') { clearTimeout(renderAcara.t); renderAcara.t = setTimeout(renderAcara, 60); }
+    if (w === 'score' && DK.cur === 'score') { clearTimeout(renderScore.t); renderScore.t = setTimeout(renderScore, 80); }
+    if ((w === 'inputs' || w === 'input' || w === 'tally' || w === 'preview' || w === 'program') && DK.cur === 'phone') { clearTimeout(renderPhone.t); renderPhone.t = setTimeout(renderPhone, 120); }
+  });
+
+  const R = { acara: renderAcara, score: renderScore, ptz: () => KM.ptz.render(KM.$('#dock-ptz')), script: renderScripts, audio: renderAudio, title: renderTitle, replay: renderReplay, phone: renderPhone, playlist: renderPlaylist };
   DK.render = function (tab) { DK.cur = tab; try { R[tab](); } catch (e) { console.error('dock', e); } };
   let t;
   KM.on('change', (w) => {

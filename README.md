@@ -73,10 +73,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
    - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.5.0.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.5.0.exe` (tanpa instal)
+     - `KLM-Mix-Setup-1.6.0.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Mix-Portable-1.6.0.exe` (tanpa instal)
    - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
-3. Untuk rilis resmi: buat tag `v1.5.0` → file otomatis muncul di halaman **Releases**.
+3. Untuk rilis resmi: buat tag `v1.6.0` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
 
@@ -130,6 +130,18 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Skrip JavaScript** (pengganti VB.NET): `API.Function("Cut")`, `Sleep()`, `Input()`, jalankan dari tombol/shortcut/trigger/Stream Deck
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Efek audio bawaan** (pengganti VST): high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
+
+### Baru di v1.6
+- **UTC Acara & UTC Score terpisah dan hadir lewat input** (menu **Input** → *UTC Acara* / *UTC Score*, juga *KLMCAM*). Tanpa inputnya tidak ada yang dirender — aplikasi tetap ringan
+- **Panel samping otomatis**: setelah input ditambahkan, tab **UTC Acara / UTC Score / KLMCAM** muncul & terbuka di panel kanan (juga saat inputnya dipilih ke Preview) berisi tombol cepat yang relevan:
+  - UTC Acara: ON AIR, jenis acara, tampil/sembunyi tiap grafis, opening/closing, daftar lower third/title/lokasi/sosmed, **editor running text** (simpan & tampilkan), preset
+  - UTC Score: ON AIR, skor ± (basket +2/+3), jam mulai/jeda/reset/±1 dtk, babak/set, foul, kartu, timeout, ganti pemain, servis, shot clock, popup gol/skor, lower/ticker, tukar sisi, undo, cabang olahraga
+  - KLMCAM: PVW/CUT, balik kamera, senter, fokus, zoom, kualitas, sambung ulang, QR sambung HP
+- **Panel lengkap** tetap tersedia untuk atur, edit, simpan, tambah & ubah (klik ganda input / klik kanan → Panel lengkap / F9)
+- **Running text: judul + banyak baris** — tiap pesan punya judul (tampil sebagai label berwarna aksen) dan isi boleh banyak baris (tiap baris berjalan berurutan); ikut mode gulir native yang mulus
+- **Fitur KLM Mix di dalam UTC Acara & UTC Score** (tombol *KLM Mix* di pojok panel, juga di jendela terpisah & HP): status Program/Preview, ON AIR, CUT/AUTO/FTB, Rekam/Live, tanda overlay & SRT, monitor Program mini, "Jadikan input KLM Mix"
+- **Buka aplikasi lebih cepat**: renderer grafis dinyalakan bertahap hanya untuk grafis yang tampil, panel scoreboard disiapkan setelah aplikasi siap, cache kompilasi skrip, ukuran aplikasi lebih kecil (modul NDI hanya untuk Windows x64)
+- API baru: `ScoreOnAir`, `ScoreOnAirOn/Off`, `ScoreAddInput`, `UTCAddInput`; perintah UTC `tkset` (ganti pesan running text)
 
 ### Baru di v1.5
 - **Grafis UTC tetap mulus walau banyak tampil bersamaan**: overlay UTC dirender **berlapis** (Lower Third/Title/Lokasi/Sosmed/Opening • Running Text • Logo • Scoreboard), masing-masing renderer sendiri — yang disalin tiap frame hanya potongan yang berubah (diambil langsung, tanpa menyalin layar penuh), hanya kotak isinya yang digambar ke Program, lapisan kosong dijeda otomatis
@@ -219,4 +231,4 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.5.0
+KLM Mix 1.6.0

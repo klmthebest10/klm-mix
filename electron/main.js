@@ -6,6 +6,8 @@ const { app, BrowserWindow, ipcMain, dialog, desktopCapturer, session, screen, s
 const path = require('path');
 const fs = require('fs');
 
+const T0 = Date.now() - Math.round(process.uptime() * 1000); // saat proses dimulai (untuk ukur kecepatan buka)
+const T = {};
 process.env.KLM_CONFIG_DIR = path.join(app.getPath('userData'), 'config');
 const server = require('./server');
 const setupUtcOsr = require('./utc-osr');
@@ -39,9 +41,12 @@ function createMain() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true, nodeIntegration: false,
-      backgroundThrottling: false, spellcheck: false
+      backgroundThrottling: false, spellcheck: false,
+      v8CacheOptions: 'bypassHeatCheck' // simpan hasil kompilasi skrip sejak pembukaan pertama → buka berikutnya lebih cepat
     }
   });
+  T.window = Date.now() - T0;
+  mainWin.webContents.once('did-finish-load', () => { T.load = Date.now() - T0; });
   Menu.setApplicationMenu(null);
   mainWin.loadURL(`http://127.0.0.1:${netInfo.ports.http}/`);
   mainWin.webContents.setWindowOpenHandler(({ url }) => {
@@ -196,7 +201,9 @@ app.whenReady().then(async () => {
   session.defaultSession.setDisplayMediaRequestHandler((req, cb) => {
     desktopCapturer.getSources({ types: ['screen'] }).then((s) => cb({ video: s[0], audio: 'loopback' })).catch(() => cb({}));
   });
+  T.ready = Date.now() - T0;
   netInfo = await server.start();
+  T.server = Date.now() - T0;
   utcOsr = setupUtcOsr({ port: () => netInfo.ports.http, scorePort: () => { const sc = server.score(); return sc ? sc.port() : 0; } });
   createMain();
   if (process.env.KLM_SMOKE) smokeTest();
@@ -244,6 +251,15 @@ function smokeTest() {
     try {
       await wait(6000);
       log('versi ' + app.getVersion() + ', port ' + JSON.stringify(netInfo.ports));
+      const ra = await js('KM.readyAt || 0');
+      log('kecepatan buka (ms sejak proses mulai): ' + JSON.stringify(Object.assign({}, T, { siap: ra ? Math.round(ra - T0) : null })));
+      const idle0 = JSON.parse(await js('JSON.stringify({ tabs: [...document.querySelectorAll(".dtabs button.dyn")].map((b) => b.dataset.tab + (b.hidden ? ":tersembunyi" : ":tampil")), osr: KM.utc.layerInfo().filter((l) => l.started).map((l) => l.id) })'));
+      log('saat dibuka (tanpa input UTC): ' + JSON.stringify(idle0));
+      if (idle0.osr.length) { fail++; log('GAGAL: renderer UTC menyala padahal belum ada input'); }
+      // UTC Acara hadir lewat input
+      await js('KM.inputs.create("colour", { title: "Latar" }); KM.engine.cut(KM.state.inputs[0].id); KM.utc.addInput({ onAir: true }); KM.ui.openSide("utc")');
+      await wait(800);
+      log('input UTC Acara: tab=' + await js('KM.ui.currentTab') + ' tombol=' + await js('!document.getElementById("bb-utc").hidden'));
       log('cmd lt show: ' + await post('/utc/api/klm/cmd', { cmd: 'show', target: 'lt' }));
       log('cmd ticker show: ' + await post('/utc/api/klm/cmd', { cmd: 'show', target: 'ticker' }));
       log('cmd logo show: ' + await post('/utc/api/klm/cmd', { cmd: 'show', target: 'logo' }));
@@ -271,9 +287,20 @@ function smokeTest() {
       log('running text 60fps: ' + JSON.stringify(sm));
       await progPng('program-60fps.png');
       await js('KM.settings.fps = 30');
-      // --- UTC KLM Scoreboard ---
+      // --- running text: judul + banyak baris, diganti saat tayang tetap native ---
+      const id0 = await js('KM.utc.layers.tk.native ? KM.utc.layers.tk.native.id : 0');
+      log('tkset: ' + (await post('/utc/api/klm/cmd', { cmd: 'tkset', items: [{ title: 'Info Jadwal', text: 'Baris satu\nBaris dua\nBaris tiga', on: true }, { title: 'Infaq', text: 'Kotak amal tersedia', on: true }] })).slice(0, 24));
+      await wait(2500);
+      const id1 = await js('KM.utc.layers.tk.native ? KM.utc.layers.tk.native.id : 0');
+      log('running text berjudul: native ' + id0 + ' → ' + id1); if (!id1 || id1 === id0) { fail++; log('GAGAL: running text berjudul/banyak baris tidak diperbarui'); }
+      await progPng('program-runtext-judul.png');
+      // --- UTC Score (lewat input) ---
       log('scoreboard status: ' + await js('JSON.stringify(KM.score.status)'));
-      await js('KM.score.setOnAir(true)'); await wait(5000);
+      await js('KM.score.addInput({ onAir: true }); KM.ui.openSide("score")');
+      const q0 = await js('KM.score.cmd("show").then((r) => JSON.stringify(r))'); // panel belum dibuka: disiapkan otomatis
+      log('tombol cepat sebelum panel dibuka: ' + q0); if (!/"ok":true/.test(q0)) { fail++; log('GAGAL: tombol cepat UTC Score tidak jalan'); }
+      await js('KM.score.cmd("away+1")');
+      await wait(4000);
       const sc = JSON.parse(await js('JSON.stringify({ frames: KM.utc.layers.score.frames, px: KM.score.coverage(), bbox: KM.utc.layers.score.bbox })'));
       log('scoreboard lapisan: ' + JSON.stringify(sc));
       if (!sc.frames || !(sc.px > 0.002)) { fail++; log('GAGAL: scoreboard tidak tampil di Program'); }
@@ -284,9 +311,12 @@ function smokeTest() {
       if (!/control/.test(scp)) { fail++; log('GAGAL: panel scoreboard tidak terbuka'); }
       const cmdr = await js('KM.score.cmd("home+1").then((r) => JSON.stringify(r))');
       log('perintah skor: ' + cmdr); if (!/"ok":true/.test(cmdr)) fail++;
-      await js('KM.score.cmd("home-1")');
+      await js('KM.score.cmd("home-1"); KM.score.cmd("away-1")');
       fs.writeFileSync(path.join(out, 'panel-score.png'), (await mainWin.webContents.capturePage()).toPNG());
-      await js('KM.ui.utcPanel(false, "acara"); KM.score.setOnAir(false)');
+      fs.writeFileSync(path.join(out, 'panel-samping-score.png'), (await (async () => { await js('KM.ui.utcPanel(false); KM.ui.dockTab("score")'); await wait(600); return mainWin.webContents.capturePage(); })()).toPNG());
+      await js('KM.ui.dockTab("acara")'); await wait(600);
+      fs.writeFileSync(path.join(out, 'panel-samping-acara.png'), (await mainWin.webContents.capturePage()).toPNG());
+      await js('KM.score.setOnAir(false)');
       // running text kembali ke halaman saat disembunyikan
       log('cmd ticker hide: ' + (await post('/utc/api/klm/cmd', { cmd: 'hide', target: 'ticker' })).slice(0, 40));
       await wait(1500);
@@ -294,7 +324,7 @@ function smokeTest() {
       log('running text native setelah hide: ' + nat); if (nat) { fail++; log('GAGAL: mode native tidak berhenti saat running text disembunyikan'); }
       const shot = await mainWin.webContents.capturePage();
       fs.writeFileSync(path.join(out, 'window.png'), shot.toPNG());
-      await js('KM.ui.utcPanel(true)'); await wait(4000);
+      await js('KM.ui.utcPanel(true, "acara")'); await wait(4000);
       const ok = await js('(() => { try { const f = document.querySelector("#utcFrame"); return !!(f && f.contentDocument && f.contentDocument.querySelector("#panel, .tabs, header")); } catch (e) { return "err " + e.message; } })()');
       log('panel UTC dimuat: ' + ok); if (ok !== true) fail++;
       fs.writeFileSync(path.join(out, 'panel.png'), (await mainWin.webContents.capturePage()).toPNG());

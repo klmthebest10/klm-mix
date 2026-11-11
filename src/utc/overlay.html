@@ -214,6 +214,8 @@ body.pv{background:#0b0d12 repeating-conic-gradient(#151922 0 25%,#0f1218 0 50%)
 .tk-run{display:inline-flex;align-items:center;font-size:var(--tfs,30px);font-weight:500;flex:none}
 .tk-it{padding:0 28px}
 .tk-sep{color:var(--a);font-size:.7em}
+.tk-ttl{flex:none;display:inline-flex;align-items:center;margin-left:28px;padding:.14em .62em;border-radius:.32em;background:var(--a);color:var(--on-a);font-family:var(--fn);font-weight:800;font-size:.74em;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;line-height:1.15}
+.tk-ttl + .tk-it{padding-left:16px}
 
 .tk-clock{flex:none;display:flex;align-items:center;padding:0 26px;font-family:var(--fn);font-weight:700;font-size:calc(var(--tfs,30px) * .92);background:rgba(0,0,0,.35);font-variant-numeric:tabular-nums;position:relative;z-index:2;contain:paint}
 
@@ -841,11 +843,17 @@ function buildTT(S, ev, item){
 function nowStr(){ const d=new Date(); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 function buildTK(S, ev){
   const c = ev.tk;
-  const items = (c.items||[]).filter(x=>x.on && String(x.text||'').trim());
+  // tiap pesan: judul (opsional) + teks yang boleh banyak baris — tiap baris tampil berurutan dipisah pemisah
+  const items = (c.items||[]).filter(x=>x.on && (String(x.text||'').trim() || String(x.title||'').trim()));
   if (!items.length) return null;
   const url = c.logo ? logoUrl(S, c.logoId) : '';
   const sep = `<span class="tk-sep">${esc(c.sep||'◆')}</span>`;
-  const run = items.map(x=>`<span class="tk-it" style="${FS(x,'text')}">${esc(x.text)}</span>${sep}`).join('');
+  const run = items.map(x=>{
+    const lines = String(x.text||'').split(/\r?\n/).map(t=>t.trim()).filter(Boolean);
+    const ttl = String(x.title||'').trim() ? `<span class="tk-ttl">${esc(String(x.title).trim())}</span>` : '';
+    if (!lines.length) return ttl + sep;
+    return ttl + lines.map(t=>`<span class="tk-it" style="${FS(x,'text')}">${esc(t)}</span>${sep}`).join('');
+  }).join('');
   const fx = fxParts(c.light, true);
   const badge = (url || c.badge) ? `<div class="tk-badge">${url?`<img src="${esc(url)}">`:''}${c.badge?`<span>${esc(c.badge)}</span>`:''}</div>` : '';
   const html = `${fx.outside}<div class="tk T-${c.layout}">${badge}<div class="tk-vp"><div class="tk-track"><div class="tk-run">${run}</div><div class="tk-run">${run}</div></div></div>${c.clock?`<div class="tk-clock">--:--</div>`:''}${fx.inside}</div>`;
@@ -943,11 +951,25 @@ function tkNative(n, vp, tr, runs, anim){
         base: (r.top - vr.top) * P + (m.fontBoundingBoxAscent || fs * 0.8), u: /underline/.test(cs.textDecorationLine) });
     }
     if (!segs.length) { if (prev) tr.style.visibility = ''; return; }
+    // latar elemen (mis. judul pesan) — kotak membulat berwarna
+    const boxes = [];
+    runs[0].querySelectorAll('*').forEach(el => {
+      const cs = getComputedStyle(el), bg = cs.backgroundColor;
+      if (!bg || bg === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(bg)) return;
+      const r = el.getBoundingClientRect(); if (!r.width) return;
+      boxes.push({ x: (r.left - rr.left) * P, y: (r.top - vr.top) * P, w: r.width * P, h: r.height * P, rad: (parseFloat(cs.borderTopLeftRadius) || 0) * k, c: bg });
+    });
     const TW = 4096, tiles = [];
     for (let x0 = 0; x0 < W; x0 += TW) {
       const tw = Math.min(TW, W - x0), c = document.createElement('canvas'); c.width = tw; c.height = H;
       const g = c.getContext('2d', { willReadFrequently: true });
       g.textBaseline = 'alphabetic';
+      for (const b of boxes) {
+        if (b.x - x0 > tw || b.x + b.w - x0 < 0) continue;
+        g.fillStyle = b.c; g.beginPath();
+        if (g.roundRect) g.roundRect(b.x - x0, b.y, b.w, b.h, Math.min(b.rad, b.h / 2)); else g.rect(b.x - x0, b.y, b.w, b.h);
+        g.fill();
+      }
       for (const sg of segs) {
         if (sg.x - x0 > tw + 60 || sg.x + sg.wd - x0 < -60) continue;
         g.font = sg.font; g.letterSpacing = sg.ls + 'px'; g.fillStyle = sg.color;

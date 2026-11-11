@@ -19,10 +19,14 @@
   if (KM.settings.scoreOnAir == null) KM.settings.scoreOnAir = false;
   const EPOCH = () => performance.timeOrigin + performance.now();
 
+  // UTC Acara & UTC Score hadir lewat input: tanpa inputnya, tidak ada yang dirender / ditayangkan
+  U.input = () => S.inputs.find((i) => i.type === 'utc');
+  U.has = () => !!U.input();
   U.onAir = () => KM.settings.utcOnAir !== false;
   U.setOnAir = (on) => {
     KM.settings.utcOnAir = on == null ? !U.onAir() : !!on; KM.saveSettings();
-    KM.toast(U.onAir() ? '● UTC ON AIR — grafis UTC tampil di Program' : 'UTC disembunyikan dari Program', U.onAir() ? 'ok' : 'warn');
+    if (U.onAir() && U.has()) U.ensure();
+    KM.toast(U.onAir() ? '● UTC ACARA ON AIR — grafis tampil di atas Program' : 'UTC Acara disembunyikan dari Program', U.onAir() ? 'ok' : 'warn');
     syncAudio(); KM.changed('utc');
   };
 
@@ -163,8 +167,12 @@
     if (L.native || L.nextNative) drawNative(ctx, L, sx, sy);
   }
   /** dipanggil engine setelah overlay 1–4, sebelum FTB */
+  // input yang sudah tayang lewat Program / Overlay tidak digambar dua kali sebagai lapisan ON AIR
+  const viaInput = (inp) => inp && KM.engine.tallyOf && KM.engine.tallyOf(inp) === 'program';
   U.drawDSK = function (ctx, W, H) {
-    const acara = U.onAir(), score = KM.settings.scoreOnAir;
+    const ui = U.input(), si = SC.input();
+    const acara = !!ui && U.onAir() && !viaInput(ui), score = !!si && KM.settings.scoreOnAir && !viaInput(si);
+    if (!acara && !score) return;
     for (const id of ORDER) {
       const L = LY[id];
       if (id === 'score' ? !score : !acara) continue;
@@ -172,7 +180,7 @@
       drawLayer(ctx, L, W, H);
     }
   };
-  U.animating = () => ACARA.some((id) => LY[id].native) || (KM.settings.scoreOnAir && LY.score.has);
+  U.animating = () => ACARA.some((id) => LY[id].native) || (KM.settings.scoreOnAir && LY.score.has && SC.has());
   U.canvas = () => composite(ACARA);
   let compCv = null;
   function composite(ids) {
@@ -208,35 +216,39 @@
   function pauseLayer(id) { const L = LY[id]; if (L.started && !L.paused) { L.paused = true; L.native = L.nextNative = null; window.klm.send('utc:pause', { L: id }); } }
   function resumeLayer(id) { const L = LY[id]; L.usedAt = KM.now(); if (!L.started) startLayer(id); else if (L.paused) { L.paused = false; window.klm.send('utc:resume', { L: id }); } }
   U.started = false; U.paused = false;
+  // lapisan dinyalakan satu per satu & hanya yang menampilkan sesuatu (tidak membebani saat aplikasi dibuka)
+  const BOOT_AT = performance.now();
   U.start = function () {
     if (!isEl()) { U.err = 'Lapisan UTC ON AIR hanya di versi PC (.exe). Di mode web, pakai alamat overlay di OBS/vMix.'; return; }
     U.avail = true; U.started = true; U.paused = false;
-    ACARA.forEach(startLayer);
+    const wait = Math.max(0, 1500 - (performance.now() - BOOT_AT));
+    ACARA.filter((id) => anyKey(id) && U.status).forEach((id, i) => setTimeout(() => { if (U.has() && anyKey(id) && !LY[id].started) startLayer(id); }, wait + i * 250));
   };
   U.boot = function () { // dipanggil saat aplikasi dibuka: hanya menyiapkan, belum merender
     if (!isEl()) { U.err = 'Lapisan UTC ON AIR hanya di versi PC (.exe). Di mode web, pakai alamat overlay di OBS/vMix.'; return; }
     U.avail = true;
-    if (S.inputs.some((i) => i.type === 'utc')) U.ensure();
-    if (KM.settings.scoreOnAir || S.inputs.some((i) => i.type === 'score')) SC.ensure();
+    if (U.has()) U.ensure();
+    if (SC.has()) setTimeout(() => { if (SC.want()) SC.ensure(); }, 2000); // tidak membebani saat aplikasi dibuka
   };
   U.ensure = function () {
-    if (!U.avail) return;
+    if (!U.avail || !U.has()) return;
     if (!U.started) U.start();
-    else { U.paused = false; ACARA.forEach((id) => { if (anyKey(id) || needAll()) resumeLayer(id); }); }
+    else { U.paused = false; ACARA.forEach((id) => { if (U.status && anyKey(id)) resumeLayer(id); }); }
     U.usedAt = KM.now();
   };
-  const needAll = () => S.inputs.some((i) => i.type === 'utc') || (document.getElementById('utcWs') && !document.getElementById('utcWs').hidden);
+  const needAll = () => false;
   setInterval(() => {
     if (!U.avail) return;
-    const now = KM.now(), all = needAll();
+    const now = KM.now(), has = U.has();
     if (U.started) for (const id of ACARA) {
       const L = LY[id];
-      if (anyKey(id) || all) { L.usedAt = now; if (L.paused) resumeLayer(id); continue; }
-      if (!L.paused && now - L.usedAt > 6000) pauseLayer(id);
+      if (has && U.status && anyKey(id)) { L.usedAt = now; if (L.paused || !L.started) resumeLayer(id); continue; }
+      if (!L.started) continue;
+      if (!L.paused && (!has || now - L.usedAt > 6000)) pauseLayer(id); // input dihapus → langsung berhenti
     }
     U.paused = U.started && ACARA.every((id) => LY[id].paused);
-    const L = LY.score, want = KM.settings.scoreOnAir || S.inputs.some((i) => i.type === 'score');
-    if (want) { if (!L.started || L.paused) SC.ensure(); L.usedAt = now; } else if (L.started && !L.paused && now - L.usedAt > 4000) pauseLayer('score');
+    const L = LY.score, want = SC.want();
+    if (want) { if (!L.started || L.paused) SC.ensure(); L.usedAt = now; } else if (L.started && !L.paused && (!SC.has() || now - L.usedAt > 4000)) pauseLayer('score');
   }, 1000);
   if (isEl() && window.klm.on) {
     window.klm.on('utc:frame', (f) => { try { U.pushFrame(f); } catch (e) { console.warn('utc frame', e); } window.klm.send('utc:ack', { L: f.L || 'main' }); });
@@ -252,27 +264,30 @@
   KM.on('resized', restartAll);
   KM.on('settings', () => setTimeout(restartAll, 50));
 
-  // ---------- input "Grafis UTC KLM Acara" ----------
+  // ---------- input "UTC Acara" ----------
   KM.inputTypes.utc = {
-    label: 'Grafis UTC KLM Acara', icon: '🎬',
+    label: 'UTC Acara', icon: '🎬',
     create(inp) { inp.rt.ready = true; setTimeout(() => U.ensure(), 0); if (!inp.opts.note) inp.opts.note = 'Lower third, title, running text, logo, lokasi, sosmed, opening/closing'; },
     source(inp) {
       if (ACARA.some((id) => LY[id].has)) { const c = composite(ACARA); return { src: c, w: c.width, h: c.height }; }
-      return KM.placeholder(inp, '🎬 UTC KLM Acara', U.avail ? 'Menunggu grafis…' : (U.err || 'Memuat…'));
+      return KM.placeholder(inp, '🎬 UTC Acara', U.avail ? 'Belum ada grafis tampil' : (U.err || 'Memuat…'));
     }
   };
-  U.addInput = () => {
-    const ex = S.inputs.find((i) => i.type === 'utc');
-    U.ensure();
+  U.addInput = (opts) => {
+    const ex = U.input();
     if (ex) { KM.engine.setPreview(ex.id); return ex; }
-    return KM.inputs.create('utc', { title: 'Grafis UTC KLM Acara' });
+    if (opts && opts.onAir != null) KM.settings.utcOnAir = !!opts.onAir;
+    const inp = KM.inputs.create('utc', { title: 'UTC Acara' });
+    U.ensure();
+    return inp;
   };
 
   // ---------- status dari server (setiap perubahan di panel UTC) ----------
   U.onStatus = function (st) {
     const was = U.status; U.status = st;
     if (U.avail && st) {
-      if (!U.started && (st.oc || Object.values(st.visible || {}).some(Boolean))) U.start();
+      if (!U.has()) { /* tanpa input UTC Acara tidak ada yang dirender */ }
+      else if (!U.started) { if (st.oc || Object.values(st.visible || {}).some(Boolean)) U.start(); }
       else if (U.started) for (const id of ACARA) if (anyKey(id)) resumeLayer(id);
     }
     const now = KM.now();
@@ -287,6 +302,7 @@
   };
   U.liveInfo = function () {
     if (!U.avail) return U.err || 'Memuat renderer…';
+    if (!U.has()) return 'Tambahkan input UTC Acara untuk menayangkan grafis';
     if (!U.started) return 'Renderer siap — menyala otomatis saat grafis ditampilkan';
     const st = U.status; if (!st) return 'Menunggu panel…';
     const names = { lt: 'Lower Third', tt: 'Title', tk: 'Running Text', bug: 'Logo', loc: 'Lokasi', soc: 'Sosial Media' };
@@ -296,33 +312,53 @@
   };
   U.cmd = (cmd, target, extra) => fetch('/utc/api/klm/cmd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ cmd, target }, extra || {})) }).then((r) => r.json()).catch((e) => ({ ok: false, msg: e.message }));
 
-  // ---------- UTC KLM Scoreboard ----------
-  SC.onStatus = (st) => { SC.status = st; SC.port = (st && st.port) || 0; KM.changed('score'); };
+  // ---------- UTC Score (UTC KLM Scoreboard) ----------
+  SC.input = () => S.inputs.find((i) => i.type === 'score');
+  SC.has = () => !!SC.input();
+  // lapisan scoreboard hanya dirender bila ada inputnya & dipakai (ON AIR / tayang) & ada yang tampil
+  SC.want = () => {
+    const si = SC.input(); if (!si) return false;
+    const used = KM.settings.scoreOnAir || (KM.engine.tallyOf && KM.engine.tallyOf(si) !== 'off');
+    const st = SC.status;
+    return used && (!st || !st.hasState || st.visible || st.extra);
+  };
+  SC.onStatus = (st) => { SC.status = st; SC.port = (st && st.port) || 0; if (U.avail && SC.want()) SC.ensure(); KM.changed('score'); };
   SC.url = (p) => SC.port ? 'http://' + location.hostname + ':' + SC.port + (p || '/') : '';
   SC.onAir = () => !!KM.settings.scoreOnAir;
-  SC.ensure = () => { if (!U.avail) return; if (!SC.port) { setTimeout(() => { if (SC.port && (KM.settings.scoreOnAir || S.inputs.some((i) => i.type === 'score'))) SC.ensure(); }, 1500); return; } resumeLayer('score'); };
+  SC.ensure = () => { if (!U.avail || !SC.has()) return; if (!SC.port) { setTimeout(() => { if (SC.port && SC.has()) SC.ensure(); }, 1500); return; } resumeLayer('score'); };
   SC.setOnAir = (on) => {
     KM.settings.scoreOnAir = on == null ? !SC.onAir() : !!on; KM.saveSettings();
     if (KM.settings.scoreOnAir) SC.ensure();
-    KM.toast(SC.onAir() ? '● SCOREBOARD ON AIR — tampil di Program' : 'Scoreboard disembunyikan dari Program', SC.onAir() ? 'ok' : 'warn');
+    KM.toast(SC.onAir() ? '● UTC SCORE ON AIR — scoreboard tampil di atas Program' : 'UTC Score disembunyikan dari Program', SC.onAir() ? 'ok' : 'warn');
     KM.changed('score');
   };
-  SC.cmd = (c) => fetch('/api/?Function=ScoreCmd&Value=' + encodeURIComponent(c)).then((r) => r.text()).then((t) => ({ ok: /successfully/.test(t), msg: t })).catch((e) => ({ ok: false, msg: e.message }));
+  const scoreSend = (c) => fetch('/api/?Function=ScoreCmd&Value=' + encodeURIComponent(c)).then((r) => r.text()).then((t) => ({ ok: /successfully/.test(t), msg: t })).catch((e) => ({ ok: false, msg: e.message }));
+  // panel UTC Score (penerima perintah) disiapkan di belakang bila belum ada, lalu perintah dicoba lagi
+  SC.cmd = async (c) => {
+    let r = await scoreSend(c);
+    if (!r.ok && /belum dibuka/.test(r.msg) && KM.ui && KM.ui.prepScorePanel) {
+      KM.ui.prepScorePanel();
+      for (let i = 0; i < 16 && !r.ok; i++) { await new Promise((ok) => setTimeout(ok, 400)); if (SC.status && SC.status.control) r = await scoreSend(c); }
+    }
+    return r;
+  };
   SC.reload = () => { if (U.avail && LY.score.started) window.klm.send('utc:reload', { L: 'score' }); };
   SC.coverage = () => U.coverage(['score']);
   KM.inputTypes.score = {
-    label: 'Scoreboard UTC KLM', icon: '🏆',
-    create(inp) { inp.rt.ready = true; setTimeout(() => SC.ensure(), 0); if (!inp.opts.note) inp.opts.note = 'Scoreboard olahraga (UTC KLM Scoreboard)'; },
+    label: 'UTC Score', icon: '🏆',
+    create(inp) { inp.rt.ready = true; setTimeout(() => SC.ensure(), 0); if (!inp.opts.note) inp.opts.note = 'Scoreboard olahraga: sepak bola, futsal, basket, voli, bulu tangkis'; },
     source(inp) {
       if (LY.score.has) { const c = composite(['score']); return { src: c, w: c.width, h: c.height }; }
-      return KM.placeholder(inp, '🏆 Scoreboard UTC KLM', U.avail ? 'Menunggu scoreboard…' : (U.err || 'Memuat…'));
+      return KM.placeholder(inp, '🏆 UTC Score', U.avail ? 'Menunggu scoreboard…' : (U.err || 'Memuat…'));
     }
   };
-  SC.addInput = () => {
-    const ex = S.inputs.find((i) => i.type === 'score');
-    SC.ensure();
+  SC.addInput = (opts) => {
+    const ex = SC.input();
     if (ex) { KM.engine.setPreview(ex.id); return ex; }
-    return KM.inputs.create('score', { title: 'Scoreboard UTC KLM' });
+    if (opts && opts.onAir != null) KM.settings.scoreOnAir = !!opts.onAir;
+    const inp = KM.inputs.create('score', { title: 'UTC Score' });
+    SC.ensure();
+    return inp;
   };
 
   // ---------- audio video opening/closing → mixer audio ----------
@@ -337,7 +373,7 @@
   }
   function syncAudio() {
     const st = U.status, oc = st && st.oc;
-    const want = U.avail && U.onAir() && oc && oc.video && oc.sound && !oc.done;
+    const want = U.avail && U.has() && (U.onAir() || viaInput(U.input())) && oc && oc.video && oc.sound && !oc.done;
     if (!want) {
       if (aInp && !aInp.rt.el.paused) aInp.rt.el.pause();
       if (!oc) aRun = '';

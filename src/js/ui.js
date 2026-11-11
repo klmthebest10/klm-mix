@@ -42,7 +42,7 @@
   // ---------- menu konteks ----------
   UI.ctxMenu = function (x, y, items) {
     document.querySelectorAll('.ctx').forEach((c) => c.remove());
-    const menu = h('div.ctx', items.map((it) => it === '-' ? h('hr') : h('button', { onclick: () => { menu.remove(); it.fn(); } }, it.label)));
+    const menu = h('div.ctx', items.filter(Boolean).map((it) => it === '-' ? h('hr') : h('button', { onclick: () => { menu.remove(); it.fn(); } }, it.label)));
     document.body.appendChild(menu);
     const r = menu.getBoundingClientRect();
     menu.style.left = Math.min(x, innerWidth - r.width - 6) + 'px';
@@ -90,15 +90,17 @@
     'score-arena': () => { if (!KM.score.port) return KM.toast('Scoreboard belum siap', 'warn'); const w = window.open(KM.score.url('/arena'), 'klm_score_arena'); if (!w) KM.toast('Jendela diblokir', 'warn'); }
   };
 
-  // ---------- workspace UTC KLM (panel asli, lengkap): Acara | Scoreboard ----------
+  // ---------- panel lengkap UTC Acara / UTC Score (aplikasi asli: setting, edit, simpan, tambah & ubah) ----------
+  // Keduanya terpisah dan hadir lewat input: tanpa input UTC Acara / UTC Score, panelnya belum ada.
   UI.utcMode = () => (KM.settings.utcMode === 'score' ? 'score' : 'acara');
+  const hasMode = (m) => (m === 'score' ? KM.score.has() : KM.utc.has());
   function utcFrame(ws, mode) {
     ws._frames = ws._frames || {};
     let f = ws._frames[mode];
     if (f) return f;
     const src = mode === 'score' ? KM.score.url('/') : '/utc';
     if (!src) return null;
-    f = document.createElement('iframe'); f.id = mode === 'score' ? 'scoreFrame' : 'utcFrame'; f.src = src;
+    f = document.createElement('iframe'); f.id = mode === 'score' ? 'scoreFrame' : 'utcFrame'; f.src = src; f.hidden = true;
     f.allow = 'camera; microphone; display-capture; clipboard-write; fullscreen';
     f.addEventListener('load', () => {
       try { f.contentWindow.addEventListener('keydown', (e) => { if (e.key === 'F9') { e.preventDefault(); UI.utcPanel(false); } }); } catch (e) {}
@@ -107,18 +109,31 @@
     if (mode === 'acara') ws._frame = f;
     return f;
   }
+  UI.utcFrameReady = (mode) => !!(($('#utcWs')._frames || {})[mode]);
+  // panel scoreboard disiapkan diam-diam di belakang saat input UTC Score ada → tombol cepat langsung jalan
+  UI.prepScorePanel = () => { if (KM.score.has() && KM.score.port) utcFrame($('#utcWs'), 'score'); };
   UI.utcPanel = function (show, mode) {
-    const ws = $('#utcWs'); show = show == null ? ws.hidden : !!show;
+    const ws = $('#utcWs');
+    if (!mode) {
+      const pv = KM.getInput(S.previewId);
+      mode = pv && pv.type === 'score' ? 'score' : pv && pv.type === 'utc' ? 'acara' : (hasMode(UI.utcMode()) ? UI.utcMode() : KM.utc.has() ? 'acara' : KM.score.has() ? 'score' : '');
+    }
+    show = show == null ? (ws.hidden || ws.dataset.mode !== mode) : !!show;
+    if (show && (!mode || !hasMode(mode))) {
+      ws.hidden = true; $('#app').classList.remove('utc-mode');
+      KM.toast('Tambahkan input ' + (mode === 'score' ? 'UTC Score' : mode === 'acara' ? 'UTC Acara' : 'UTC Acara / UTC Score') + ' dulu (menu Input).', 'warn', 4500);
+      KM.dialogs.addInput(mode === 'score' ? 'score' : mode === 'acara' ? 'utc' : undefined);
+      return;
+    }
     if (mode) { KM.settings.utcMode = mode; KM.saveSettings(); }
     const m = UI.utcMode();
     if (show) {
       const f = utcFrame(ws, m);
-      if (!f && m === 'score') { KM.toast('Scoreboard sedang dinyalakan… coba lagi sebentar', 'warn'); }
+      if (!f && m === 'score') { KM.toast('UTC Score sedang dinyalakan… coba lagi sebentar', 'warn'); }
       Object.entries(ws._frames || {}).forEach(([k, el]) => { el.hidden = k !== m; });
     }
     ws.hidden = !show;
     ws.dataset.mode = m;
-    $$('[data-utcmode]', ws).forEach((b) => b.classList.toggle('act', b.dataset.utcmode === m));
     $('#app').classList.toggle('utc-mode', show);
     if (show) {
       if (m === 'acara') KM.utc.ensure(); else KM.score.ensure();
@@ -126,7 +141,30 @@
     }
     updateUtc();
   };
-  document.addEventListener('click', (e) => { const b = e.target.closest('[data-utcmode]'); if (b) UI.utcPanel(true, b.dataset.utcmode); });
+  // ---------- panel samping: tab muncul hanya bila inputnya ada ----------
+  const SIDE = { utc: 'acara', score: 'score', klmcam: 'phone' };
+  UI.sideTab = (type) => SIDE[type];
+  UI.openSide = (type) => { const t = SIDE[type]; if (t) { syncDockTabs(); UI.dockTab(t); } };
+  function syncDockTabs() {
+    const has = { acara: KM.utc.has(), score: KM.score.has(), phone: S.inputs.some((i) => i.type === 'klmcam') };
+    $$('.dtabs button.dyn').forEach((b) => { b.hidden = !has[b.dataset.tab]; });
+    const bu = $('#bb-utc'), bs = $('#bb-score');
+    if (bu) bu.hidden = !has.acara;
+    if (bs) bs.hidden = !has.score;
+    if (has.score) setTimeout(() => UI.prepScorePanel(), Math.max(0, 6000 - performance.now())); // disiapkan setelah aplikasi selesai dibuka
+    if (UI.currentTab && has[UI.currentTab] === false) UI.dockTab('audio');
+    const ws = $('#utcWs');
+    if (!ws.hidden && !hasMode(ws.dataset.mode)) UI.utcPanel(false);
+  }
+  UI.syncDockTabs = syncDockTabs;
+  let lastPv = null;
+  KM.on('change', (w) => {
+    if (w === 'inputs' || w === 'input') syncDockTabs();
+    if (w === 'preview' && S.previewId !== lastPv) { // input UTC/KLMCAM dipilih → panel sampingnya dibuka
+      lastPv = S.previewId; const pv = KM.getInput(S.previewId);
+      if (pv && SIDE[pv.type] && UI.currentTab !== SIDE[pv.type]) UI.dockTab(SIDE[pv.type]);
+    }
+  });
   function updateScore() {
     const on = KM.score.onAir();
     ['#bb-score', '#ws-score-air'].forEach((s) => { const b = $(s); if (b) b.classList.toggle('on', on); });
@@ -136,11 +174,11 @@
       else {
         const ip = (KM._appInfo && KM._appInfo.ips && KM._appInfo.ips[0]) || '';
         const c = st.clients || {};
-        l.innerHTML = 'Port <b>' + st.port + '</b> • panel ' + (c.control ? '<b>terbuka</b>' : 'belum dibuka') + (c.overlay ? ' • overlay ' + c.overlay : '') + (c.hp ? ' • HP ' + c.hp : '') +
+        l.innerHTML = 'Port <b>' + st.port + '</b> • panel ' + (c.control ? '<b>siap</b>' : 'memuat…') + (c.overlay ? ' • overlay ' + c.overlay : '') + (c.hp ? ' • HP ' + c.hp : '') +
           (ip ? ' • HP: <b>http://' + KM.esc(typeof ip === 'string' ? ip : ip.address) + ':' + st.port + '/hp</b>' : '') + (st.migratedFrom ? ' • data lama dipindahkan' : '');
       }
     }
-    if (st && st.port && !$('#utcWs').hidden && UI.utcMode() === 'score' && !($('#utcWs')._frames || {}).score) UI.utcPanel(true);
+    if (st && st.port && KM.score.has()) setTimeout(() => UI.prepScorePanel(), Math.max(0, 6000 - performance.now()));
   }
   KM.on('change', (w) => { if (w === 'score') updateScore(); });
   function updateUtc() {
@@ -213,7 +251,7 @@
       const card = h('div.card', { draggable: true, 'data-id': inp.id },
         h('div.thumb', {
           onclick: (e) => { if (e.ctrlKey) KM.engine.cut(inp.id); else KM.engine.setPreview(inp.id); },
-          ondblclick: () => KM.dialogs.inputSettings(inp),
+          ondblclick: () => (inp.type === 'utc' || inp.type === 'score' ? UI.utcPanel(true, inp.type === 'score' ? 'score' : 'acara') : KM.dialogs.inputSettings(inp)),
           title: 'Klik: ke Preview • Ctrl+Klik: Cut • Dobel klik: pengaturan'
         }, inp.rt.thumb, h('span.num', String(idx + 1)), h('span.tly'), h('span.typ', { title: KM.inputTypes[inp.type].label }, typeIcon(inp)), h('div.pbar'), KM.inputs.hasAudio(inp) ? h('div.ameter', meter) : null),
         h('div.ctitle', h('span', { title: inp.title, ondblclick: async () => { const v = await UI.prompt('Ganti nama input', inp.title); if (v) { inp.title = v; KM.changed('inputs'); } } }, inp.title)),
@@ -250,7 +288,8 @@
         q('video', 'film', 'Video', 'MP4, MOV, MKV'),
         q('image', 'image', 'Gambar', 'Foto / logo'),
         q('screen', 'monitor', 'Layar', 'Desktop / jendela'),
-        q('utc', 'clapper', 'Grafis Acara', 'UTC KLM Acara')),
+        q('utc', 'clapper', 'UTC Acara', 'Grafis acara'),
+        q('score', 'trophy', 'UTC Score', 'Scoreboard olahraga')),
       h('div.row', { style: { marginTop: '14px', justifyContent: 'center' } },
         h('button.btn', { onclick: () => KM.dialogs.addInput() }, KI.el('grid'), 'Semua jenis input'),
         h('button.btn', { onclick: () => UI.openProject() }, KI.el('folder-open'), 'Buka proyek'),
@@ -304,6 +343,8 @@
 
   UI.inputMenu = function (inp, x, y) {
     UI.ctxMenu(x, y, [
+      SIDE[inp.type] ? { label: '🎛 Panel samping (tombol cepat)', fn: () => UI.openSide(inp.type) } : null,
+      inp.type === 'utc' || inp.type === 'score' ? { label: '🖥 Panel lengkap (atur, edit, simpan)', fn: () => UI.utcPanel(true, inp.type === 'score' ? 'score' : 'acara') } : null,
       { label: '⚙ Pengaturan…', fn: () => KM.dialogs.inputSettings(inp) },
       { label: '✎ Ganti nama…', fn: async () => { const v = await UI.prompt('Ganti nama input', inp.title); if (v) { inp.title = v; KM.changed('inputs'); } } },
       { label: '⧉ Duplikat', fn: () => KM.inputs.duplicate(inp) },
@@ -388,7 +429,7 @@
       if (e.ctrlKey && k.toLowerCase() === 'r') { e.preventDefault(); return KM.rec.toggleRecording(); }
       if (e.ctrlKey && k.toLowerCase() === 'l') { e.preventDefault(); return KM.rec.toggleStreaming(); }
       if (e.ctrlKey || e.altKey || e.metaKey) return;
-      if (k === 'F9') { e.preventDefault(); return UI.utcPanel(); }
+      if (k === 'F9') { e.preventDefault(); const ws = $('#utcWs'); return ws.hidden ? UI.utcPanel(true) : UI.utcPanel(false); }
       if (k === 'Escape' && !$('#utcWs').hidden) return UI.utcPanel(false);
       if (/^F[1-4]$/.test(k)) { e.preventDefault(); const n = +k[1] - 1, ch = S.overlays[n]; const on = ch.phase === 'in' || ch.phase === 'on'; return KM.engine.overlay(n, on ? null : S.previewId, on ? 'out' : 'in'); }
       if (/^[0-9]$/.test(e.code.replace('Digit', '')) && e.code.startsWith('Digit')) {
@@ -527,6 +568,8 @@
     const bl = $('#brandLogo'); if (bl) bl.replaceWith(KI.el('logo'));
     $('#bb-srt').addEventListener('contextmenu', (e) => { e.preventDefault(); KM.dialogs.settings('srt'); });
     $('#bb-score').addEventListener('contextmenu', (e) => { e.preventDefault(); UI.utcPanel(true, 'score'); });
+    $('#bb-utc').addEventListener('contextmenu', (e) => { e.preventDefault(); UI.utcPanel(true, 'acara'); });
+    syncDockTabs();
     renderTransSlots(); initTbar(); initShortcuts(); initDrop(); initSplitter();
     KM.$$('.dtabs button').forEach((b) => b.addEventListener('click', () => UI.dockTab(b.dataset.tab)));
     KM.$$('.dd > .mbtn').forEach((b) => b.addEventListener('click', () => b.parentElement.classList.toggle('open')));

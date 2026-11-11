@@ -195,7 +195,9 @@
       master: A.master ? { vol: A.master.vol, mute: A.master.muted } : null,
       replay: { enabled: KM.replay.enabled, events: KM.replay.events.map((e) => ({ id: e.id, name: e.name, sec: e.sec })), playing: KM.replay.playing, speed: KM.replay.speed },
       playlist: { running: KM.playlist.running, idx: KM.playlist.idx, len: KM.playlist.items.length },
-      utc: KM.utc && KM.utc.status ? { onAir: KM.utc.onAir(), eventName: KM.utc.status.eventName, visible: KM.utc.status.visible, oc: KM.utc.status.oc ? KM.utc.status.oc.kind : null } : null
+      utc: KM.utc && KM.utc.status ? { has: KM.utc.has(), onAir: KM.utc.onAir(), eventName: KM.utc.status.eventName, visible: KM.utc.status.visible, oc: KM.utc.status.oc ? KM.utc.status.oc.kind : null } : { has: !!(KM.utc && KM.utc.has()) },
+      score: KM.score ? { has: KM.score.has(), onAir: KM.score.onAir() } : null,
+      fps: KM.settings.fps, res: KM.settings.width + 'x' + KM.settings.height
     };
   }
   L.snapState = snapState;

@@ -51,6 +51,15 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      - name: Ukuran aplikasi (koffi hanya Windows x64)
+        shell: pwsh
+        run: |
+          $k = "dist/win-unpacked/resources/app.asar.unpacked/node_modules/koffi/build/koffi"
+          if (Test-Path $k) { Get-ChildItem $k | ForEach-Object { Write-Host "koffi: $($_.Name)" } } else { Write-Host "koffi build tidak ditemukan di $k" }
+          $sz = (Get-ChildItem dist/win-unpacked -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
+          Write-Host ("win-unpacked: {0:N0} MB" -f $sz)
+          Get-ChildItem dist/*.exe | ForEach-Object { Write-Host ("{0}: {1:N0} MB" -f $_.Name, ($_.Length / 1MB)) }
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

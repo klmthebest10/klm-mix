@@ -42,7 +42,7 @@
   D.qr = (text) => h('div.qr', { html: window.KMQR ? KMQR.svg(text, { border: 2 }) : '' });
 
   // =================== TAMBAH INPUT ===================
-  const ORDER = ['video', 'image', 'list', 'camera', 'klmcam', 'stream', 'call', 'screen', 'utc', 'score', 'title', 'audio', 'audiofile', 'colour', 'bars', 'browser', 'virtualset', 'replay', 'urlvideo'];
+  const ORDER = ['video', 'image', 'list', 'camera', 'klmcam', 'utc', 'score', 'stream', 'call', 'screen', 'title', 'audio', 'audiofile', 'colour', 'bars', 'browser', 'virtualset', 'replay', 'urlvideo'];
   D.addInput = function (preset) {
     const form = h('div', { style: { marginTop: '12px' } });
     let current = null, creator = null;
@@ -66,14 +66,26 @@
 
   const FORMS = {
     utc(form) {
-      form.append(h('div.sec', h('p', 'Grafis asli UTC KLM Acara (lower third, title, running text, logo, lokasi, sosmed, opening/closing) sebagai input transparan — pakai untuk Overlay 1–4, layer PiP, atau multiview.'),
-        h('p.muted', 'Tanpa input ini pun grafis UTC sudah tampil di Program lewat lapisan UTC ON AIR. Atur isinya di 🎬 UTC KLM Acara (F9).')));
-      return () => { KM.utc.addInput(); };
+      const o = { onAir: true };
+      form.append(h('div.sec', h('h4', '🎬 UTC Acara'),
+        h('p', 'Grafis siaran acara: lower third, title, running text (berjudul & banyak baris), logo, lokasi, sosial media, opening/closing — untuk pengajian, pernikahan, khitanan, seminar, dll.'),
+        h('ul.muted', { style: { margin: '6px 0 10px 18px', lineHeight: 1.7 } },
+          h('li', 'Setelah ditambahkan, tab ', h('b', 'UTC Acara'), ' muncul di panel samping berisi tombol cepat: tampil/sembunyi, ganti nama lower third, running text, opening/closing, preset.'),
+          h('li', 'Atur, edit, simpan, tambah & ubah semuanya di ', h('b', 'Panel lengkap'), ' (klik ganda input / F9).'),
+          h('li', 'Input bisa dipakai di Program, Overlay 1–4, layer & multiview.')),
+        chk('Langsung tampil di atas Program (UTC ACARA ON AIR)', true, (v) => { o.onAir = v; })));
+      return () => { if (KM.utc.has()) { KM.toast('UTC Acara sudah ada — dibuka di panel samping', 'info'); } KM.utc.addInput(o); UI.openSide('utc'); };
     },
     score(form) {
-      form.append(h('div.sec', h('p', 'Papan skor UTC KLM Scoreboard (sepak bola, futsal, basket, voli, badminton, dll.) sebagai input transparan — pakai untuk Overlay 1–4, layer PiP, atau multiview.'),
-        h('p.muted', 'Tanpa input ini pun scoreboard bisa tampil di Program lewat tombol SCORE ON AIR. Atur skor, tim, jam & tampilan di UTC KLM → Scoreboard (F9), atau dari HP.')));
-      return () => { KM.score.addInput(); };
+      const o = { onAir: true };
+      form.append(h('div.sec', h('h4', '🏆 UTC Score'),
+        h('p', 'Scoreboard olahraga siaran: sepak bola, futsal, basket, voli, bulu tangkis — skor, jam pertandingan, babak, foul, kartu, timeout, pergantian pemain, popup gol, data turnamen.'),
+        h('ul.muted', { style: { margin: '6px 0 10px 18px', lineHeight: 1.7 } },
+          h('li', 'Setelah ditambahkan, tab ', h('b', 'UTC Score'), ' muncul di panel samping: tombol skor ±, jam mulai/jeda, babak, foul, kartu, timeout, popup, tukar sisi.'),
+          h('li', 'Atur tim, logo, warna, aturan & turnamen di ', h('b', 'Panel lengkap'), ' (klik ganda input / F9), atau dari HP.'),
+          h('li', 'Alamat lama tetap jalan untuk OBS/vMix: http://IP:7171/overlay')),
+        chk('Langsung tampil di atas Program (UTC SCORE ON AIR)', true, (v) => { o.onAir = v; })));
+      return () => { if (KM.score.has()) { KM.toast('UTC Score sudah ada — dibuka di panel samping', 'info'); } KM.score.addInput(o); UI.openSide('score'); };
     },
     stream(form) {
       const o = { source: 'listen-rtmp', url: '', mode: 'copy', latency: 120, maxLag: 0.6, ndiName: '', ndiLow: false, key: 'klm' + Math.floor(Math.random() * 900 + 100) };
@@ -201,7 +213,7 @@
             h('p', '1. Buka aplikasi ', h('b', 'KLM Mix (APK)'), ' → mode ', h('b', 'Kamera'), ' → isi IP PC: ', h('b.urlbox', urls.map((u) => u.ip).join(' / '))),
             h('p', '2. Atau scan QR / buka di Chrome HP:'), ...urls.map((u) => h('div.urlbox', u.cam)),
             h('p.muted', 'Di browser HP akan muncul peringatan sertifikat → pilih Lanjutkan/Advanced. Pilih slot yang sama di HP.')))));
-      return () => { KM.inputs.create('klmcam', { title: 'KLMCAM ' + o.slot, opts: o }); };
+      return () => { KM.inputs.create('klmcam', { title: 'KLMCAM ' + o.slot, opts: o }); UI.openSide('klmcam'); };
     },
     title(form) {
       const o = { template: 'lt-klasik', theme: 'emas' };
@@ -735,7 +747,7 @@
       },
       about() {
         return h('div', h('div.sec', h('h4', 'KLM Mix ' + KM.version),
-          h('p', 'Studio produksi live all-in-one: switcher, transisi, overlay, title UTC KLM Acara, kamera HP KLMCAM, mixer audio, rekam, streaming multi-platform, instant replay, playlist, multiview & API vMix.'),
+          h('p', 'Studio produksi live all-in-one: switcher, transisi, overlay, grafis UTC Acara, scoreboard UTC Score, kamera HP KLMCAM, mixer audio, rekam, streaming multi-platform, instant replay, playlist, multiview & API vMix.'),
           h('p.muted', 'Berjalan 100% offline. Versi PC (.exe) & aplikasi HP (.apk).')),
           h('div.sec', h('h4', 'Browser engine'), h('div.muted', navigator.userAgent)));
       }

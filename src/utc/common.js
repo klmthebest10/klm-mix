@@ -450,7 +450,7 @@
     const tpl = arr => { const t = Object.assign({}, (arr || [])[0] || {}); delete t.id; return t; };
     const itemTpl = {
       lt: Object.assign({ name: '', role: '', extra: '', label: '' }, tpl(base.lt.items)),
-      tt: tpl(base.tt.items), tk: Object.assign({ text: '', on: true }, tpl(base.tk.items)),
+      tt: tpl(base.tt.items), tk: Object.assign({ title: '', text: '', on: true }, tpl(base.tk.items)),
       loc: tpl(base.loc.items), soc: tpl(base.soc.items), bug: tpl(base.bug.items)
     };
     for (const k of ['lt', 'tt', 'tk', 'loc', 'soc', 'bug']) {

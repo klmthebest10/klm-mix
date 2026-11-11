@@ -320,7 +320,7 @@ async function start(opts) {
   }
   if (!score && !process.env.KLM_NO_SCORE) {
     try {
-      score = createScore({ dataDir: path.join(configDir(), 'score'), pubDir: path.join(ROOT, 'src', 'score'), localIPs });
+      score = createScore({ dataDir: path.join(configDir(), 'score'), pubDir: path.join(ROOT, 'src', 'score'), localIPs, mixPort: () => ports.http, bridgeFile: path.join(ROOT, 'web', 'klm-bridge.js') });
       let t = null;
       score.onChange(() => { clearTimeout(t); t = setTimeout(() => { const m = mixer(); if (m) send(m, { t: 'score-status', status: score.status() }); }, 300); });
       score.start(cfg.scorePort).then(() => { const m = mixer(); if (m) send(m, { t: 'score-status', status: score.status() }); });

@@ -154,6 +154,8 @@ ol.steps{margin:6px 0 0;padding-left:20px;line-height:1.6}
 .url code{flex:1;background:#0f1420;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;overflow:auto;white-space:nowrap}
 .tk-it{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:8px}
 .tk-it textarea{min-height:40px;resize:vertical}
+.tk-f{display:flex;flex-direction:column;gap:6px;min-width:0}
+.tk-f .tk-ttl-in{font-weight:800;letter-spacing:.3px}
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(30px);background:#1f2a3f;border:1px solid #3a4a6c;padding:10px 18px;border-radius:12px;opacity:0;transition:.25s;z-index:99;font-weight:600;pointer-events:none;max-width:90vw;text-align:center}
 .toast.show{opacity:1;transform:translateX(-50%)}
 .mswitch{display:none}
@@ -853,7 +855,10 @@ function pTK(){
   const ev = cfg(), c = ev.tk;
   const items = c.items.map((it,i)=>`<div class="tk-it">
       <input type="checkbox" data-it="tk" data-id="${it.id}" data-f="on" ${it.on?'checked':''} title="Aktif">
-      ${FW('tk', it, 'text', `<textarea data-it="tk" data-id="${it.id}" data-f="text" rows="1" placeholder="Teks berjalan">${esc(it.text)}</textarea>`)}
+      <div class="tk-f">
+        <input class="tk-ttl-in" data-it="tk" data-id="${it.id}" data-f="title" value="${esc(it.title||'')}" placeholder="Judul pesan (opsional) — mis. INFO, JADWAL, PENGUMUMAN">
+        ${FW('tk', it, 'text', `<textarea data-it="tk" data-id="${it.id}" data-f="text" rows="${Math.min(8, Math.max(2, String(it.text||'').split('\n').length))}" placeholder="Isi teks berjalan — boleh banyak baris (Enter = baris baru, tiap baris tampil berurutan)">${esc(it.text)}</textarea>`)}
+      </div>
       <div class="bar" style="gap:2px"><button class="ic" data-act="up" data-l="tk" data-id="${it.id}">↑</button><button class="ic" data-act="down" data-l="tk" data-id="${it.id}">↓</button><button class="ic" data-act="del" data-l="tk" data-id="${it.id}">✕</button></div>
     </div>`).join('');
   return `
@@ -861,7 +866,7 @@ function pTK(){
     <h3>Running Text</h3>
     <div class="bar" style="margin-bottom:12px">
       <button class="take" style="min-width:200px;padding:12px" data-act="toggle" data-l="tk">${c.visible?'■ SEMBUNYIKAN RUNNING TEXT':'▶ TAMPILKAN RUNNING TEXT'}</button>
-      <span class="hint">Centang = pesan ikut berjalan. Bisa diedit saat tayang.</span>
+      <span class="hint">Centang = pesan ikut berjalan. Tiap pesan punya judul & boleh banyak baris. Bisa diedit saat tayang.</span>
     </div>
     <div class="list">${items}</div>
     <div class="bar" style="margin-top:10px"><button data-act="add" data-l="tk">+ Tambah pesan</button></div>
@@ -1095,7 +1100,7 @@ function newItem(L){
   if (L==='bug') return K.makeBugItem((cfg().bug.items||[]).length);
   if (L==='loc') return { id:K.uid(), label:'Lokasi baru', cap:'LOKASI', place:'Nama tempat', addr:'Alamat / kota' };
   if (L==='soc'){ const P = K.SOC_PLAT.website; return { id:K.uid(), label:P.n, plat:'website', cap:P.n, handle:P.h, extra:'', logoId:'', on:true }; }
-  return { id:K.uid(), text:'Pesan baru', on:true };
+  return { id:K.uid(), title:'', text:'Pesan baru', on:true };
 }
 async function loadPresets(){ try{ ui.presets = await (await fetch('/utc/api/presets')).json(); }catch(e){ ui.presets=[]; } if(ui.tab==='preset') renderAll(); }
 async function savePreset(name){
@@ -1616,5 +1621,7 @@ initSw();
 init();
 })();
 </script>
+<script>window.KLM_MIX = { app: 'acara' };</script>
+<script src="/klm-bridge.js" defer></script>
 </body>
 </html>
