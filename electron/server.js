@@ -157,8 +157,11 @@ function serveFile(req, res, file, extraHeaders) {
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('404 Tidak ditemukan'); }
     const type = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
-    const headers = Object.assign({ 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache', 'Access-Control-Allow-Origin': '*' }, extraHeaders || {});
+    // validator → buka berikutnya cukup "304 tidak berubah" & hasil kompilasi skrip (code cache) dipakai ulang
+    const etag = '"' + st.size.toString(36) + '-' + Math.floor(st.mtimeMs).toString(36) + '"';
+    const headers = Object.assign({ 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Cache-Control': 'no-cache', 'ETag': etag, 'Last-Modified': new Date(st.mtimeMs).toUTCString(), 'Access-Control-Allow-Origin': '*' }, extraHeaders || {});
     const range = req.headers.range;
+    if (!range && req.headers['if-none-match'] === etag) { res.writeHead(304, { 'ETag': etag, 'Cache-Control': headers['Cache-Control'], 'Access-Control-Allow-Origin': '*' }); return res.end(); }
     if (range) {
       const m = /bytes=(\d*)-(\d*)/.exec(range);
       let start = m && m[1] ? parseInt(m[1], 10) : 0;

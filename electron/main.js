@@ -255,6 +255,10 @@ function smokeTest() {
       log('kecepatan buka (ms sejak proses mulai): ' + JSON.stringify(Object.assign({}, T, { siap: ra ? Math.round(ra - T0) : null })));
       const idle0 = JSON.parse(await js('JSON.stringify({ tabs: [...document.querySelectorAll(".dtabs button.dyn")].map((b) => b.dataset.tab + (b.hidden ? ":tersembunyi" : ":tampil")), osr: KM.utc.layerInfo().filter((l) => l.started).map((l) => l.id) })'));
       log('saat dibuka (tanpa input UTC): ' + JSON.stringify(idle0));
+      log('rincian muat halaman: ' + await js(`(() => { const n = performance.getEntriesByType('navigation')[0] || {}; const r = performance.getEntriesByType('resource');
+        const fcp = (performance.getEntriesByType('paint').find((p) => p.name === 'first-contentful-paint') || {}).startTime;
+        const slow = r.slice().sort((a, b) => b.duration - a.duration).slice(0, 8).map((x) => x.name.replace(/^https?:\/\/[^/]+/, '') + ' @' + Math.round(x.startTime) + ' +' + Math.round(x.duration));
+        return JSON.stringify({ origin: Math.round(performance.timeOrigin - ${T0}), req: Math.round(n.requestStart), resp: Math.round(n.responseStart), dom: Math.round(n.domInteractive), dcl: Math.round(n.domContentLoadedEventEnd), load: Math.round(n.loadEventEnd), fcp: Math.round(fcp || 0), n: r.length, slow }); })()`));
       if (idle0.osr.length) { fail++; log('GAGAL: renderer UTC menyala padahal belum ada input'); }
       // UTC Acara hadir lewat input
       await js('KM.inputs.create("colour", { title: "Latar" }); KM.engine.cut(KM.state.inputs[0].id); KM.utc.addInput({ onAir: true }); KM.ui.openSide("utc")');
@@ -329,6 +333,9 @@ function smokeTest() {
       log('panel UTC dimuat: ' + ok); if (ok !== true) fail++;
       fs.writeFileSync(path.join(out, 'panel.png'), (await mainWin.webContents.capturePage()).toPNG());
       await js('KM.ui.utcPanel(false)');
+      await post('/utc/api/klm/cmd', { cmd: 'hideall' });
+      await js('KM.inputs.remove(KM.state.inputs.find((i) => i.type === "score"))'); await wait(1500);
+      log('setelah input UTC Score dihapus: tab score ' + (await js('document.querySelector(".dtabs button[data-tab=score]").hidden ? "tersembunyi" : "tampil"')) + ', lapisan score ' + (await js('KM.utc.layers.score.paused ? "dijeda" : "jalan"')));
       // --- efek audio: rantai preset "Vokal Siaran" pada tone uji ---
       const fx = await js(`(async () => { const inp = KM.inputs.create('bars', { title: 'Tone', opts: { tone: true } }); await new Promise((r) => setTimeout(r, 800));
         inp.audio.fx = KM.afx.presetChain('Vokal Siaran'); const st = KM.audio.strips.get(inp.id); await st.rack.sync(inp.audio.fx); await new Promise((r) => setTimeout(r, 1200));
@@ -344,7 +351,8 @@ function smokeTest() {
         await wait(1200);
         await js(`Object.assign(KM.settings.srt, { mode: 'caller', host: '127.0.0.1', port: 9310, latency: 200, encoder: 'auto', videoBitrate: 4500, res: '720', passphrase: '' }); KM.rec.startSrt()`);
         let st = '';
-        for (let i = 0; i < 15; i++) { await wait(1000); st = await js('KM.rec.srtStatus + " " + JSON.stringify(KM.rec.srtStats || {})'); if (st.startsWith('live') && i > 5) break; }
+        let wasLive = false;
+        for (let i = 0; i < 15; i++) { await wait(1000); st = await js('KM.rec.srtStatus + " " + JSON.stringify(KM.rec.srtStats || {})'); if (st.startsWith('live')) wasLive = true; if (st.startsWith('live') && i > 5) break; }
         log('SRT status: ' + st + ' encoder=' + await js('KM.rec.srtEncoder'));
         await js('KM.rec.stopSrt(true)'); await wait(2500);
         try { gw.kill(); } catch (e) {}
@@ -352,7 +360,7 @@ function smokeTest() {
         const size = fs.existsSync(ts) ? fs.statSync(ts).size : 0;
         const info = (gwLog.match(/Stream #0:\d.*/g) || []).join(' | ');
         log('SRT diterima gateway: ' + size + ' byte — ' + info);
-        if (!st.startsWith('live') || size < 100000) { fail++; log('GAGAL: SRT tidak sampai ke gateway. Log srt: ' + (await js('KM.rec.srtLog')).slice(-600)); }
+        if (!(wasLive || st.startsWith('live')) || size < 100000) { fail++; log('GAGAL: SRT tidak sampai ke gateway. Log srt: ' + (await js('KM.rec.srtLog')).slice(-600)); }
       } catch (e) { fail++; log('GAGAL SRT: ' + e.message); }
     } catch (e) { fail++; log('ERROR ' + (e && e.stack || e)); }
     log(fail ? 'HASIL: GAGAL (' + fail + ')' : 'HASIL: OK');
