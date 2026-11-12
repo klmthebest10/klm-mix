@@ -593,18 +593,44 @@
       keys() {
         const list = st.shortcuts || (st.shortcuts = []);
         const wrap = h('div');
-        const fnOpts = KM.api.list().map((f) => [f, f]);
+        const all = KM.api.list();
+        const COMMON = ['Cut', 'Fade', 'Merge', 'Wipe', 'Zoom', 'Transition1', 'Transition2', 'Transition3', 'Transition4', 'PreviewInput', 'ActiveInput', 'QuickPlay',
+          'OverlayInput1', 'OverlayInput2', 'OverlayInput3', 'OverlayInput4', 'FadeToBlack', 'StartStopRecording', 'StartStopStreaming', 'Snapshot', 'UTCOnAir', 'ScoreOnAir', 'ScoreCmd', 'Play', 'Pause', 'Restart'].filter((f) => all.includes(f));
+        // params "Input=..&Duration=..&Value=.." ⇄ kolom terpisah
+        const parse = (str) => { const o = {}; String(str || '').split('&').forEach((kv) => { const i = kv.indexOf('='); if (i > 0) o[kv.slice(0, i).trim()] = decodeURIComponent(kv.slice(i + 1).trim()); }); return o; };
+        const compose = (o) => Object.entries(o).filter(([, v]) => v !== '' && v != null).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
+        const fnSelect = (val, on) => {
+          const se = h('select', { style: { width: '190px' }, onchange: () => on(se.value) },
+            h('optgroup', { label: 'Sering dipakai' }, COMMON.map((f) => h('option', { value: f, selected: f === val }, f))),
+            h('optgroup', { label: 'Semua fungsi' }, all.filter((f) => !COMMON.includes(f)).map((f) => h('option', { value: f, selected: f === val }, f))));
+          return se;
+        };
+        const inputSelect = (val, on) => {
+          const se = h('select', { style: { width: '190px' }, title: 'Input yang dikenai shortcut', onchange: () => on(se.value) },
+            h('option', { value: '' }, '— input Preview / tidak perlu —'),
+            S.inputs.map((inp) => h('option', { value: inp.id, selected: inp.id === val || String(KM.inputNum(inp)) === String(val) || inp.title === val }, KM.inputNum(inp) + '. ' + inp.title)));
+          if (val && !S.inputs.some((i) => i.id === val || String(KM.inputNum(i)) === String(val) || i.title === val)) se.append(h('option', { value: val, selected: true }, val + ' (tidak ada)'));
+          return se;
+        };
         const build = () => wrap.replaceChildren(h('div.sec', h('h4', 'Shortcut kustom (Stream Deck / keyboard / USB macro pad)'),
+          list.length ? h('div.scrow.head', h('span', 'Tombol'), h('span', 'Fungsi'), h('span', 'Input'), h('span', 'Transisi (ms)'), h('span', 'Nilai'), h('span')) : null,
           ...list.map((s, i) => {
-            const key = h('input', { value: s.key, readOnly: true, placeholder: 'tekan tombol…', style: { width: '130px', cursor: 'pointer' } });
+            const p = parse(s.params);
+            const upd = () => { s.params = compose(p); save(); };
+            const key = h('input', { value: s.key, readOnly: true, placeholder: 'tekan tombol…', style: { cursor: 'pointer' }, title: 'Klik lalu tekan kombinasi tombol' });
             key.addEventListener('keydown', (e) => { e.preventDefault(); if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return; s.key = KM.script.combo(e); key.value = s.key; save(); });
-            return h('div.row', { style: { marginBottom: '6px' } }, key, sel(fnOpts, s.fn, (v) => { s.fn = v; save(); }),
-              h('input', { value: s.params || '', placeholder: 'Input=2', style: { width: '170px' }, onchange: (e) => { s.params = e.target.value; save(); } }),
-              h('button.btn.sm', { onclick: () => { list.splice(i, 1); save(); build(); } }, '✕'));
+            const dur = KM.api.usesDuration(s.fn), val = KM.api.usesValue(s.fn), inpOk = KM.api.usesInput(s.fn) || dur;
+            const defMs = /^Transition([1-4])$/.test(s.fn) ? (KM.settings.transitions[+s.fn.slice(-1) - 1] || {}).dur : 500;
+            return h('div.scrow', key,
+              fnSelect(s.fn, (v) => { s.fn = v; save(); build(); }),
+              inpOk ? inputSelect(p.Input || '', (v) => { p.Input = v; upd(); }) : h('span.muted', '—'),
+              dur ? h('input', { type: 'number', min: 0, max: 10000, step: 50, value: p.Duration || '', placeholder: String(defMs || 500), title: 'Lama transisi dalam milidetik (kosong = bawaan)', onchange: (e) => { p.Duration = e.target.value; upd(); } }) : h('span.muted', '—'),
+              val ? h('input', { value: p.Value || '', placeholder: 'nilai', onchange: (e) => { p.Value = e.target.value; upd(); } }) : h('span.muted', '—'),
+              h('button.btn.sm', { title: 'Hapus shortcut', onclick: () => { list.splice(i, 1); save(); build(); } }, '✕'));
           }),
-          h('div.row', h('button.btn.pri', { onclick: () => { list.push({ key: '', fn: 'Cut', params: '' }); save(); build(); } }, '＋ Tambah shortcut'),
-            h('span.muted', 'Klik kotak kiri lalu tekan kombinasi tombol. Shortcut kustom menang atas shortcut bawaan.'))),
-          h('div.sec', h('h4', 'Shortcut bawaan'), h('p.muted', 'Spasi=Cut • Enter=Transisi 1 • 1–0=Preview • Shift+angka=Cut • F1–F4=Overlay • B=FTB • Q=Quick Play • P=Play • M=Replay • Ctrl+R/L=Rekam/Live')));
+          h('div.row', { style: { marginTop: '8px' } }, h('button.btn.pri', { onclick: () => { list.push({ key: '', fn: 'Fade', params: '' }); save(); build(); } }, '＋ Tambah shortcut'),
+            h('span.muted', 'Klik kotak Tombol lalu tekan kombinasi. Pilih input dari daftar & atur lama transisi (ms). Shortcut kustom menang atas bawaan.'))),
+          h('div.sec', h('h4', 'Shortcut bawaan'), h('p.muted', 'Spasi=Cut • Enter=Transisi 1 • 1–0=Preview • Shift+angka=Cut • F1–F4=Overlay • B=FTB • Q=Quick Play • P=Play • M=Replay • Ctrl+R/L=Rekam/Live • F9=Panel lengkap UTC')));
         build();
         return wrap;
       },

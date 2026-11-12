@@ -398,6 +398,22 @@
     KM.changed('fx');
     return FX.external;
   };
+  // ---------------- plugin audio yang terpasang di PC (VST3 / VST2 / CLAP) ----------------
+  FX.pc = null; // hasil pindai terakhir
+  FX.scanPC = async function () {
+    if (!(KM.isElectron && window.klm && window.klm.invoke)) throw new Error('Pindai plugin hanya di versi PC (.exe)');
+    FX.pc = await window.klm.invoke('fx:scan-pc', KM.settings.vstFolders || []);
+    return FX.pc;
+  };
+  // padanan efek bawaan untuk plugin yang terdeteksi (berdasarkan kategori & nama)
+  FX.equivalent = function (pl) {
+    const n = (pl.name + ' ' + (pl.sub || '')).toLowerCase();
+    const by = [[/de-?ess/, 'deesser'], [/gate/, 'gate'], [/limit|maximi|clip|loud|master/, 'limiter'], [/hum/, 'hum'], [/noise|denois|restor|clean/, 'denoise'], [/flang/, 'flanger'], [/trem|pan/, 'tremolo'], [/chorus|phase|modul/, 'chorus'],
+      [/pitch|tune|harmon|voice|vocal/, 'pitch'], [/delay|echo/, 'delay'], [/verb|room|hall|plate|space|convol/, 'reverb'], [/eq|equali|filter|tone/, 'eq5'], [/comp|dynam|level|kotelnikov|1176|la-?2a|pro-c/, 'comp'], [/sat|dist|drive|tape|warm|tube/, 'saturate'], [/width|stereo|imag/, 'width']];
+    for (const [re, id] of by) if (re.test(n) && FX.defs[id]) return id;
+    return { EQ: 'eq5', Dinamika: 'comp', Reverb: 'reverb', Delay: 'delay', 'Vokal/Pitch': 'pitch', Restorasi: 'denoise', Modulasi: 'chorus', Saturasi: 'saturate', 'Mastering/Meter': 'limiter' }[pl.cat] || null;
+  };
+
   /** pasang plugin dari file yang dipilih pengguna (.js plugin / .wav IR) */
   FX.importFiles = async function (files) {
     const out = [];
@@ -453,7 +469,7 @@
         return h('div.fxi' + (item.on === false ? '.off' : ''),
           h('div.fxh',
             h('input', { type: 'checkbox', checked: item.on !== false, title: 'Aktif / bypass', onchange: (e) => { item.on = e.target.checked; rack() && rack().mix(item); save(); draw(); } }),
-            h('button.fxn', { onclick: () => { expanded ? open.delete(item.id) : open.add(item.id); draw(); }, title: d.desc || '' }, KI.el(expanded ? 'chev-down' : 'chev-right'), h('b', d.name), h('span.muted', d.cat)),
+            h('button.fxn', { onclick: () => { expanded ? open.delete(item.id) : open.add(item.id); draw(); }, title: d.desc || '' }, KI.el(expanded ? 'chev-down' : 'chev-right'), h('b', d.name), item.alias ? h('span.pill', { title: 'Padanan bawaan untuk plugin PC ' + item.alias }, '≈ ' + item.alias) : null, h('span.muted', d.cat)),
             h('span.grow'),
             h('span.fxmix', 'Mix', h('input', { type: 'range', min: 0, max: 100, value: Math.round(item.mix * 100), oninput: (e) => { item.mix = e.target.value / 100; mixOut.textContent = e.target.value + '%'; rack() && rack().mix(item); }, onchange: save }), mixOut),
             h('button.cb', { title: 'Naik', disabled: i === 0, onclick: () => { L.splice(i - 1, 0, L.splice(i, 1)[0]); commit(); draw(); } }, KI.el('chev-up')),
@@ -479,8 +495,35 @@
             KM.isElectron ? h('button.btn', { onclick: () => window.klm.invoke('fx:open-folder') }, KI.el('folder-open'), 'Folder plugin') : null,
             KM.isElectron ? h('button.btn', { onclick: async () => { await FX.loadAll(); draw(); KM.toast('Plugin dimuat ulang: ' + FX.external.filter((x) => x.ok).length + ' berhasil', 'ok'); } }, KI.el('refresh'), 'Muat ulang') : null),
           h('p.muted', 'Format: plugin KLM (.js — Web Audio/AudioWorklet, lihat docs/PLUGIN-AUDIO.md) dan impulse response (.wav) untuk reverb ruangan asli, hall, plate, atau kabinet speaker. Plugin VST/AU tidak bisa dimuat langsung — jalankan di host VST (mis. Cantabile/LightHost) lalu masukkan ke KLM Mix lewat kabel audio virtual (VB-Cable) sebagai input Mic/Audio.'),
-          FX.external.length ? h('div.list', FX.external.map((x) => h('div.li', KI.el(x.kind === 'ir' ? 'activity' : 'zap'), h('span.grow', (x.title || x.name) + (x.kind === 'ir' ? ' (impulse response)' : '')), h('span.pill' + (x.ok ? '.ok' : '.red'), x.ok ? 'terpasang' : 'gagal: ' + x.err)))) : null));
+          FX.external.length ? h('div.list', FX.external.map((x) => h('div.li', KI.el(x.kind === 'ir' ? 'activity' : 'zap'), h('span.grow', (x.title || x.name) + (x.kind === 'ir' ? ' (impulse response)' : '')), h('span.pill' + (x.ok ? '.ok' : '.red'), x.ok ? 'terpasang' : 'gagal: ' + x.err)))) : null),
+        pcSection());
     }
+    // ---- plugin VST/CLAP yang terpasang di PC ----
+    let pcFilter = '', scanning = false;
+    function pcSection() {
+      const pc = FX.pc;
+      const head = h('div.row',
+        h('button.btn' + (pc ? '' : '.pri'), { disabled: scanning || !KM.isElectron, onclick: async () => { scanning = true; draw(); try { await FX.scanPC(); } catch (e) { KM.toast(e.message, 'warn'); } scanning = false; draw(); } }, KI.el('search'), scanning ? 'Memindai…' : pc ? 'Pindai ulang' : 'Pindai PC'),
+        h('button.btn', { title: 'Tambah folder plugin lain untuk dipindai', disabled: !KM.isElectron, onclick: async () => { const d = await window.klm.invoke('dialog:folder'); if (d) { KM.settings.vstFolders = [...new Set([...(KM.settings.vstFolders || []), d])]; KM.saveSettings(); scanning = true; draw(); try { await FX.scanPC(); } catch (e) {} scanning = false; draw(); } } }, KI.el('folder-open'), 'Folder lain…'),
+        pc && pc.plugins.length ? h('input', { placeholder: 'Cari plugin…', value: pcFilter, style: { flex: 1, minWidth: '120px' }, oninput: (e) => { pcFilter = e.target.value.toLowerCase(); const l = body.querySelector('.pclist'); if (l) l.replaceWith(pcList()); } }) : null);
+      const info = !KM.isElectron ? h('p.muted', 'Pindai plugin PC hanya di versi PC (.exe).')
+        : !pc ? h('p.muted', 'Cari plugin audio VST3, VST2 & CLAP yang sudah terpasang di PC (folder standar Windows + folder tambahan).')
+        : h('p.muted', pc.plugins.length + ' plugin ditemukan di ' + pc.folders.length + ' folder' + (pc.hosts.length ? ' • terpasang: ' + pc.hosts.join(', ') : '') + '.');
+      function pcList() {
+        const L = list();
+        const rows = (pc ? pc.plugins : []).filter((x) => !pcFilter || (x.name + ' ' + x.vendor + ' ' + x.cat + ' ' + x.format).toLowerCase().includes(pcFilter));
+        return h('div.pclist', rows.slice(0, 400).map((x) => {
+          const eq = FX.equivalent(x), d = eq && FX.defs[eq];
+          return h('div.pcr', h('span.pill.fmt', x.format), h('div.pcn', h('b', x.name), h('small', [x.vendor, x.version, x.cat].filter(Boolean).join(' • '))),
+            d ? h('button.btn.sm', { title: 'Tambahkan efek bawaan yang setara ke rak ini (' + d.name + ')', onclick: async () => { const it = FX.newItem(eq); it.alias = x.name; L.push(it); open.add(it.id); await commit(); draw(); KM.toast('Ditambahkan: ' + d.name + ' (padanan ' + x.name + ')', 'ok'); } }, KI.el('plus'), d.name.split(' (')[0])
+              : h('span.muted', x.cat === 'Instrumen' ? 'instrumen' : '—'));
+        }));
+      }
+      return h('div.sec', { style: { marginTop: '12px' } }, h('h4', KI.el('search'), 'Plugin terpasang di PC (VST3 / VST2 / CLAP)'), head, info,
+        pc && pc.plugins.length ? pcList() : null,
+        pc ? h('p.muted', { style: { fontSize: '11.5px' } }, 'Tombol ＋ memasang efek bawaan KLM Mix yang setara (diberi tanda ≈ nama plugin). Untuk memakai plugin VST aslinya: jalankan di host VST' + (pc.hosts.length ? ' (' + pc.hosts.join(', ') + ')' : ' (mis. Light Host / Cantabile)') + ', kirim audio lewat kabel virtual (VB-CABLE/Voicemeeter) — keluarkan Bus A/B ke "CABLE Input" (Pengaturan → Audio), lalu tambahkan output host sebagai input Mic/Audio.') : null);
+    }
+    if (KM.isElectron && !FX.pc && !FX._autoScan) { FX._autoScan = true; FX.scanPC().then(() => draw()).catch(() => {}); }
     draw();
     UI.modal('🎚 Efek audio — ' + (isMaster ? 'Master' : (KM.inputNum(inp) + '. ' + inp.title)), body, [{ label: 'Selesai', cls: 'pri' }], 'wide');
   };

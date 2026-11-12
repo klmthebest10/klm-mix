@@ -329,13 +329,26 @@
   // ---------- thumbnail ----------
   // Sumber live (kamera, KLMCAM, layar, tamu) tampil langsung dari stream-nya di kartu (mulus, nyaris tanpa beban).
   // Sisanya digambar ulang berdasarkan waktu: media yang sedang diputar sering, gambar diam jarang. Dibatasi anggaran waktu per frame.
-  E.liveThumb = (inp) => !!(inp.rt.stream && inp.rt.stream.getVideoTracks().some((t) => t.readyState === 'live') && !KM.inputTypes[inp.type].noVideo);
+  // sumber video langsung untuk thumbnail: stream kamera/KLMCAM/layar, atau video yang sedang diputar (captureStream)
+  E.liveStream = (inp) => {
+    if (KM.inputTypes[inp.type].noVideo) return null;
+    const rt = inp.rt;
+    if (rt.stream && rt.stream.getVideoTracks().some((t) => t.readyState === 'live')) return rt.stream;
+    const md = KM.inputs.media(inp);
+    if (!md || md.tagName !== 'VIDEO' || md.paused || md.readyState < 2 || !md.captureStream || rt.capFail) return null;
+    if (!rt.cap || rt.capEl !== md) {
+      try { rt.cap = md.captureStream(); rt.capEl = md; } catch (e) { rt.capFail = true; return null; }
+    }
+    return rt.cap.getVideoTracks().some((t) => t.readyState === 'live') ? rt.cap : null;
+  };
+  E.liveThumb = (inp) => !!E.liveStream(inp);
   let thumbCursor = 0;
   function updateThumbs(now) {
     const n = S.inputs.length; if (!n) return;
     const mode = KM.settings.perf || 'seimbang';
-    const fast = 1000 / (mode === 'hemat' ? 6 : mode === 'kualitas' ? 20 : 12), slow = mode === 'hemat' ? 2000 : 900;
-    const budget = mode === 'hemat' ? 2 : 4, t0 = performance.now();
+    // yang tersisa di sini hanya sumber kanvas (title, jam, slide, grafis UTC…) — ringan, jadi bisa lebih sering
+    const fast = 1000 / (mode === 'hemat' ? 10 : 30), slow = mode === 'hemat' ? 2000 : 900;
+    const budget = mode === 'hemat' ? 3 : 6, t0 = performance.now();
     for (let k = 0; k < n; k++) {
       const inp = S.inputs[(thumbCursor + k) % n];
       const cv = inp.rt.thumb; if (!cv || !cv.isConnected) continue;
@@ -388,8 +401,8 @@
     if (!idle && E.frame % pvEvery === 0) {
       const v = E.vctx, pw = E.prev.width, ph = E.prev.height;
       v.globalAlpha = 1; v.fillStyle = '#000'; v.fillRect(0, 0, pw, ph);
-      const pv = KM.getInput(S.previewId);
-      if (pv) drawInputRect(v, pv, 0, 0, pw, ph, 0);
+      if (E.gridActive()) drawPvGrid(v, pw, ph);
+      else { const pv = KM.getInput(S.previewId); if (pv) drawInputRect(v, pv, 0, 0, pw, ph, 0); }
     }
 
     if (!idle) updateThumbs(now);
@@ -399,6 +412,52 @@
 
     fpsCount++;
     if (now - fpsT >= 1000) { E.fps = Math.round(fpsCount * 1000 / (now - fpsT)); fpsCount = 0; fpsT = now; KM.emit('fps', E.fps); }
+  };
+
+  // ---------- Preview grid: banyak input sekaligus di monitor Preview (dipilih manual) ----------
+  // klik 1× = pilih ke Preview, klik 2× = pilih + zoom satu layar penuh (klik 2× lagi / Esc = kembali ke grid)
+  E.pvZoom = null;
+  E.gridIds = () => { const g = KM.settings.pvGrid; return g && g.ids ? g.ids.filter((id) => KM.getInput(id)) : []; };
+  E.gridActive = () => !!(KM.settings.pvGrid && KM.settings.pvGrid.on && !E.pvZoom);
+  E.gridLayout = (n, pw, ph) => {
+    const cols = Math.max(1, Math.ceil(Math.sqrt(n))), rows = Math.max(1, Math.ceil(n / cols));
+    const gap = Math.round(pw * 0.006), cw = (pw - gap * (cols + 1)) / cols, ch = (ph - gap * (rows + 1)) / rows;
+    let w = cw, hh = cw * 9 / 16; if (hh > ch) { hh = ch; w = ch * 16 / 9; }
+    const ox = (pw - (w * cols + gap * (cols - 1))) / 2, oy = (ph - (hh * rows + gap * (rows - 1))) / 2;
+    const cells = [];
+    for (let i = 0; i < n; i++) { const c = i % cols, r = Math.floor(i / cols); cells.push({ x: ox + c * (w + gap), y: oy + r * (hh + gap), w, h: hh }); }
+    return cells;
+  };
+  function drawPvGrid(v, pw, ph) {
+    const ids = E.gridIds();
+    if (!ids.length) {
+      v.fillStyle = '#7d8696'; v.font = '600 ' + Math.round(ph * 0.04) + 'px Plus Jakarta Sans, sans-serif'; v.textAlign = 'center'; v.textBaseline = 'middle';
+      v.fillText('Grid Preview kosong — klik "+ Input" di atas untuk menambah input', pw / 2, ph / 2); v.textAlign = 'left'; v.textBaseline = 'alphabetic';
+      return;
+    }
+    const cells = E.gridLayout(ids.length, pw, ph), fs = Math.max(10, Math.round(cells[0].h * 0.09));
+    ids.forEach((id, i) => {
+      const inp = KM.getInput(id), c = cells[i];
+      v.save(); v.beginPath(); v.rect(c.x, c.y, c.w, c.h); v.clip();
+      v.fillStyle = '#000'; v.fillRect(c.x, c.y, c.w, c.h);
+      try { drawInputRect(v, inp, c.x, c.y, c.w, c.h, 0); } catch (e) {}
+      // label
+      const lbl = KM.inputNum(inp) + '  ' + inp.title;
+      v.font = '700 ' + fs + 'px Plus Jakarta Sans, sans-serif';
+      const tw = Math.min(c.w - 8, v.measureText(lbl).width + fs);
+      v.fillStyle = 'rgba(0,0,0,.62)'; v.fillRect(c.x, c.y + c.h - fs * 1.6, tw, fs * 1.6);
+      v.fillStyle = '#fff'; v.fillText(lbl, c.x + fs * 0.5, c.y + c.h - fs * 0.5, c.w - fs);
+      v.restore();
+      const tl = id === S.previewId ? '#22c55e' : E.live.has(id) ? '#ef4444' : null;
+      if (tl) { const lw = Math.max(2, Math.round(c.h * 0.025)); v.strokeStyle = tl; v.lineWidth = lw; v.strokeRect(c.x + lw / 2, c.y + lw / 2, c.w - lw, c.h - lw); }
+    });
+  }
+  E.gridHit = (fx, fy) => { // fx,fy = posisi relatif 0..1 di kanvas Preview
+    const ids = E.gridIds(); if (!ids.length) return null;
+    const pw = E.prev.width, ph = E.prev.height, x = fx * pw, y = fy * ph;
+    const cells = E.gridLayout(ids.length, pw, ph);
+    const i = cells.findIndex((c) => x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h);
+    return i >= 0 ? ids[i] : null;
   };
 
   // ---------- mode diam: adegan statis tanpa output aktif → render 6 fps (hemat CPU/GPU/baterai) ----------
@@ -419,6 +478,7 @@
     if (KM.playlist && KM.playlist.running) return true;
     if (S.inputs.some((i) => KM.inputTypes[i.type].playable && KM.inputs.isPlaying(i))) return true; // video yang diputar (juga untuk thumbnail-nya)
     if (movingInput(KM.getInput(S.programId)) || movingInput(KM.getInput(S.previewId))) return true;
+    if (E.gridActive() && E.gridIds().some((id) => movingInput(KM.getInput(id)))) return true;
     if ((S.overlays || []).some((o) => o && o.phase !== 'off' && (o.phase !== 'on' || movingInput(KM.getInput(o.inputId))))) return true;
     return false;
   };

@@ -73,10 +73,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
    - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.6.0.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.6.0.exe` (tanpa instal)
+     - `KLM-Mix-Setup-1.7.0.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Mix-Portable-1.7.0.exe` (tanpa instal)
    - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
-3. Untuk rilis resmi: buat tag `v1.6.0` → file otomatis muncul di halaman **Releases**.
+3. Untuk rilis resmi: buat tag `v1.7.0` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
 
@@ -130,6 +130,13 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Skrip JavaScript** (pengganti VB.NET): `API.Function("Cut")`, `Sleep()`, `Input()`, jalankan dari tombol/shortcut/trigger/Stream Deck
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Efek audio bawaan** (pengganti VST): high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
+
+### Baru di v1.7
+- **Daftar input mulus total**: kamera, KLMCAM, layar **dan video yang sedang diputar** tampil sebagai thumbnail live yang digambar langsung oleh GPU (frame rate asli, tidak ikut beban mixer); sumber kanvas (title, jam, grafis) diperbarui sampai 30 fps; meter audio & progres video memakai transform (tanpa hitung ulang tata letak); tombol kartu hanya dibuat ulang bila statusnya berubah
+- **Grid Preview**: tombol ⊞ di monitor Preview menampilkan banyak input sekaligus (pilih sendiri lewat **+ Input**, atau klik kanan input → *Tambah ke grid Preview*). **Klik 1×** = pilih ke Preview, **klik 2×** = pilih + zoom satu layar penuh (klik 2× lagi / Esc / tombol *Kembali ke grid*), Ctrl+klik = Cut
+- **Shortcut lebih mudah**: saat menambah shortcut, pilih **input dari daftar nama** dan isi **lama transisi (ms)**; kolom nilai muncul hanya untuk fungsi yang memakainya; fungsi yang sering dipakai di urutan atas
+- **Deteksi plugin audio terpasang di PC** (VST3, VST2, CLAP; folder standar Windows, folder dari registri, dan folder tambahan) di dialog Efek audio → *Plugin terpasang di PC*: cari, lihat vendor/kategori, dan **＋ tambahkan padanan efek bawaan** (ditandai ≈ nama plugin). Host VST & kabel virtual yang terpasang (Light Host, Cantabile, Voicemeeter, VB-CABLE, Equalizer APO…) ikut terdeteksi untuk merutekan audio ke plugin aslinya
+- **Panel samping tertata & responsif**: kepala panel tetap di atas (nama, ON AIR, panel lengkap), bagian bisa dilipat (diingat), 1–3 kolom menyesuaikan lebar panel, tab panel satu baris (label otomatis jadi ikon saat sempit) — UTC Acara, UTC Score, KLMCAM
 
 ### Baru di v1.6
 - **UTC Acara & UTC Score terpisah dan hadir lewat input** (menu **Input** → *UTC Acara* / *UTC Score*, juga *KLMCAM*). Tanpa inputnya tidak ada yang dirender — aplikasi tetap ringan
@@ -231,4 +238,4 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.6.0
+KLM Mix 1.7.0

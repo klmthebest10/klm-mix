@@ -4,6 +4,7 @@
 'use strict';
 const { app, BrowserWindow, ipcMain, dialog, desktopCapturer, session, screen, shell, Menu } = require('electron');
 const path = require('path');
+const os = require('os');
 const fs = require('fs');
 
 const T0 = Date.now() - Math.round(process.uptime() * 1000); // saat proses dimulai (untuk ukur kecepatan buka)
@@ -162,6 +163,52 @@ ipcMain.handle('fx:save', (e, name, data) => {
   fs.writeFileSync(path.join(fxDir(), n), typeof data === 'string' ? data : Buffer.from(data)); return true;
 });
 ipcMain.handle('fx:open-folder', () => shell.openPath(fxDir()));
+// ---- deteksi plugin audio yang terpasang di PC (VST3 / VST2 / CLAP) + host VST & kabel audio virtual ----
+ipcMain.handle('fx:scan-pc', async (e, extra) => {
+  const fsp = fs.promises, out = [], seen = new Set(), folders = [];
+  const env = process.env, PF = env.ProgramFiles || 'C:\\Program Files', PF86 = env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', CF = env.CommonProgramFiles || path.join(PF, 'Common Files'), CF86 = env['CommonProgramFiles(x86)'] || path.join(PF86, 'Common Files'), LA = env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+  const roots = [
+    ['VST3', path.join(CF, 'VST3')], ['VST3', path.join(CF86, 'VST3')], ['VST3', path.join(LA, 'Programs', 'Common', 'VST3')],
+    ['CLAP', path.join(CF, 'CLAP')], ['CLAP', path.join(LA, 'Programs', 'Common', 'CLAP')],
+    ['VST2', path.join(PF, 'VSTPlugins')], ['VST2', path.join(PF, 'Steinberg', 'VSTPlugins')], ['VST2', path.join(CF, 'VST2')], ['VST2', path.join(CF, 'Steinberg', 'VST2')],
+    ['VST2', path.join(PF86, 'VSTPlugins')], ['VST2', path.join(PF86, 'Steinberg', 'VSTPlugins')], ['VST2', path.join(CF86, 'VST2')], ['VST2', path.join(PF, 'Vstplugins')]
+  ];
+  if (process.platform === 'win32') { // folder VST2 dari registri
+    const q = (k) => new Promise((ok) => require('child_process').execFile('reg', ['query', k, '/v', 'VSTPluginsPath'], { windowsHide: true, timeout: 4000 }, (er, so) => ok(er ? '' : String(so))));
+    for (const k of ['HKLM\\SOFTWARE\\VST', 'HKLM\\SOFTWARE\\WOW6432Node\\VST', 'HKCU\\SOFTWARE\\VST']) { const m = (await q(k)).match(/VSTPluginsPath\s+REG_\w+\s+(.+)/); if (m) roots.push(['VST2', m[1].trim()]); }
+  }
+  (Array.isArray(extra) ? extra : []).forEach((d) => roots.push(['?', d]));
+  const CAT = [[/pro-?q|eq\b|equali|tone|filter|kirchhoff|nova|slick ?eq/i, 'EQ'], [/comp|limit|gate|expan|dynam|leveler|maximi|clip|transient|de-?ess|kotelnikov|molot|1176|la-?2a|bus ?comp|pro-[cldg]\\b/i, 'Dinamika'], [/verb|room|hall|plate|space|valhalla|convol/i, 'Reverb'], [/delay|echo/i, 'Delay'],
+    [/tune|pitch|voice|vocal|harmon|autotune|melodyne/i, 'Vokal/Pitch'], [/noise|denois|hum|rx\b|restor|clean|dereverb|krisp/i, 'Restorasi'], [/chorus|flang|phase|trem|vibrato|modul/i, 'Modulasi'], [/sat|dist|drive|tape|warm|tube|amp|cab/i, 'Saturasi'], [/master|ozone|loud|meter|analy|span/i, 'Mastering/Meter'], [/synth|piano|drum|sampler|kontakt|instrument|serum|vital|surge/i, 'Instrumen']];
+  const guess = (n, sub) => { const t = n + ' ' + (sub || ''); for (const [re, c] of CAT) if (re.test(t)) return c; return 'Efek'; };
+  async function walk(fmt, dir, depth) {
+    let ents; try { ents = await fsp.readdir(dir, { withFileTypes: true }); } catch (er) { return; }
+    for (const d of ents) {
+      const full = path.join(dir, d.name), low = d.name.toLowerCase();
+      if (low.endsWith('.vst3') || low.endsWith('.clap') || (low.endsWith('.dll') && (fmt === 'VST2' || fmt === '?'))) {
+        if (seen.has(full.toLowerCase())) continue; seen.add(full.toLowerCase());
+        const f = low.endsWith('.vst3') ? 'VST3' : low.endsWith('.clap') ? 'CLAP' : 'VST2';
+        const item = { name: d.name.replace(/\.(vst3|clap|dll)$/i, ''), format: f, path: full, vendor: '', version: '', sub: '' };
+        if (f === 'VST3' && d.isDirectory()) { // bundle VST3: baca moduleinfo.json bila ada
+          try { const mi = JSON.parse(await fsp.readFile(path.join(full, 'Contents', 'moduleinfo.json'), 'utf8')); item.vendor = (mi['Factory Info'] && mi['Factory Info'].Vendor) || ''; item.version = mi.Version || '';
+            const cl = (mi.Classes || []).find((c) => /Audio Module/i.test(c.Category || '')); if (cl) { item.name = cl.Name || item.name; item.sub = (cl['Sub Categories'] || []).join('|'); } } catch (er) {}
+        }
+        item.cat = /instrument/i.test(item.sub) ? 'Instrumen' : guess(item.name, item.sub);
+        out.push(item);
+        continue;
+      }
+      if (d.isDirectory() && depth < 4 && !low.endsWith('.vst3')) await walk(fmt, full, depth + 1);
+    }
+  }
+  for (const [fmt, dir] of roots) { try { await fsp.access(dir); folders.push(dir); await walk(fmt, dir, 0); } catch (er) {} }
+  // host VST & kabel audio virtual yang terpasang (untuk merutekan audio ke plugin VST)
+  const exists = async (p) => { try { await fsp.access(p); return true; } catch (er) { return false; } };
+  const HOSTS = [['Equalizer APO', path.join(PF, 'EqualizerAPO')], ['Light Host', path.join(PF, 'Light Host')], ['Light Host', path.join(PF86, 'Light Host')], ['Cantabile', path.join(PF, 'Topten Software', 'Cantabile 4')], ['Element', path.join(PF, 'Element')],
+    ['Voicemeeter', path.join(PF86, 'VB', 'Voicemeeter')], ['VB-CABLE', path.join(PF, 'VB', 'CABLE')], ['VB-CABLE', path.join(PF86, 'VB', 'CABLE')], ['REAPER', path.join(PF, 'REAPER (x64)')], ['Pedalboard 2', path.join(PF86, 'Pedalboard2')], ['Kushview Element', path.join(PF, 'Kushview', 'Element')]];
+  const hosts = []; for (const [n, p] of HOSTS) if (!hosts.includes(n) && (await exists(p))) hosts.push(n);
+  out.sort((a, b) => a.cat.localeCompare(b.cat) || a.name.localeCompare(b.name));
+  return { plugins: out.slice(0, 1500), folders, hosts, platform: process.platform };
+});
 
 ipcMain.handle('server:get', () => server.loadConfig());
 ipcMain.handle('server:set', (e, cfg) => { server.saveConfig(Object.assign(server.loadConfig(), cfg)); return true; });
@@ -336,6 +383,14 @@ function smokeTest() {
       await post('/utc/api/klm/cmd', { cmd: 'hideall' });
       await js('KM.inputs.remove(KM.state.inputs.find((i) => i.type === "score"))'); await wait(1500);
       log('setelah input UTC Score dihapus: tab score ' + (await js('document.querySelector(".dtabs button[data-tab=score]").hidden ? "tersembunyi" : "tampil"')) + ', lapisan score ' + (await js('KM.utc.layers.score.paused ? "dijeda" : "jalan"')));
+      // --- plugin audio terpasang di PC ---
+      const pcs = JSON.parse(await js('KM.afx.scanPC().then((r) => JSON.stringify({ n: r.plugins.length, folders: r.folders, hosts: r.hosts, contoh: r.plugins.slice(0, 5).map((x) => x.format + ":" + x.name + ":" + x.cat) }))'));
+      log('pindai plugin PC: ' + JSON.stringify(pcs));
+      // --- grid Preview ---
+      const gr = await js('KM.ui.setGrid(true); new Promise((r) => setTimeout(() => r(JSON.stringify({ on: KM.engine.gridActive(), n: KM.engine.gridIds().length })), 600))');
+      log('grid Preview: ' + gr); if (!/"on":true/.test(gr)) { fail++; log('GAGAL: grid Preview tidak aktif'); }
+      fs.writeFileSync(path.join(out, 'preview-grid.png'), (await mainWin.webContents.capturePage()).toPNG());
+      await js('KM.ui.setGrid(false)');
       // --- efek audio: rantai preset "Vokal Siaran" pada tone uji ---
       const fx = await js(`(async () => { const inp = KM.inputs.create('bars', { title: 'Tone', opts: { tone: true } }); await new Promise((r) => setTimeout(r, 800));
         inp.audio.fx = KM.afx.presetChain('Vokal Siaran'); const st = KM.audio.strips.get(inp.id); await st.rack.sync(inp.audio.fx); await new Promise((r) => setTimeout(r, 1200));

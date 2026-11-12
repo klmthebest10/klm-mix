@@ -243,6 +243,10 @@
   KM.api = {
     functions: F,
     list: () => Object.keys(F).sort(),
+    // fungsi yang memakai durasi transisi (ms) — untuk editor shortcut
+    usesDuration: (fn) => /^(Fade|Merge|Wipe|Slide|Fly|Zoom|CrossZoom|Circle|BarnDoor|CubeZoom|Cube|FadeToBlackTransition|Dip|Blur|VerticalWipe|VerticalSlide|Transition[1-4]|VirtualPTZPreset)$/.test(fn) || String(F[fn] || '').includes('p.Duration'),
+    usesValue: (fn) => String(F[fn] || '').includes('p.Value'),
+    usesInput: (fn) => /inp\(p|p\.Input/.test(String(F[fn] || '')),
     async exec(fn, params) {
       const f = lookup[String(fn || '').toLowerCase()];
       if (!f) throw new Error('Fungsi tidak dikenal: ' + fn);

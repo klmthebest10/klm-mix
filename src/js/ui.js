@@ -297,15 +297,19 @@
   }
 
   // tampilan live mulus untuk kamera/KLMCAM/layar di kartu input (memakai stream yang sama, tanpa decode ulang)
+  // thumbnail LIVE: kamera, KLMCAM, layar, dan video yang sedang diputar ditampilkan sebagai <video> kecil
+  // yang digambar langsung oleh compositor GPU (frame rate asli, tidak ikut beban thread utama) → tidak patah-patah
   function syncLiveThumb(card) {
     const inp = card._inp; if (!inp) return;
-    const th = card.querySelector('.thumb'); if (!th) return;
+    const th = card._th || (card._th = card.querySelector('.thumb')); if (!th) return;
     let v = th.querySelector('video.live');
-    const st = KM.engine.liveThumb(inp) ? inp.rt.stream : null;
-    if (!st) { if (v) { v.srcObject = null; v.remove(); } return; }
+    const st = KM.engine.liveStream(inp);
+    const trk = st && st.getVideoTracks().find((t) => t.readyState === 'live');
+    if (!trk) { if (v) { v.srcObject = null; v.remove(); } return; }
     if (!v) { v = document.createElement('video'); v.className = 'live'; v.muted = true; v.playsInline = true; v.autoplay = true; v.disablePictureInPicture = true; th.insertBefore(v, th.firstChild.nextSibling); }
-    if (v._st !== st) { v._st = st; v.srcObject = new MediaStream(st.getVideoTracks()); v.play().catch(() => {}); }
-    v.style.transform = inp.opts && inp.opts.mirror ? 'scaleX(-1)' : '';
+    if (v._trk !== trk) { v._trk = trk; v.srcObject = new MediaStream([trk]); v.play().catch(() => {}); }
+    const tf = inp.opts && inp.opts.mirror ? 'scaleX(-1)' : '';
+    if (v.style.transform !== tf) v.style.transform = tf;
   }
   UI.syncLiveThumbs = () => KM.$$('#inputs .card[data-id]').forEach(syncLiveThumb);
 
@@ -316,12 +320,15 @@
       card.classList.toggle('program', tl === 'program');
       card.classList.toggle('preview', tl === 'preview');
       card.classList.toggle('overlay', S.overlays.some((o) => o.inputId === inp.id && o.phase !== 'off'));
-      card.querySelector('.cbtns').replaceChildren(...cardButtons(inp));
+      // tombol hanya dibuat ulang bila statusnya berubah (bukan setiap ada perubahan apa pun)
+      const sig = [KM.inputNum(inp), KM.inputs.isPlayable(inp) && KM.inputs.isPlaying(inp), inp.loop, KM.inputs.hasAudio(inp) && inp.audio.mute, S.overlays.map((o) => (o.inputId === inp.id && o.phase !== 'off' ? 1 : 0)).join('')].join('|');
+      if (card._sig !== sig) { card._sig = sig; card.querySelector('.cbtns').replaceChildren(...cardButtons(inp)); }
       const t = card.querySelector('.ctitle span'); if (t.textContent !== inp.title) { t.textContent = inp.title; t.title = inp.title; }
     });
     const pv = KM.getInput(S.previewId), pg = KM.getInput(S.programId);
     const nm = (el, inp) => { const k = inp ? KM.inputNum(inp) + '|' + inp.title : '-'; if (el._k === k) return; el._k = k; el.replaceChildren(...(inp ? [h('span.n', String(KM.inputNum(inp))), inp.title] : [h('span.muted', 'Belum ada input')])); };
     nm($('#pvwName'), pv); nm($('#pgmName'), pg);
+    if (KM.engine.gridActive()) { const n = KM.engine.gridIds().length; $('#pvwName').textContent = 'Grid ' + n + ' input' + (pv ? ' • terpilih: ' + KM.inputNum(pv) + '. ' + pv.title : ''); }
     $('#pvwBox').classList.toggle('nosig', !pv); $('#pgmBox').classList.toggle('nosig', !pg);
     renderPvwTools(pv);
   };
@@ -341,6 +348,50 @@
     box.appendChild(h('button.ic', { title: 'Pengaturan input', onclick: () => KM.dialogs.inputSettings(pv) }, KI.el('settings')));
   }
 
+  // ---------- Preview grid ----------
+  const grid = () => (KM.settings.pvGrid = KM.settings.pvGrid || { on: false, ids: [] });
+  UI.gridAdd = (id, on) => { const g = grid(); const has = g.ids.includes(id); if (on == null ? !has : on) { if (!has) g.ids.push(id); } else g.ids = g.ids.filter((x) => x !== id); KM.saveSettings(); renderGridBar(); };
+  UI.setGrid = (on) => { const g = grid(); g.on = on == null ? !g.on : !!on; if (g.on && !g.ids.length) g.ids = S.inputs.slice(0, 9).map((i) => i.id); KM.engine.pvZoom = null; KM.saveSettings(); renderGridBar(); KM.changed('preview'); };
+  function gridPicker(btn) {
+    const g = grid(), r = btn.getBoundingClientRect();
+    UI.ctxMenu(r.left, r.bottom + 4, [
+      ...S.inputs.map((inp) => ({ label: (g.ids.includes(inp.id) ? '☑ ' : '☐ ') + KM.inputNum(inp) + '. ' + inp.title, fn: () => { UI.gridAdd(inp.id); setTimeout(() => gridPicker(btn), 0); } })),
+      '-',
+      { label: '＋ Semua input', fn: () => { g.ids = S.inputs.map((i) => i.id); KM.saveSettings(); renderGridBar(); } },
+      { label: '✕ Kosongkan grid', fn: () => { g.ids = []; KM.saveSettings(); renderGridBar(); } }
+    ]);
+  }
+  function renderGridBar() {
+    const box = $('#pvwGrid'); if (!box) return;
+    const g = grid(), on = !!g.on, n = KM.engine.gridIds().length;
+    box.replaceChildren(
+      h('button.ic' + (on ? '.on' : ''), { title: on ? 'Matikan grid (kembali ke 1 input)' : 'Grid: tampilkan banyak input di Preview', onclick: () => UI.setGrid() }, KI.el('grid')),
+      on ? h('button.ic.txt', { title: 'Pilih input yang tampil di grid', onclick: (e) => gridPicker(e.currentTarget) }, KI.el('plus'), 'Input' + (n ? ' (' + n + ')' : '')) : null);
+    $('#pvzBack').hidden = !(on && KM.engine.pvZoom);
+    $('#pvwBox').classList.toggle('gridmode', on && !KM.engine.pvZoom);
+  }
+  UI.renderGridBar = renderGridBar;
+  function pvPos(e) { const cv = $('#pvw'), r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; }
+  function initPvGrid() {
+    const cv = $('#pvw');
+    cv.addEventListener('click', (e) => {
+      if (!KM.engine.gridActive()) return;
+      const id = KM.engine.gridHit(...pvPos(e)); if (!id) return;
+      if (e.ctrlKey) KM.engine.cut(id); else KM.engine.setPreview(id);
+    });
+    cv.addEventListener('dblclick', (e) => {
+      const g = grid(); if (!g.on) return;
+      if (KM.engine.pvZoom) { KM.engine.pvZoom = null; renderGridBar(); KM.changed('preview'); return; }
+      const id = KM.engine.gridHit(...pvPos(e)); if (!id) return;
+      KM.engine.setPreview(id); KM.engine.pvZoom = id; renderGridBar(); KM.changed('preview');
+    });
+    $('#pvzBack').addEventListener('click', () => { KM.engine.pvZoom = null; renderGridBar(); KM.changed('preview'); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && KM.engine.pvZoom && !document.querySelector('.modal')) { KM.engine.pvZoom = null; renderGridBar(); KM.changed('preview'); } });
+    KM.on('change', (w) => { if (w === 'inputs') renderGridBar(); });
+    renderGridBar();
+  }
+  UI.initPvGrid = initPvGrid;
+
   UI.inputMenu = function (inp, x, y) {
     UI.ctxMenu(x, y, [
       SIDE[inp.type] ? { label: '🎛 Panel samping (tombol cepat)', fn: () => UI.openSide(inp.type) } : null,
@@ -350,6 +401,7 @@
       { label: '⧉ Duplikat', fn: () => KM.inputs.duplicate(inp) },
       '-',
       { label: '👁 Ke Preview', fn: () => KM.engine.setPreview(inp.id) },
+      { label: (KM.engine.gridIds().includes(inp.id) ? '⊟ Keluarkan dari' : '⊞ Tambah ke') + ' grid Preview', fn: () => { UI.gridAdd(inp.id); if (!grid().on) UI.setGrid(true); } },
       { label: '✂ Cut ke Program', fn: () => KM.engine.cut(inp.id) },
       { label: '📃 Tambah ke Playlist', fn: () => { KM.playlist.add(inp.id, KM.inputs.isPlayable(inp) ? 0 : 10); KM.toast('Ditambahkan ke playlist'); } },
       { label: '✨ Jadikan Stinger 1', fn: () => { KM.settings.stingers[0].inputId = inp.id; KM.saveSettings(); KM.toast('Stinger 1 = ' + inp.title); } },
@@ -367,9 +419,10 @@
     KM.$$('#inputs .card[data-id]').forEach((card) => {
       const inp = card._inp; if (!inp) return;
       const st = KM.audio.strips.get(inp.id);
-      if (st && card._meter) { const m = KM.audio.readMeter(st.meter); const db = KM.audio.toDb(Math.max(m.peakL, m.peakR)); card._meter.style.height = KM.clamp((db + 60) / 60 * 100, 0, 100) + '%'; }
-      const md = KM.inputs.media(inp), pb = card.querySelector('.pbar');
-      if (pb && md && md.duration && isFinite(md.duration)) pb.style.width = (md.currentTime / md.duration * 100) + '%';
+      // transform saja (tanpa hitung ulang tata letak) → daftar input tetap mulus
+      if (st && card._meter) { const m = KM.audio.readMeter(st.meter); const db = KM.audio.toDb(Math.max(m.peakL, m.peakR)); const v = Math.round(KM.clamp((db + 60) / 60, 0, 1) * 100) / 100; if (card._mv !== v) { card._mv = v; card._meter.style.transform = 'scaleY(' + v + ')'; } }
+      const md = KM.inputs.media(inp), pb = card._pbar || (card._pbar = card.querySelector('.pbar'));
+      if (pb && md && md.duration && isFinite(md.duration)) { const v = Math.round(md.currentTime / md.duration * 1000) / 1000; if (card._pv !== v) { card._pv = v; pb.style.transform = 'scaleX(' + v + ')'; } }
     });
   }
 
@@ -574,7 +627,7 @@
     KM.$$('.dtabs button').forEach((b) => b.addEventListener('click', () => UI.dockTab(b.dataset.tab)));
     KM.$$('.dd > .mbtn').forEach((b) => b.addEventListener('click', () => b.parentElement.classList.toggle('open')));
     document.addEventListener('mousedown', (e) => { if (!e.target.closest('.dd')) KM.$$('.dd.open').forEach((d) => d.classList.remove('open')); });
-    UI.renderCards(); updateBars();
+    UI.renderCards(); updateBars(); initPvGrid();
     // gabungkan banyak perubahan menjadi satu update per frame (UI lebih ringan)
     let pendRender = false, pendUpdate = false, raf = 0;
     const flush = () => { raf = 0; if (pendRender) UI.renderCards(); else if (pendUpdate) UI.updateCards(); pendRender = pendUpdate = false; updateBars(); };
@@ -592,7 +645,8 @@
     setInterval(UI.autosave, 10000);
     // tampilkan status play terbaru
     KM.on('change', (w) => { if (w === 'input') setTimeout(UI.syncLiveThumbs, 50); });
-    setInterval(() => KM.$$('#inputs .card[data-id]').forEach((c) => { syncLiveThumb(c); const b = c.querySelector('.cb.play'); if (b && c._inp) { const t = KM.inputs.isPlaying(c._inp) ? 'pause' : 'play'; if (b._t !== t) { b._t = t; b.replaceChildren(KI.el(t)); } } }), 500);
+    setInterval(() => { if (document.hidden) return; KM.$$('#inputs .card[data-id]').forEach((c) => { syncLiveThumb(c); const b = c.querySelector('.cb.play'); if (b && c._inp) { const t = KM.inputs.isPlaying(c._inp) ? 'pause' : 'play'; if (b._t !== t) { b._t = t; b.replaceChildren(KI.el(t)); } } }); }, 300);
+    ['play', 'playing', 'pause', 'seeked', 'emptied'].forEach((ev) => document.addEventListener(ev, () => { clearTimeout(UI._lt); UI._lt = setTimeout(UI.syncLiveThumbs, 30); }, true)); // video mulai/berhenti → thumbnail live langsung ikut
     // layar pembuka
     setTimeout(() => { const sp = $('#splash'); if (sp) { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); } }, 450);
   };
