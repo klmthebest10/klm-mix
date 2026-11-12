@@ -140,7 +140,7 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 ### Baru di v1.8
 - **Host plugin VST asli (VST3 & VST2, 64-bit)**: dialog Efek audio → *Plugin terpasang di PC* → **Pasang**. Plugin berjalan di dalam KLM Mix, **tampilan/editor asli plugin** langsung terbuka (tombol *Editor* untuk membuka lagi), bisa juga diatur lewat daftar parameter. Pengaturan plugin (state) ikut tersimpan di preset & dipulihkan saat dibuka lagi
   - Setiap plugin berjalan di **proses terpisah** (`klm-vsthost.exe`): bila plugin crash, KLM Mix tetap jalan dan suara asli diteruskan; tombol *Muat ulang* menjalankannya kembali dengan pengaturan terakhir
-  - Latensi tetap ±21 ms (blok 256 × 4 @48 kHz); suara kering ikut ditunda sehingga slider **Mix** bersih (tanpa efek "comb")
+  - Latensi ±21 ms (blok 256 × 4 @48 kHz), otomatis bertambah bila PC sedang sibuk agar suara tidak putus-putus; suara kering ikut ditunda sehingga slider **Mix** bersih (tanpa efek "comb")
   - Plugin 32-bit dan CLAP ditandai (belum didukung) — untuk itu tetap tersedia tombol padanan efek bawaan
 - **Tutup aplikasi seperti vMix**: muncul dialog **Simpan / Jangan simpan / Batal**. *Simpan* menulis ke **preset yang sedang dimuat**, atau membuat **preset baru** (pilih nama & lokasi) bila belum ada; batal memilih file = aplikasi tetap terbuka. Dialog juga memberi tahu bila ada perubahan yang belum disimpan dan rekaman/streaming yang sedang berjalan. Nama preset tampil di judul jendela; menu *Proyek* kini *Preset*
 - **Buka aplikasi lebih cepat**: jendela & layar pembuka tampil seketika (tidak menunggu server), CSS di-inline dan ±25 skrip digabung menjadi satu bundle yang dijalankan setelah layar pembuka tergambar (±27 → 3 permintaan; pada PC lambat siap ±20% lebih cepat)

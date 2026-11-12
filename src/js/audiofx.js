@@ -463,7 +463,7 @@
     const vparams = new Map(); // item.id -> daftar parameter terakhir
     function vstPanel(item, vi) {
       const ok = vi && vi.status === 'ok', inf = ok ? vi.info : null;
-      const lat = inf ? Math.round(((inf.latency || 0) + KM.vst.B * ((KM.settings.vstBlocks | 0) || 4)) / (vi.ctx.sampleRate / 1000)) : 0;
+      const lat = inf ? Math.round(((inf.latency || 0) + KM.vst.B * ((vi.stat && vi.stat.L) || (KM.settings.vstBlocks | 0) || 4)) / (vi.ctx.sampleRate / 1000)) : 0;
       const line = !vi ? 'Rak ini belum aktif (input belum punya jalur audio).' : ok ? [inf.name, inf.vendor, inf.format, inf.params + ' parameter', 'latensi ±' + lat + ' ms'].filter(Boolean).join(' • ')
         : vi.status === 'loading' ? 'Memuat plugin…' : 'Gagal: ' + vi.error;
       const plist = vparams.get(item.id);

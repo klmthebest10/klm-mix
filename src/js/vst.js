@@ -16,10 +16,10 @@
       this.B = p.B || 256; this.L = Math.max(1, p.L || 4); this.D = this.B * this.L;
       this.acc = [new Float32Array(this.B), new Float32Array(this.B)]; this.accN = 0; this.seq = 0; this.T = 0;
       this.dry = new Map(); this.wet = new Map(); this.mix = p.mix != null ? p.mix : 1;
-      this.link = null; this.under = 0; this.got = 0; this.lastRep = 0;
+      this.link = null; this.under = 0; this.got = 0; this.lastRep = 0; this.warm = false; this.streak = 0; this.Lmax = p.Lmax || 12;
       this.port.onmessage = (e) => {
         const d = e.data || {};
-        if (d.port) { if (this.link) try { this.link.close(); } catch (x) {} this.link = d.port; this.wet.clear(); this.link.onmessage = (ev) => { const m = ev.data; if (m && m.t === 'a') { let w = m.data; if (!(w instanceof Float32Array)) w = ArrayBuffer.isView(w) ? new Float32Array(w.buffer.slice(w.byteOffset, w.byteOffset + w.byteLength)) : new Float32Array(w); this.wet.set(m.seq, w); this.got++; } }; }
+        if (d.port) { if (this.link) try { this.link.close(); } catch (x) {} this.link = d.port; this.wet.clear(); this.warm = false; this.link.onmessage = (ev) => { const m = ev.data; if (m && m.t === 'a') { let w = m.data; if (!(w instanceof Float32Array)) w = ArrayBuffer.isView(w) ? new Float32Array(w.buffer.slice(w.byteOffset, w.byteOffset + w.byteLength)) : new Float32Array(w); this.wet.set(m.seq, w); this.got++; this.warm = true; } }; }
         if (d.mix != null) this.mix = d.mix;
         if (d.close) { if (this.link) try { this.link.close(); } catch (x) {} this.link = null; this.dead = true; }
       };
@@ -40,8 +40,9 @@
           else if (w && w.length >= B) { for (let i = 0; i < n; i++) o[i] = w[off + i] * m + dr[db + i] * dm; }
           else for (let i = 0; i < n; i++) o[i] = dr[db + i];
         }
-        if (!w && this.link) this.under++;
-        if (off + n >= B) { this.wet.delete(k); this.dry.delete(k); if (this.wet.size > 64) for (const key of this.wet.keys()) if (key < k) this.wet.delete(key); }
+        // latensi adaptif: bila blok olahan terlambat (PC sibuk), tambah tunda 1 blok (sekali tersendat, lalu stabil)
+        if (!w && this.link && this.warm) { this.under++; if (++this.streak >= 2 && this.L < this.Lmax) { this.L++; this.D = B * this.L; this.streak = 0; } } else if (w) this.streak = 0;
+        if (off + n >= B) { const old = k - 16; this.wet.delete(old); this.dry.delete(old); if (this.wet.size > 64 || this.dry.size > 64) { for (const key of this.wet.keys()) if (key < old) this.wet.delete(key); for (const key of this.dry.keys()) if (key < old) this.dry.delete(key); } }
       }
       this.accN += n; this.T += n;
       if (this.accN >= B) {
@@ -50,7 +51,7 @@
         if (this.link) try { this.link.postMessage({ t: 'p', seq: this.seq, n: B, ch: 2, data: blk }); } catch (x) {}
         this.seq++; this.accN = 0;
       }
-      if (currentTime - this.lastRep > 2) { this.lastRep = currentTime; this.port.postMessage({ stat: { under: this.under, got: this.got } }); }
+      if (currentTime - this.lastRep > 2) { this.lastRep = currentTime; this.port.postMessage({ stat: { under: this.under, got: this.got, L: this.L } }); }
       return !this.dead;
     }
   }
