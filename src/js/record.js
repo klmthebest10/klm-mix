@@ -109,8 +109,17 @@
   R.startStreaming = async function () {
     if (S.streaming) return true;
     const sc = KM.settings.stream;
-    const dests = sc.destinations.filter((d) => d.enabled && (d.url || '').trim()).map((d) => ({ enabled: true, url: joinKey(d.url.trim(), (d.key || '').trim()) }));
-    if (!dests.length) { KM.toast('Isi URL & stream key dulu di Pengaturan Streaming', 'warn'); KM.ui && KM.ui.openSettings('stream'); return false; }
+    if (R.starting) return false;
+    let dests;
+    if (KM.live) { // akun live (panel Live): bisa banyak akun, judul/deskripsi/thumbnail via API
+      R.starting = true;
+      let p = null; try { p = await KM.live.prepare(); } finally { R.starting = false; }
+      if (!p) return false;
+      dests = p.dests;
+    } else {
+      dests = sc.destinations.filter((d) => d.enabled && (d.url || '').trim()).map((d) => ({ enabled: true, url: joinKey(d.url.trim(), (d.key || '').trim()) }));
+      if (!dests.length) { KM.toast('Isi URL & stream key dulu di Pengaturan Streaming', 'warn'); KM.ui && KM.ui.openSettings('stream'); return false; }
+    }
     const h264 = H264_WEBM.find((m) => MediaRecorder.isTypeSupported(m));
     const mime = h264 || 'video/webm;codecs=vp8,opus';
     let encoder = sc.encoder || 'auto';
@@ -121,13 +130,13 @@
     const cfg = { encoder, preset: sc.preset, videoBitrate: sc.videoBitrate, audioBitrate: sc.audioBitrate, fps: KM.settings.fps, destinations: dests };
     const r = await openHubOut('stream', { cfg }, (m) => {
       if (m.t === 'stats') { R.stats = m; KM.emit('stream-stats', m); }
-      else if (m.t === 'log') { R.log = ((R.log || '') + m.msg).slice(-6000); }
+      else if (m.t === 'log') { R.log = ((R.log || '') + m.msg).slice(-6000); KM.emit('stream-log', m.msg); }
       else if ((m.t === 'ended' || m.t === 'closed') && S.streaming) {
         KM.toast('Streaming terputus. Cek internet / stream key (lihat log di Pengaturan > Streaming).', 'err', 7000);
         R.stopStreaming(true);
       }
     });
-    if (!r.ok) { KM.toast('Gagal streaming: ' + r.msg, 'err', 6000); return false; }
+    if (!r.ok) { KM.toast('Gagal streaming: ' + r.msg, 'err', 6000); if (KM.live) KM.live.finish(); return false; }
     S.streaming = true;
     R.streamWs = r.ws;
     R.streamer = pipeRecorder(r.ws, mixStream('M'), mime, vbps, 100);
@@ -147,6 +156,7 @@
     try { R.streamer.stop(); } catch (e) {}
     setTimeout(() => { try { R.streamWs && R.streamWs.close(); } catch (e) {} R.streamWs = null; }, 400);
     R.streamer = null; R.stats = null;
+    if (KM.live) KM.live.finish(); // akhiri siaran YouTube/Facebook yang dibuat lewat API
     if (silent !== true) KM.toast('Streaming dihentikan');
     KM.changed('stream');
     return true;

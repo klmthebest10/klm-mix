@@ -23,6 +23,7 @@ klm-mix/
 │   ├── utc-osr.js            # render overlay UTC asli offscreen BERLAPIS (Acara, running text, logo, scoreboard)
 │   ├── osr-preload.js        # jembatan halaman overlay offscreen → mixer (running text native)
 │   ├── score.js              # server UTC KLM Scoreboard (port 7171, API & alamat sama dengan aplikasi aslinya)
+│   ├── live.js / live-api.js # akun live: YouTube (OAuth) & Facebook (Graph) — judul, deskripsi, thumbnail
 │   ├── vst.js                # manajer host VST: IPC, MessagePort AudioWorklet ↔ broker
 │   ├── vst-broker.js         # broker host VST (utilityProcess): 1 proses klm-vsthost per plugin
 │   ├── gencert.js            # sertifikat HTTPS lokal (proses terpisah)
@@ -40,6 +41,7 @@ klm-mix/
 │       ├── effects.js        # GPU: koreksi warna, chroma key, luma key
 │       ├── inputs.js         # semua jenis input
 │       ├── audiofx.js        # rak efek & plugin audio (18 efek, preset, plugin eksternal)
+│       ├── live.js           # tab Live: akun YouTube/Facebook/TikTok/Instagram, live bersamaan
 │       ├── vst.js            # plugin VST3/VST2 asli di rak efek (AudioWorklet berlatensi tetap, editor, state)
 │       ├── utc.js            # UTC KLM Acara menyatu: lapisan UTC ON AIR (WebGL), input UTC, audio opening/closing
 │       ├── titles.js         # Title Cepat kanvas (16 template, 8 tema)
@@ -79,10 +81,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
    - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.8.0.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.8.0.exe` (tanpa instal)
+     - `KLM-Mix-Setup-1.9.0.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Mix-Portable-1.9.0.exe` (tanpa instal)
    - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
-3. Untuk rilis resmi: buat tag `v1.8.0` → file otomatis muncul di halaman **Releases**.
+3. Untuk rilis resmi: buat tag `v1.9.0` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
 
@@ -136,6 +138,15 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Skrip JavaScript** (pengganti VB.NET): `API.Function("Cut")`, `Sleep()`, `Input()`, jalankan dari tombol/shortcut/trigger/Stream Deck
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
+
+### Baru di v1.9
+- **Panel samping UTC Acara: klik = tampil, klik lagi = sembunyi** — berlaku untuk item Lower Third, Title, Lokasi, Sosmed (item yang sedang tampil diberi tanda merah **TAMPIL**; klik item lain = langsung ganti) serta tombol Opening/Closing
+- **Tab Live — live ke banyak akun sekaligus**: simpan akun **YouTube, Facebook, TikTok, Instagram** dan RTMP/SRT lain (Twitch, Kick, server sendiri), **lebih dari satu akun per platform**; centang akun mana yang ikut live, lalu satu tombol *Mulai live* (satu encode dikirim ke semua tujuan; bila satu tujuan gagal, yang lain tetap jalan, status per akun LIVE/gagal)
+  - **Judul, deskripsi, thumbnail** (pilih gambar atau ambil dari Program, otomatis 1280×720) & privasi YouTube diisi sekali di panel Live
+  - **Mode otomatis (API)**: YouTube — siaran baru dibuat tiap live dengan judul, deskripsi, thumbnail & privasi, mulai/berakhir otomatis (masuk dengan Google; butuh Client ID gratis dari Google Cloud, panduan di dialog akun). Facebook — video live baru dengan judul & deskripsi (Page access token). Kredensial disimpan terenkripsi di PC
+  - TikTok & Instagram tidak menyediakan API publik → isi server + stream key (kolom cepat langsung di kartu akun karena key berubah tiap live), judul disalin ke halaman live mereka (tombol *Salin judul / deskripsi*, *Simpan thumbnail*, *Buka halaman live*)
+  - Tujuan lama di Pengaturan → Streaming otomatis dipindah menjadi akun
+- Perbaikan: status bitrate streaming kini tampil juga saat multi-tujuan / mode copy; teks "null" yang muncul di header Preview hilang
 
 ### Baru di v1.8
 - **Host plugin VST asli (VST3 & VST2, 64-bit)**: dialog Efek audio → *Plugin terpasang di PC* → **Pasang**. Plugin berjalan di dalam KLM Mix, **tampilan/editor asli plugin** langsung terbuka (tombol *Editor* untuk membuka lagi), bisa juga diatur lewat daftar parameter. Pengaturan plugin (state) ikut tersimpan di preset & dipulihkan saat dibuka lagi
@@ -252,4 +263,4 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.8.0
+KLM Mix 1.9.0

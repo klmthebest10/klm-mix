@@ -246,8 +246,11 @@ wssOut.on('connection', (ws) => {
         proc.stdin.on('error', () => {});
         proc.stderr.on('data', (d) => {
           const s = d.toString();
-          const x = /frame=\s*(\d+).*?fps=\s*([\d.]+).*?bitrate=\s*([\d.]+\w+\/s).*?speed=\s*([\d.]+x)/.exec(s);
-          tell(x ? { t: 'stats', frame: +x[1], fps: +x[2], bitrate: x[3], speed: x[4] } : { t: 'log', msg: s.slice(0, 400) });
+          // multi-tujuan (tee): size & bitrate = N/A → bitrate dihitung dari bitrate encoder bila perlu
+          // mode copy / multi-tujuan (tee): tanpa frame=, size & bitrate = N/A
+          const x = /(?:frame=\s*(\d+).*?fps=\s*([\d.]+).*?)?time=\s*(\S+)\s+bitrate=\s*([\d.]+\w+\/s|N\/A).*?speed=\s*([\d.]+x|N\/A)/.exec(s.split('\r').filter(Boolean).pop() || s);
+          if (x) tell({ t: 'stats', frame: +x[1] || 0, fps: +x[2] || +m.cfg.fps || 0, time: x[3], bitrate: x[4] === 'N/A' ? ((m.cfg.videoBitrate || 0) + (m.cfg.audioBitrate || 0)) + 'kbits/s' : x[4], speed: x[5] === 'N/A' ? '' : x[5] });
+          if (!x || /failed|error|refused|denied|Slave/i.test(s)) tell({ t: 'log', msg: s.slice(0, 600) });
         });
         proc.on('close', (code) => { tell({ t: 'ended', code }); proc = null; });
         proc.on('error', (e) => tell({ t: 'error', msg: 'ffmpeg: ' + e.message }));

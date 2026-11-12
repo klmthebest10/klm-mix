@@ -2,7 +2,12 @@
 'use strict';
 window.KM = window.KM || {};
 (function (KM) {
-  KM.version = '1.8.0';
+  // null/false/undefined tidak boleh tampil sebagai teks "null" (dipakai pola `cond ? el : null`)
+  for (const fn of ['replaceChildren', 'append', 'prepend']) {
+    const orig = Element.prototype[fn];
+    Element.prototype[fn] = function (...kids) { return orig.apply(this, kids.filter((x) => x != null && x !== false)); };
+  }
+  KM.version = '1.9.0';
   KM.isElectron = !!(window.klm && window.klm.isElectron);
 
   // ---------- event bus ----------
@@ -39,7 +44,7 @@ window.KM = window.KM || {};
       const v = attrs[k];
       if (v == null || v === false) continue;
       if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
-      else if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+      else if (k === 'style' && typeof v === 'object') { for (const sk in v) { if (sk.startsWith('--')) el.style.setProperty(sk, v[sk]); else el.style[sk] = v[sk]; } }
       else if (k === 'html') el.innerHTML = v;
       else if (k in el && k !== 'list' && k !== 'type') { try { el[k] = v; } catch (e) { el.setAttribute(k, v); } }
       else el.setAttribute(k, v === true ? '' : v);

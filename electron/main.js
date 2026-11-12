@@ -146,6 +146,7 @@ function toRenderer(ch, data) { if (mainWin && !mainWin.isDestroyed()) mainWin.w
 
 // ---------------- IPC ----------------
 const vstMgr = require('./vst').setup({ win: () => mainWin });
+require('./live').setup({ configDir: () => server.configDir() });
 ipcMain.handle('app:info', () => ({
   version: app.getVersion(), ports: netInfo.ports, ips: server.localIPs(),
   videos: app.getPath('videos'), pictures: app.getPath('pictures'), documents: app.getPath('documents'),
@@ -512,6 +513,46 @@ function smokeTest() {
         if (size < 100000) { fail++; log('GAGAL: SRT tidak sampai ke gateway. Log srt: ' + (await js('KM.rec.srtLog')).slice(-600)); }
         else if (!(wasLive || st.startsWith('live'))) log('catatan: data SRT sampai (' + size + ' byte) tetapi status "live" belum sempat terbaca (VM CI sibuk)');
       } catch (e) { fail++; log('GAGAL SRT: ' + e.message); }
+      // --- Live ke banyak akun: akun Facebook mode API (server Graph tiruan) + RTMP manual → 2 penerima RTMP lokal ---
+      try {
+        const { spawn } = require('child_process');
+        const http = require('http');
+        const hits = [];
+        const mock = http.createServer((rq, rs) => { let b = ''; rq.on('data', (d) => { b += d; }); rq.on('end', () => {
+          const u = new URL(rq.url, 'http://x'), f = new URLSearchParams(b); hits.push(rq.method + ' ' + u.pathname + (f.get('title') ? ' title=' + f.get('title') : '') + (f.get('end_live_video') ? ' end' : ''));
+          const j = (o) => { rs.writeHead(200, { 'Content-Type': 'application/json' }); rs.end(JSON.stringify(o)); };
+          if (u.pathname === '/123' && rq.method === 'GET') return j({ id: '123', name: 'Halaman Uji' });
+          if (u.pathname === '/123/live_videos') return j({ id: 'LV1', secure_stream_url: 'rtmp://127.0.0.1:19350/rtmp/FBKEY' });
+          if (u.pathname === '/LV1') return j(rq.method === 'GET' ? { permalink_url: '/uji/videos/LV1/' } : { id: 'LV1' });
+          rs.writeHead(404); rs.end('{}');
+        }); });
+        await new Promise((r) => mock.listen(0, '127.0.0.1', r));
+        process.env.KLM_LIVE_BASE = JSON.stringify({ graph: 'http://127.0.0.1:' + mock.address().port });
+        const fa = path.join(out, 'live-fb.flv'), fbb = path.join(out, 'live-rtmp.flv');
+        const rx = (url, file) => { const p = spawn(server.hub.ffmpegPath(), ['-hide_banner', '-y', '-listen', '1', '-i', url, '-c', 'copy', '-f', 'flv', file], { windowsHide: true }); p.stderr.on('data', () => {}); return p; };
+        const r1 = rx('rtmp://127.0.0.1:19350/rtmp/FBKEY', fa), r2 = rx('rtmp://127.0.0.1:19351/live/kunci2', fbb);
+        await wait(1200);
+        const con = JSON.parse(await js(`window.klm.invoke('live:fb-connect', 'accFB', 'TOKEN-UJI-0123456789abcdef', '123').then((r) => JSON.stringify(r))`));
+        await js(`(() => { const c = KM.live.cfg(); c.accounts = [{ id: 'accFB', platform: 'facebook', name: 'FB uji', mode: 'api', on: true }, { id: 'accR', platform: 'custom', name: 'RTMP uji', url: 'rtmp://127.0.0.1:19351/live', key: 'kunci2', mode: 'key', on: true }, { id: 'accT', platform: 'tiktok', name: 'TikTok tidak dipilih', url: '', key: '', mode: 'key', on: false }];
+          c.meta.title = 'Uji Live KLM'; c.meta.desc = 'deskripsi uji'; KM.saveSettings(); KM.live.auth = {}; return KM.live.refreshAuth(); })()`);
+        await js('KM.ui.dockTab("live")');
+        const started = await js('KM.rec.startStreaming()');
+        let ls = '';
+        for (let i = 0; i < 14; i++) { await wait(1000); ls = await js('JSON.stringify({ on: KM.state.streaming, st: KM.live.session && KM.live.session.status, w: KM.live.session && KM.live.session.watch, stats: KM.rec.stats && KM.rec.stats.bitrate })'); }
+        const cards = await js('document.querySelectorAll("#dock-live .lacc").length');
+        await js('KM.rec.stopStreaming(true)'); await wait(3000);
+        try { r1.kill(); r2.kill(); } catch (e) {} mock.close();
+        await wait(800);
+        const sz = (f) => (fs.existsSync(f) ? fs.statSync(f).size : 0);
+        let enc = ''; try { enc = Object.values(JSON.parse(fs.readFileSync(path.join(server.configDir(), 'live-auth.json'), 'utf8'))).map((v) => v.slice(0, 2)).join(','); } catch (e) {}
+        log('live banyak akun: hubung ' + JSON.stringify(con) + ', mulai ' + started + ', ' + ls + ', kartu ' + cards + ', diterima FB ' + sz(fa) + ' byte / RTMP ' + sz(fbb) + ' byte, token tersimpan ' + enc + ', API: ' + hits.join(' | '));
+        delete process.env.KLM_LIVE_BASE;
+        if (!con.ok) { fail++; log('GAGAL: hubungkan akun Facebook (API tiruan)'); }
+        if (!hits.some((x) => /live_videos title=Uji Live KLM/.test(x))) { fail++; log('GAGAL: judul tidak dikirim ke API'); }
+        if (!hits.some((x) => /POST \/LV1 end/.test(x))) { fail++; log('GAGAL: siaran API tidak diakhiri saat stop'); }
+        if (sz(fa) < 50000 || sz(fbb) < 50000) { fail++; log('GAGAL: stream tidak sampai ke kedua tujuan'); }
+        if (enc && !/^e:/.test(enc)) log('catatan: token tidak terenkripsi (safeStorage tidak tersedia)');
+      } catch (e) { fail++; log('GAGAL live banyak akun: ' + e.message); }
     } catch (e) { fail++; log('ERROR ' + (e && e.stack || e)); }
     log(fail ? 'HASIL: GAGAL (' + fail + ')' : 'HASIL: OK');
     app.on('will-quit', () => log('will-quit')); app.on('quit', () => log('quit'));

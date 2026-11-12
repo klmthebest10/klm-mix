@@ -440,7 +440,7 @@ static int run (int argc, char** argv)
 		else if (a == "--title") gWindowTitle = next ();
 		else if (a == "--format") fmt = lower (next ());
 		else if (a == "--probe") probe = true;
-		else if (a == "--version") { std::printf ("klm-vsthost 1.8.0\n"); return 0; }
+		else if (a == "--version") { std::printf ("klm-vsthost 1.9.0\n"); return 0; }
 	}
 	if (gSampleRate < 8000 || gSampleRate > 384000) gSampleRate = 48000;
 	if (gMaxBlock < 16 || gMaxBlock > 8192) gMaxBlock = 512;

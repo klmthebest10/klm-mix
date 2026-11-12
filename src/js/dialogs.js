@@ -676,14 +676,13 @@
             row('Preset x264', sel(['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium'], sc.preset, (v) => { sc.preset = v; save(); })),
             row('Bitrate video', sel([[1500, '1.5 Mbps (480p)'], [2500, '2.5 Mbps (720p)'], [3500, '3.5 Mbps'], [4500, '4.5 Mbps (1080p30)'], [6000, '6 Mbps (1080p60)'], [9000, '9 Mbps'], [12000, '12 Mbps']], sc.videoBitrate, (v) => { sc.videoBitrate = +v; save(); }),
               h('label', 'Audio'), sel([[128, '128k'], [160, '160k'], [192, '192k'], [256, '256k']], sc.audioBitrate, (v) => { sc.audioBitrate = +v; save(); }))),
-          ...sc.destinations.map((d, i) => {
-            const key = h('input.grow', { type: 'password', value: d.key, placeholder: 'Stream key', onchange: (e) => { d.key = e.target.value; save(); } });
-            const url = h('input.grow', { value: d.url, placeholder: 'rtmp://server/app', onchange: (e) => { d.url = e.target.value; save(); } });
-            return h('div.sec', h('h4', chk('Tujuan ' + (i + 1), d.enabled, (v) => { d.enabled = v; save(); }), h('input', { value: d.name, style: { width: '140px' }, onchange: (e) => { d.name = e.target.value; save(); } })),
-              row('Server', url, sel(PRESET, '', (v) => { if (v) { url.value = d.url = v; save(); } })),
-              row('Stream key', key, h('button.btn.sm', { onclick: () => { key.type = key.type === 'password' ? 'text' : 'password'; } }, '👁')));
-          }),
-          h('p.muted', 'Bisa live ke 3 platform sekaligus (YouTube + Facebook + lainnya). Jika internet lemah, turunkan bitrate.'),
+          (() => { // tujuan live = akun di panel Live (bisa banyak akun per platform)
+            const L = KM.live, acc = L ? L.cfg().accounts : [];
+            return h('div.sec', h('h4', 'Akun tujuan live'),
+              acc.length ? h('div', acc.map((a) => h('div.row', { style: { gap: '8px', margin: '4px 0' } }, h('span.pill' + (a.on ? '.ok' : ''), a.on ? 'ikut live' : 'tidak'), h('b', a.name || L.PLAT[a.platform].name), h('span.muted', L.PLAT[a.platform].name + (a.mode === 'api' ? ' • otomatis (API)' : ''))))) : h('p.muted', 'Belum ada akun.'),
+              h('div.row', { style: { marginTop: '8px' } }, h('button.btn.pri', { onclick: (e) => { const bg = e.target.closest('.modal-bg'); if (bg) bg.querySelector('.mh .x').click(); KM.ui.dockTab('live'); } }, KI.el('radio'), 'Kelola akun, judul & thumbnail di panel Live')));
+          })(),
+          h('p.muted', 'Bisa live ke banyak akun sekaligus (YouTube, Facebook, TikTok, Instagram, RTMP lain). Jika internet lemah, turunkan bitrate.'),
           KM.rec.log ? h('details', h('summary', 'Log ffmpeg'), h('pre', { style: { maxHeight: '200px', overflow: 'auto', fontSize: '11px', userSelect: 'text' } }, KM.rec.log)) : null);
       },
       srt() {

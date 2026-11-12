@@ -92,6 +92,7 @@
     <aside id="dock">
       <div class="dtabs">
         <button data-tab="audio" class="on"><i data-ic="sliders"></i>Audio</button>
+        <button data-tab="live" title="Live streaming ke banyak akun sekaligus (YouTube, Facebook, TikTok, Instagram)"><i data-ic="radio"></i>Live</button>
         <button data-tab="acara" class="dyn" hidden title="UTC Acara — tombol cepat (muncul setelah input UTC Acara ditambahkan)"><i data-ic="clapper"></i>UTC Acara</button>
         <button data-tab="score" class="dyn" hidden title="UTC Score — tombol cepat (muncul setelah input UTC Score ditambahkan)"><i data-ic="trophy"></i>UTC Score</button>
         <button data-tab="phone" class="dyn" hidden title="KLMCAM — kontrol kamera HP (muncul setelah input KLMCAM ditambahkan)"><i data-ic="phone"></i>KLMCAM</button>
@@ -102,6 +103,7 @@
         <button data-tab="script"><i data-ic="zap"></i>Skrip</button>
       </div>
       <div class="dbody" id="dock-audio"></div>
+      <div class="dbody" id="dock-live" hidden></div>
       <div class="dbody" id="dock-acara" hidden></div>
       <div class="dbody" id="dock-score" hidden></div>
       <div class="dbody" id="dock-title" hidden></div>
@@ -184,6 +186,7 @@
 <script src="/src/js/ui.js" defer></script>
 <script src="/src/js/dialogs.js" defer></script>
 <script src="/src/js/dock.js" defer></script>
+<script src="/src/js/live.js" defer></script>
 <script src="/src/js/app.js" defer></script>
 </body>
 </html>

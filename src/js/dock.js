@@ -290,7 +290,11 @@
       badge: badge(vis[k]),
       tools: [tool(KI.el('chev-left'), 'Sebelumnya', () => run('prev', k, { show: true })), tool(KI.el('chev-right'), 'Berikutnya', () => run('next', k, { show: true })),
         tool(vis[k] ? 'Sembunyikan' : 'Tampilkan', vis[k] ? 'Sembunyikan' : 'Tampilkan', () => run('toggle', k), vis[k] ? '.red' : '.pri')]
-    }, h('div.items', list.map((x, i) => h('button.btn.sm' + (x.id === actId ? '.act' : ''), { title: [x.label, nameOf(x)].filter(Boolean).join(' • ') + ' — klik: pilih & tampilkan', onclick: () => run('select', k, { name: String(i + 1) }) }, h('b', String(i + 1)), h('span', nameOf(x) || x.label || '—'))))) : null;
+    }, h('div.items', list.map((x, i) => { // klik = tampilkan, klik lagi item yang sedang tampil = sembunyikan
+      const live = x.id === actId && vis[k];
+      return h('button.btn.sm' + (x.id === actId ? '.act' : '') + (live ? '.live' : ''), { title: [x.label, nameOf(x)].filter(Boolean).join(' • ') + (live ? ' — SEDANG TAMPIL • klik untuk menyembunyikan' : ' — klik untuk menampilkan (klik lagi untuk menyembunyikan)'),
+        onclick: () => (live ? run('hide', k) : run('select', k, { name: String(i + 1) })) }, h('b', String(i + 1)), h('span', nameOf(x) || x.label || '—'), live ? h('i.onair', 'TAMPIL') : null);
+    }))) : null;
     const presetSel = h('select', { style: { flex: 1, minWidth: 0 } }, h('option', { value: '' }, utcPresets ? (utcPresets.length ? '— pilih preset —' : '(belum ada preset)') : 'memuat…'),
       (utcPresets || []).map((p) => h('option', { value: p.name }, p.name)));
     if (!utcPresets) fetch('/utc/api/presets').then((r) => r.json()).then((l) => { utcPresets = l; if (DK.cur === 'acara') renderAcara(); }).catch(() => { utcPresets = []; });
@@ -319,7 +323,7 @@
         h('textarea', { rows: Math.min(6, Math.max(2, String(it.text || '').split('\n').length)), value: it.text || '', placeholder: 'Isi teks — boleh banyak baris (Enter = baris baru, tiap baris berjalan berurutan)', oninput: (e) => { it.text = e.target.value; dirty(); } })))),
       h('div.row.tkadd', h('button.btn.sm', { onclick: () => { tkDraft.items.push({ title: '', text: '', on: true }); dirty(); renderAcara(); } }, KI.el('plus'), 'Tambah pesan')),
       saveBar) : null;
-    const oc = st.oc;
+    const oc = st.oc, ocOn = (k) => !!(oc && oc.kind === k && !oc.done); // sedang diputar (belum selesai)
     box.replaceChildren(h('div.sidep.utcq',
       phead('clapper', 'UTC Acara', st.eventName || 'Grafis acara',
         h('button.btn.air' + (U.onAir() ? '.on' : ''), { onclick: () => U.setOnAir(), title: 'Tampilkan / sembunyikan grafis UTC Acara di atas Program' }, KI.el(U.onAir() ? 'radio' : 'eye'), U.onAir() ? 'ON AIR' : 'Tayangkan'),
@@ -328,8 +332,8 @@
       fold('ac-show', 'Tampilkan / sembunyikan', { wide: true, tools: [tool([KI.el('ban'), 'Semua OFF'], 'Sembunyikan semua grafis', () => run('hideall'), '.red')] },
         h('div.tgrid', tg('lt', 'Lower Third'), tg('tt', 'Title'), tg('tk', 'Running Text'), tg('bug', 'Logo'), tg('loc', 'Lokasi'), tg('soc', 'Sosmed')),
         h('div.bgrid.oc',
-          h('button.btn.sm' + (oc && oc.kind === 'opening' ? '.pri' : ''), { onclick: () => run('opening') }, KI.el('play'), 'Opening'),
-          h('button.btn.sm' + (oc && oc.kind === 'closing' ? '.pri' : ''), { onclick: () => run('closing') }, KI.el('moon'), 'Closing'),
+          h('button.btn.sm' + (ocOn('opening') ? '.pri' : ''), { title: ocOn('opening') ? 'Klik lagi untuk menghentikan opening' : 'Putar opening', onclick: () => run(ocOn('opening') ? 'ocoff' : 'opening') }, KI.el(ocOn('opening') ? 'x' : 'play'), 'Opening'),
+          h('button.btn.sm' + (ocOn('closing') ? '.pri' : ''), { title: ocOn('closing') ? 'Klik lagi untuk menghentikan closing' : 'Putar closing', onclick: () => run(ocOn('closing') ? 'ocoff' : 'closing') }, KI.el(ocOn('closing') ? 'x' : 'moon'), 'Closing'),
           h('button.btn.sm', { disabled: !oc, onclick: () => run('ocoff') }, KI.el('x'), 'Hentikan'))),
       items('lt', st.lists && st.lists.lt, st.activeId && st.activeId.lt, 'Lower Third', (x) => x.name),
       items('tt', st.lists && st.lists.tt, st.activeId && st.activeId.tt, 'Title', (x) => x.title),
@@ -402,6 +406,8 @@
 
   const R = { acara: renderAcara, score: renderScore, ptz: () => KM.ptz.render(KM.$('#dock-ptz')), script: renderScripts, audio: renderAudio, title: renderTitle, replay: renderReplay, phone: renderPhone, playlist: renderPlaylist };
   DK.render = function (tab) { DK.cur = tab; try { R[tab](); } catch (e) { console.error('dock', e); } };
+  DK.register = (tab, fn) => { R[tab] = fn; };
+  DK.ui = { fold, tool, badge, phead };
   let t;
   KM.on('change', (w) => {
     if (w === 'tbar' || w === 'audio-vol') return;
