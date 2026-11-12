@@ -474,7 +474,12 @@ function smokeTest() {
             if (!vr.state) { fail++; log('GAGAL: state plugin tidak tersimpan'); }
             if (Math.abs(vr.d3 - vr.d2) > 1.5) { fail++; log('GAGAL: state plugin tidak dipulihkan setelah muat ulang'); }
           }
-          await wait(800);
+          await wait(1500);
+          try {
+            const ps = require('child_process').execFileSync('powershell', ['-NoProfile', '-Command', "Get-Process | Where-Object { $_.Name -match 'klm-vsthost|electron|ffmpeg' } | ForEach-Object { $_.Name + ':' + [math]::Round($_.CPU,1) }"], { encoding: 'utf8', timeout: 15000, windowsHide: true });
+            log('proses setelah uji VST (nama:detik CPU): ' + ps.trim().split(/\r?\n/).join(' '));
+            if (/klm-vsthost/.test(ps)) { fail++; log('GAGAL: proses klm-vsthost masih tertinggal setelah plugin dihapus'); }
+          } catch (e) { log('daftar proses gagal: ' + e.message); }
         } catch (e) { fail++; log('GAGAL host VST: ' + e.message); }
       } else log('host VST: dilewati (KLM_VSTTEST tidak diset)');
       // --- dialog tutup ala vMix: info + simpan ke preset ---
@@ -496,7 +501,7 @@ function smokeTest() {
         await js(`Object.assign(KM.settings.srt, { mode: 'caller', host: '127.0.0.1', port: 9310, latency: 200, encoder: 'auto', videoBitrate: 4500, res: '720', passphrase: '' }); KM.rec.startSrt()`);
         let st = '';
         let wasLive = false;
-        for (let i = 0; i < 15; i++) { await wait(1000); st = await js('KM.rec.srtStatus + " " + JSON.stringify(KM.rec.srtStats || {})'); if (st.startsWith('live')) wasLive = true; if (st.startsWith('live') && i > 5) break; }
+        for (let i = 0; i < 25; i++) { await wait(1000); st = await js('KM.rec.srtStatus + " " + JSON.stringify(KM.rec.srtStats || {})'); if (st.startsWith('live')) wasLive = true; if (st.startsWith('live') && i > 5) break; }
         log('SRT status: ' + st + ' encoder=' + await js('KM.rec.srtEncoder'));
         await js('KM.rec.stopSrt(true)'); await wait(2500);
         try { gw.kill(); } catch (e) {}
