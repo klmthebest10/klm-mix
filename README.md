@@ -23,6 +23,8 @@ klm-mix/
 │   ├── utc-osr.js            # render overlay UTC asli offscreen BERLAPIS (Acara, running text, logo, scoreboard)
 │   ├── osr-preload.js        # jembatan halaman overlay offscreen → mixer (running text native)
 │   ├── score.js              # server UTC KLM Scoreboard (port 7171, API & alamat sama dengan aplikasi aslinya)
+│   ├── vst.js                # manajer host VST: IPC, MessagePort AudioWorklet ↔ broker
+│   ├── vst-broker.js         # broker host VST (utilityProcess): 1 proses klm-vsthost per plugin
 │   ├── gencert.js            # sertifikat HTTPS lokal (proses terpisah)
 │   └── ndi-worker.js         # NDI in/out (proses terpisah, butuh NDI Runtime gratis)
 ├── src/                      # aplikasi mixer (UI + mesin)
@@ -38,6 +40,7 @@ klm-mix/
 │       ├── effects.js        # GPU: koreksi warna, chroma key, luma key
 │       ├── inputs.js         # semua jenis input
 │       ├── audiofx.js        # rak efek & plugin audio (18 efek, preset, plugin eksternal)
+│       ├── vst.js            # plugin VST3/VST2 asli di rak efek (AudioWorklet berlatensi tetap, editor, state)
 │       ├── utc.js            # UTC KLM Acara menyatu: lapisan UTC ON AIR (WebGL), input UTC, audio opening/closing
 │       ├── titles.js         # Title Cepat kanvas (16 template, 8 tema)
 │       ├── audio.js          # mixer audio (EQ, kompresor, gate, delay, bus M/A/B, solo, auto)
@@ -59,6 +62,9 @@ klm-mix/
 │   ├── icons.js              # set ikon SVG bersama (PC & HP)
 │   ├── jakarta.woff          # font antarmuka (offline)
 │   └── common.js · phone.css · manifest.json
+├── native/vsthost/           # host plugin VST asli (C++, VST 3 SDK lisensi MIT) → klm-vsthost.exe
+│   ├── src/                  # main.cpp (protokol, jendela editor), vst3.cpp, vst2.cpp
+│   └── test/                 # plugin uji KLM Test Gain + uji protokol
 ├── mobile/                   # pembungkus Android (Capacitor) → .apk
 ├── build/                    # ikon & skrip installer (aturan firewall otomatis)
 └── .github/workflows/        # build otomatis .exe & .apk di GitHub
@@ -73,10 +79,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
    - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.7.0.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.7.0.exe` (tanpa instal)
+     - `KLM-Mix-Setup-1.8.0.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Mix-Portable-1.8.0.exe` (tanpa instal)
    - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
-3. Untuk rilis resmi: buat tag `v1.7.0` → file otomatis muncul di halaman **Releases**.
+3. Untuk rilis resmi: buat tag `v1.8.0` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
 
@@ -129,7 +135,15 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Title Designer** (pengganti GT Designer): teks, kotak, lingkaran, garis, gambar; gradien, bayangan, outline; animasi per elemen + jeda; field bernama untuk SetText; pustaka template sendiri; **impor CSV** untuk daftar nama
 - **Skrip JavaScript** (pengganti VB.NET): `API.Function("Cut")`, `Sleep()`, `Input()`, jalankan dari tombol/shortcut/trigger/Stream Deck
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
-- **Efek audio bawaan** (pengganti VST): high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
+- **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
+
+### Baru di v1.8
+- **Host plugin VST asli (VST3 & VST2, 64-bit)**: dialog Efek audio → *Plugin terpasang di PC* → **Pasang**. Plugin berjalan di dalam KLM Mix, **tampilan/editor asli plugin** langsung terbuka (tombol *Editor* untuk membuka lagi), bisa juga diatur lewat daftar parameter. Pengaturan plugin (state) ikut tersimpan di preset & dipulihkan saat dibuka lagi
+  - Setiap plugin berjalan di **proses terpisah** (`klm-vsthost.exe`): bila plugin crash, KLM Mix tetap jalan dan suara asli diteruskan; tombol *Muat ulang* menjalankannya kembali dengan pengaturan terakhir
+  - Latensi tetap ±21 ms (blok 256 × 4 @48 kHz); suara kering ikut ditunda sehingga slider **Mix** bersih (tanpa efek "comb")
+  - Plugin 32-bit dan CLAP ditandai (belum didukung) — untuk itu tetap tersedia tombol padanan efek bawaan
+- **Tutup aplikasi seperti vMix**: muncul dialog **Simpan / Jangan simpan / Batal**. *Simpan* menulis ke **preset yang sedang dimuat**, atau membuat **preset baru** (pilih nama & lokasi) bila belum ada; batal memilih file = aplikasi tetap terbuka. Dialog juga memberi tahu bila ada perubahan yang belum disimpan dan rekaman/streaming yang sedang berjalan. Nama preset tampil di judul jendela; menu *Proyek* kini *Preset*
+- **Buka aplikasi lebih cepat**: jendela & layar pembuka tampil seketika (tidak menunggu server), CSS di-inline dan ±25 skrip digabung menjadi satu bundle yang dijalankan setelah layar pembuka tergambar (±27 → 3 permintaan; pada PC lambat siap ±20% lebih cepat)
 
 ### Baru di v1.7
 - **Daftar input mulus total**: kamera, KLMCAM, layar **dan video yang sedang diputar** tampil sebagai thumbnail live yang digambar langsung oleh GPU (frame rate asli, tidak ikut beban mixer); sumber kanvas (title, jam, grafis) diperbarui sampai 30 fps; meter audio & progres video memakai transform (tanpa hitung ulang tata letak); tombol kartu hanya dibuat ulang bila statusnya berubah
@@ -234,8 +248,8 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 ## Catatan
 - **NDI** & **Virtual Camera** butuh *NDI Tools* (gratis, ndi.video) terinstal. NDI berjalan di proses terpisah, jadi bila bermasalah aplikasi utama tetap aman. Saat ini NDI membawa video saja (audio lewat mixer/stream).
 - **KLM Call** dari luar jaringan lokal butuh VPN (Tailscale/ZeroTier) atau port-forward ke PC studio.
-- Plugin **VST** asli (DLL) tidak bisa dimuat; diganti efek audio bawaan di atas. Skrip memakai **JavaScript**, bukan VB.NET.
+- Plugin **VST3/VST2 64-bit** didukung (Windows). Plugin 32-bit, CLAP, dan plugin instrumen (synth/MIDI) belum. Skrip memakai **JavaScript**, bukan VB.NET.
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.7.0
+KLM Mix 1.8.0

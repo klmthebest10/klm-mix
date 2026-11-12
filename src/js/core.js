@@ -2,7 +2,7 @@
 'use strict';
 window.KM = window.KM || {};
 (function (KM) {
-  KM.version = '1.7.0';
+  KM.version = '1.8.0';
   KM.isElectron = !!(window.klm && window.klm.isElectron);
 
   // ---------- event bus ----------

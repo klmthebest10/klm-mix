@@ -22,11 +22,28 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # Host plugin VST asli (klm-vsthost.exe) dibangun dengan VST 3 SDK (lisensi MIT) + plugin uji KLM Test Gain
+      - name: Build host VST (VST3 SDK 3.8.1)
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch v3.8.1_build_84 https://github.com/steinbergmedia/vst3sdk.git "$env:RUNNER_TEMP\vst3sdk"
+          git -C "$env:RUNNER_TEMP\vst3sdk" submodule update --init --depth 1 base cmake pluginterfaces public.sdk
+          cmake -S native/vsthost -B native/vsthost/build -A x64 -DVST3_SDK="$env:RUNNER_TEMP\vst3sdk"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cmake --build native/vsthost/build --config Release --parallel
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-ChildItem native/vsthost/build/bin/Release | ForEach-Object { Write-Host ("{0}: {1:N0} KB" -f $_.Name, ($_.Length / 1KB)) }
+          Get-ChildItem -Recurse native/vsthost/build/KLMTestGain.vst3 | ForEach-Object { Write-Host $_.FullName }
+
+      - name: Uji host VST (protokol, parameter, state, throughput)
+        run: node native/vsthost/test/host-test.js native/vsthost/build/bin/Release/klm-vsthost.exe native/vsthost/build/KLMTestGain.vst3
+
       # Uji nyata di Windows: aplikasi dibuka, grafis UTC KLM Acara harus benar-benar tampil di Program
-      - name: Smoke test (UTC Acara berlapis, running text native, Scoreboard, audio FX, SRT)
+      - name: Smoke test (UTC Acara berlapis, running text native, Scoreboard, audio FX, host VST, simpan preset, SRT)
         shell: pwsh
         run: |
           $env:KLM_SMOKE = "$env:RUNNER_TEMP\smoke"
+          $env:KLM_VSTTEST = "$env:GITHUB_WORKSPACE\native\vsthost\build\KLMTestGain.vst3"
           $p = Start-Process -FilePath "node_modules\electron\dist\electron.exe" -ArgumentList "." -PassThru
           Write-Host "PID utama: $($p.Id)"
           $t = 0
@@ -51,7 +68,7 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      - name: Ukuran aplikasi (koffi hanya Windows x64)
+      - name: Ukuran aplikasi & isi paket (koffi x64, host VST)
         shell: pwsh
         run: |
           $k = "dist/win-unpacked/resources/app.asar.unpacked/node_modules/koffi/build/koffi"
@@ -59,6 +76,7 @@ jobs:
           $sz = (Get-ChildItem dist/win-unpacked -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
           Write-Host ("win-unpacked: {0:N0} MB" -f $sz)
           Get-ChildItem dist/*.exe | ForEach-Object { Write-Host ("{0}: {1:N0} MB" -f $_.Name, ($_.Length / 1MB)) }
+          if (Test-Path dist/win-unpacked/resources/vsthost/klm-vsthost.exe) { Write-Host "host VST ikut terpasang: resources/vsthost/klm-vsthost.exe" } else { Write-Host "::error::klm-vsthost.exe tidak ada di paket"; exit 1 }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

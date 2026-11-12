@@ -181,6 +181,39 @@ function serveFile(req, res, file, extraHeaders) {
   });
 }
 
+// ---------- kerangka aplikasi cepat ----------
+// index.html disajikan dengan CSS di-inline dan semua skrip (defer) digabung menjadi satu bundle yang diunduh
+// paralel (preload) tapi baru dijalankan setelah layar pembuka tergambar: 1 permintaan (bukan ±25), jendela tidak
+// lagi kosong/gelap saat skrip dikompilasi. KLM_NOBUNDLE=1 mematikan.
+const shell = { key: '', html: null, js: null, etag: '' };
+function appShell() {
+  if (process.env.KLM_NOBUNDLE) return null;
+  const idx = path.join(ROOT, 'src', 'index.html'), cssF = path.join(ROOT, 'src', 'css', 'app.css');
+  let html; try { html = fs.readFileSync(idx, 'utf8'); } catch (e) { return null; }
+  const srcs = []; html.replace(/<script src="([^"]+)" defer><\/script>/g, (m, x) => { srcs.push(x); return m; });
+  const fileOf = (x) => (x.startsWith('/src/') ? path.join(ROOT, x) : path.join(ROOT, 'web', x.slice(1)));
+  const files = [idx, cssF].concat(srcs.map(fileOf));
+  let key = '';
+  for (const f of files) { try { const st = fs.statSync(f); key += st.size + ':' + st.mtimeMs + '|'; } catch (e) { return null; } }
+  if (key === shell.key && shell.html) return shell;
+  try {
+    let js = "'use strict';\n";
+    for (const x of srcs) js += '\n// ==== ' + x + ' ====\ntry {\n' + fs.readFileSync(fileOf(x), 'utf8') + "\n} catch (e) { console.error('[KLM] modul " + x + " gagal', e); }\n";
+    const etag = require('crypto').createHash('sha1').update(js).digest('hex').slice(0, 16);
+    const css = fs.readFileSync(cssF, 'utf8');
+    let first = true;
+    html = html.replace(/<script src="[^"]+" defer><\/script>\n?/g, () => { if (!first) return ''; first = false; return '<script>(function () { var done = false, go = function () { if (done) return; done = true; var s = document.createElement("script"); s.src = "/app.bundle.js?v=' + etag + '"; document.body.appendChild(s); }; requestAnimationFrame(function () { setTimeout(go, 0); }); setTimeout(go, 120); })();</script>\n'; })
+      .replace('<link rel="stylesheet" href="/src/css/app.css">', () => '<link rel="preload" href="/app.bundle.js?v=' + etag + '" as="script">\n<link rel="preload" href="/jakarta.woff" as="font" type="font/woff" crossorigin>\n<style>\n' + css + '\n</style>');
+    Object.assign(shell, { key, html: Buffer.from(html), js: Buffer.from(js), etag });
+    return shell;
+  } catch (e) { console.warn('[KLM] bundle gagal', e.message); return null; }
+}
+function sendShell(req, res, buf, type, etag) {
+  const h = { 'Content-Type': type, 'Cache-Control': 'no-cache', 'ETag': '"' + etag + '"' };
+  if (req.headers['if-none-match'] === h.ETag) { res.writeHead(304, h); return res.end(); }
+  h['Content-Length'] = buf.length; res.writeHead(200, h); res.end(req.method === 'HEAD' ? undefined : buf);
+}
+
 function isLoopback(req) {
   const a = (req.socket.remoteAddress || '').replace('::ffff:', '');
   return a === '127.0.0.1' || a === '::1';
@@ -235,6 +268,8 @@ async function handleHttp(req, res, ports) {
     if (!f) { res.writeHead(400); return res.end(); }
     return serveFile(req, res, path.normalize(f));
   }
+  if (p === '/' || p === '/index.html') { const sh = appShell(); if (sh) return sendShell(req, res, sh.html, 'text/html; charset=utf-8', 'h' + sh.etag); }
+  if (p === '/app.bundle.js') { const sh = appShell(); if (sh) return sendShell(req, res, sh.js, 'text/javascript; charset=utf-8', sh.etag); }
   if (ROUTES[p]) return serveFile(req, res, path.join(ROOT, ROUTES[p]));
   if (p.startsWith('/src/') || p.startsWith('/web/') || p.startsWith('/build/')) {
     const full = path.normalize(path.join(ROOT, p));

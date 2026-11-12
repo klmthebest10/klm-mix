@@ -1,7 +1,7 @@
 {
   "name": "klm-mix",
   "productName": "KLM Mix",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "KLM Mix - Studio produksi live (klon vMix) dengan KLMCAM & UTC KLM Acara terintegrasi",
   "author": "KLM",
   "license": "UNLICENSED",
@@ -40,7 +40,10 @@
       "!node_modules/koffi/build/koffi/{darwin,freebsd,linux,openbsd,musl}*/**",
       "!node_modules/koffi/build/koffi/win32_{ia32,arm64}/**"
     ],
-    "asarUnpack": [
+    "extraResources": [
+   { "from": "native/vsthost/build/bin/Release/klm-vsthost.exe", "to": "vsthost/klm-vsthost.exe" }
+  ],
+  "asarUnpack": [
       "node_modules/ffmpeg-static/**",
       "node_modules/koffi/**"
     ],

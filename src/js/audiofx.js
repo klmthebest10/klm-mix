@@ -320,11 +320,13 @@
     const R = { input, output, inst: new Map(), order: [], ctx };
     function wrap(item) {
       const d = FX.defs[item.type]; if (!d) return null;
-      let core; try { core = d.make(ctx, item.params); } catch (e) { console.warn('fx', item.type, e); return null; }
+      let core; try { core = d.make(ctx, item.params, item); } catch (e) { console.warn('fx', item.type, e); return null; }
       const win = ctx.createGain(), wet = ctx.createGain(), dry = ctx.createGain(), out = ctx.createGain();
       win.connect(core.input); core.output.connect(wet); wet.connect(out); win.connect(dry); dry.connect(out);
       const w = { item, d, core, input: win, output: out, wet, dry };
-      w.mix = () => { const on = item.on !== false, m = clamp(+item.mix, 0, 1); smooth(wet.gain, on ? (d.parallel ? m : m) : 0, ctx, 0.015); smooth(dry.gain, on ? (d.parallel ? 1 : 1 - m) : 1, ctx, 0.015); };
+      w.mix = () => { const it = w.item, on = it.on !== false, m = clamp(+it.mix, 0, 1);
+        if (d.selfMix) { core.setMix && core.setMix(m); smooth(wet.gain, on ? 1 : 0, ctx, 0.015); smooth(dry.gain, on ? 0 : 1, ctx, 0.015); return; } // plugin mencampur sendiri (suara kering ikut ditunda)
+        smooth(wet.gain, on ? (d.parallel ? m : m) : 0, ctx, 0.015); smooth(dry.gain, on ? (d.parallel ? 1 : 1 - m) : 1, ctx, 0.015); };
       Object.keys(item.params || {}).forEach((k) => { try { core.set(k, item.params[k]); } catch (e) {} });
       w.mix();
       return w;
@@ -345,7 +347,7 @@
       for (const x of list) {
         let w = R.inst.get(x.id);
         if (!w) { w = wrap(x); if (w) R.inst.set(x.id, w); }
-        else { w.item = x; Object.keys(x.params || {}).forEach((k) => { try { w.core.set(k, x.params[k]); } catch (e) {} }); w.mix(); }
+        else { w.item = x; if (w.core.setItem) w.core.setItem(x); Object.keys(x.params || {}).forEach((k) => { try { w.core.set(k, x.params[k]); } catch (e) {} }); w.mix(); }
       }
       R.order = list.map((x) => x.id);
       relink();
@@ -457,6 +459,35 @@
         onchange: save, ondblclick: () => { rack() && rack().set(item, p.k, p.def); item.params[p.k] = p.def; rng.value = toR(p.def); out.textContent = fmt(p, p.def); save(); }, title: 'Dobel klik: kembali ke ' + p.def });
       return [h('label', p.n), rng, out];
     }
+    // ---- panel plugin VST asli: info, editor, parameter generik ----
+    const vparams = new Map(); // item.id -> daftar parameter terakhir
+    function vstPanel(item, vi) {
+      const ok = vi && vi.status === 'ok', inf = ok ? vi.info : null;
+      const lat = inf ? Math.round(((inf.latency || 0) + KM.vst.B * ((KM.settings.vstBlocks | 0) || 4)) / (vi.ctx.sampleRate / 1000)) : 0;
+      const line = !vi ? 'Rak ini belum aktif (input belum punya jalur audio).' : ok ? [inf.name, inf.vendor, inf.format, inf.params + ' parameter', 'latensi ±' + lat + ' ms'].filter(Boolean).join(' • ')
+        : vi.status === 'loading' ? 'Memuat plugin…' : 'Gagal: ' + vi.error;
+      const plist = vparams.get(item.id);
+      const loadParams = async () => { try { vparams.set(item.id, (await KM.vst.params(vi)) || []); } catch (e) { vparams.set(item.id, []); } draw(); };
+      let refreshT = 0;
+      const rows = plist ? plist.slice(0, 160).map((p) => {
+        const out = h('output', p.text ? p.text + (p.unit ? ' ' + p.unit : '') : (+p.v).toFixed(2));
+        const rng = h('input', { type: 'range', min: 0, max: 1000, step: p.steps > 0 ? 1000 / p.steps : 1, value: Math.round(p.v * 1000),
+          oninput: (e) => { p.v = e.target.value / 1000; out.textContent = p.v.toFixed(2); KM.vst.setParam(vi, p.id, p.v); clearTimeout(refreshT); refreshT = setTimeout(async () => { const l = await KM.vst.params(vi).catch(() => null); const q = l && l.find((x) => x.id === p.id); if (q && q.text) out.textContent = q.text + (q.unit ? ' ' + q.unit : ''); }, 180); },
+          ondblclick: () => { if (p.def == null) return; p.v = p.def; rng.value = Math.round(p.def * 1000); KM.vst.setParam(vi, p.id, p.def); }, title: 'Dobel klik: nilai bawaan' });
+        return [h('label', { title: p.name }, p.name), rng, out];
+      }) : [];
+      return h('div.fxp.vstp',
+        h('p.muted', line),
+        h('div.row',
+          h('button.btn.sm', { disabled: !ok || !inf.editor, onclick: () => KM.vst.editor(vi, 1) }, KI.el('sliders'), 'Buka editor plugin'),
+          h('button.btn.sm', { disabled: !ok, onclick: loadParams }, KI.el('list'), plist ? 'Segarkan parameter' : 'Tampilkan parameter'),
+          h('button.btn.sm', { disabled: !vi, onclick: () => KM.vst.reload(vi), title: 'Matikan lalu jalankan ulang plugin (state tersimpan dipulihkan)' }, KI.el('refresh'), 'Muat ulang'),
+          item.state ? h('span.muted', { style: { fontSize: '11px' } }, 'state tersimpan ' + Math.round(item.state.length * 0.75 / 1024 * 10) / 10 + ' KB') : null),
+        plist ? (rows.length ? h('div.kv.vstpar', ...rows.flat()) : h('p.muted', 'Plugin tidak membuka parameter otomasi.')) : null,
+        plist && plist.length > 160 ? h('p.muted', 'Menampilkan 160 dari ' + plist.length + ' parameter — selebihnya lewat editor plugin.') : null,
+        h('p.muted', { style: { fontSize: '11px', wordBreak: 'break-all' } }, item.params.path));
+    }
+    if (KM.vst && KM.vst.onChange) { const off = KM.vst.onChange(() => { if (!body.isConnected) return off(); draw(); }); }
     let saveT = null;
     const save = () => { clearTimeout(saveT); saveT = setTimeout(() => { if (isMaster) KM.saveSettings(); KM.changed('audio'); }, 300); };
     function draw() {
@@ -466,19 +497,24 @@
         if (!d) return h('div.fxi.miss', h('div.fxh', h('b', '⚠ ' + item.type), h('span.muted', 'Plugin tidak terpasang'), h('span.grow'), h('button.cb.del', { onclick: () => { L.splice(i, 1); commit(); draw(); } }, KI.el('x'))));
         const expanded = open.has(item.id);
         const mixOut = h('output', Math.round(item.mix * 100) + '%');
+        const isV = item.type === 'vst', rw = isV && rack() && rack().inst.get(item.id), vi = rw && rw.core.vst;
+        const vStat = isV ? (!vi ? ['', 'tidak aktif'] : vi.status === 'ok' ? ['.ok', 'aktif'] : vi.status === 'loading' ? ['', 'memuat…'] : ['.red', vi.status === 'crash' ? 'berhenti' : 'gagal']) : null;
         return h('div.fxi' + (item.on === false ? '.off' : ''),
           h('div.fxh',
             h('input', { type: 'checkbox', checked: item.on !== false, title: 'Aktif / bypass', onchange: (e) => { item.on = e.target.checked; rack() && rack().mix(item); save(); draw(); } }),
-            h('button.fxn', { onclick: () => { expanded ? open.delete(item.id) : open.add(item.id); draw(); }, title: d.desc || '' }, KI.el(expanded ? 'chev-down' : 'chev-right'), h('b', d.name), item.alias ? h('span.pill', { title: 'Padanan bawaan untuk plugin PC ' + item.alias }, '≈ ' + item.alias) : null, h('span.muted', d.cat)),
+            h('button.fxn', { onclick: () => { expanded ? open.delete(item.id) : open.add(item.id); draw(); }, title: isV ? item.params.path : d.desc || '' }, KI.el(expanded ? 'chev-down' : 'chev-right'), h('b', isV ? item.params.name : d.name), item.alias ? h('span.pill', { title: 'Padanan bawaan untuk plugin PC ' + item.alias }, '≈ ' + item.alias) : null,
+              isV ? h('span.pill.fmt', item.params.format) : null, isV ? h('span.pill' + vStat[0], { title: (vi && vi.error) || '' }, vStat[1]) : h('span.muted', d.cat)),
             h('span.grow'),
+            isV ? h('button.btn.sm' + (vi && vi.editor ? '.on' : ''), { disabled: !vi || vi.status === 'error' || vi.status === 'crash' || (vi.info && vi.info.ok && !vi.info.editor), title: vi && vi.info && vi.info.ok && !vi.info.editor ? 'Plugin ini tidak punya tampilan editor — pakai daftar parameter' : 'Buka/tutup tampilan plugin', onclick: () => KM.vst.editor(vi, 2) }, KI.el('sliders'), 'Editor') : null,
+            isV && vi && (vi.status === 'crash' || vi.status === 'error') ? h('button.btn.sm', { title: 'Jalankan ulang plugin', onclick: () => KM.vst.reload(vi) }, KI.el('refresh'), 'Muat ulang') : null,
             h('span.fxmix', 'Mix', h('input', { type: 'range', min: 0, max: 100, value: Math.round(item.mix * 100), oninput: (e) => { item.mix = e.target.value / 100; mixOut.textContent = e.target.value + '%'; rack() && rack().mix(item); }, onchange: save }), mixOut),
             h('button.cb', { title: 'Naik', disabled: i === 0, onclick: () => { L.splice(i - 1, 0, L.splice(i, 1)[0]); commit(); draw(); } }, KI.el('chev-up')),
             h('button.cb', { title: 'Turun', disabled: i === L.length - 1, onclick: () => { L.splice(i + 1, 0, L.splice(i, 1)[0]); commit(); draw(); } }, KI.el('chev-down')),
             h('button.cb.del', { title: 'Hapus efek', onclick: () => { L.splice(i, 1); open.delete(item.id); commit(); draw(); } }, KI.el('trash'))),
-          expanded ? h('div.kv.fxp', ...d.params.flatMap((p) => paramRow(item, p))) : null);
+          expanded ? (isV ? vstPanel(item, vi) : h('div.kv.fxp', ...d.params.flatMap((p) => paramRow(item, p)))) : null);
       });
       const cats = {};
-      Object.values(FX.defs).forEach((d) => { (cats[d.cat] = cats[d.cat] || []).push(d); });
+      Object.values(FX.defs).forEach((d) => { if (!d.hidden) (cats[d.cat] = cats[d.cat] || []).push(d); });
       const addSel = h('select', { style: { flex: 1 } }, h('option', { value: '' }, '＋ Tambah efek / plugin…'),
         Object.keys(cats).map((c) => h('optgroup', { label: c }, cats[c].map((d) => h('option', { value: d.id }, d.name)))));
       addSel.onchange = async () => { if (!addSel.value) return; const it = FX.newItem(addSel.value); L.push(it); open.add(it.id); await commit(); draw(); };
@@ -494,7 +530,7 @@
             h('button.btn', { onclick: () => { const f = h('input', { type: 'file', multiple: true, accept: '.js,.mjs,.wav,.flac,.mp3,.ogg,.aif,.aiff' }); f.onchange = async () => { const r = await FX.importFiles([...f.files]); KM.toast(r.join(' • '), 'ok', 6000); draw(); }; f.click(); } }, KI.el('upload'), 'Pasang plugin / IR…'),
             KM.isElectron ? h('button.btn', { onclick: () => window.klm.invoke('fx:open-folder') }, KI.el('folder-open'), 'Folder plugin') : null,
             KM.isElectron ? h('button.btn', { onclick: async () => { await FX.loadAll(); draw(); KM.toast('Plugin dimuat ulang: ' + FX.external.filter((x) => x.ok).length + ' berhasil', 'ok'); } }, KI.el('refresh'), 'Muat ulang') : null),
-          h('p.muted', 'Format: plugin KLM (.js — Web Audio/AudioWorklet, lihat docs/PLUGIN-AUDIO.md) dan impulse response (.wav) untuk reverb ruangan asli, hall, plate, atau kabinet speaker. Plugin VST/AU tidak bisa dimuat langsung — jalankan di host VST (mis. Cantabile/LightHost) lalu masukkan ke KLM Mix lewat kabel audio virtual (VB-Cable) sebagai input Mic/Audio.'),
+          h('p.muted', 'Format: plugin KLM (.js — Web Audio/AudioWorklet, lihat docs/PLUGIN-AUDIO.md) dan impulse response (.wav) untuk reverb ruangan asli, hall, plate, atau kabinet speaker. Plugin VST3/VST2 yang terpasang di PC dipasang dari bagian di bawah.'),
           FX.external.length ? h('div.list', FX.external.map((x) => h('div.li', KI.el(x.kind === 'ir' ? 'activity' : 'zap'), h('span.grow', (x.title || x.name) + (x.kind === 'ir' ? ' (impulse response)' : '')), h('span.pill' + (x.ok ? '.ok' : '.red'), x.ok ? 'terpasang' : 'gagal: ' + x.err)))) : null),
         pcSection());
     }
@@ -514,15 +550,24 @@
         const rows = (pc ? pc.plugins : []).filter((x) => !pcFilter || (x.name + ' ' + x.vendor + ' ' + x.cat + ' ' + x.format).toLowerCase().includes(pcFilter));
         return h('div.pclist', rows.slice(0, 400).map((x) => {
           const eq = FX.equivalent(x), d = eq && FX.defs[eq];
-          return h('div.pcr', h('span.pill.fmt', x.format), h('div.pcn', h('b', x.name), h('small', [x.vendor, x.version, x.cat].filter(Boolean).join(' • '))),
+          const can = KM.vst && KM.vst.supports(x);
+          const inst = can ? h('button.btn.sm.pri', { title: 'Pasang plugin ' + x.format + ' asli ke rak ini (tampilan plugin langsung dibuka)', onclick: async () => {
+            const it = KM.vst.newItem(x); L.push(it); open.add(it.id); await commit(); draw();
+            const w = rack() && rack().inst.get(it.id); if (w && w.core.vst) KM.vst.editor(w.core.vst, 1);
+            KM.toast('Plugin dipasang: ' + x.name, 'ok'); } }, KI.el('plus'), 'Pasang') : null;
+          const why = !can && KM.vst && KM.vst.ok ? (x.format === 'CLAP' ? 'CLAP belum didukung' : x.x86 ? '32-bit (tidak didukung)' : x.cat === 'Instrumen' ? 'instrumen (butuh MIDI)' : '') : '';
+          return h('div.pcr', h('span.pill.fmt', x.format), h('div.pcn', h('b', x.name), h('small', [x.vendor, x.version, x.cat, why].filter(Boolean).join(' • '))), inst,
             d ? h('button.btn.sm', { title: 'Tambahkan efek bawaan yang setara ke rak ini (' + d.name + ')', onclick: async () => { const it = FX.newItem(eq); it.alias = x.name; L.push(it); open.add(it.id); await commit(); draw(); KM.toast('Ditambahkan: ' + d.name + ' (padanan ' + x.name + ')', 'ok'); } }, KI.el('plus'), d.name.split(' (')[0])
-              : h('span.muted', x.cat === 'Instrumen' ? 'instrumen' : '—'));
+              : can ? null : h('span.muted', x.cat === 'Instrumen' ? 'instrumen' : '—'));
         }));
       }
       return h('div.sec', { style: { marginTop: '12px' } }, h('h4', KI.el('search'), 'Plugin terpasang di PC (VST3 / VST2 / CLAP)'), head, info,
         pc && pc.plugins.length ? pcList() : null,
-        pc ? h('p.muted', { style: { fontSize: '11.5px' } }, 'Tombol ＋ memasang efek bawaan KLM Mix yang setara (diberi tanda ≈ nama plugin). Untuk memakai plugin VST aslinya: jalankan di host VST' + (pc.hosts.length ? ' (' + pc.hosts.join(', ') + ')' : ' (mis. Light Host / Cantabile)') + ', kirim audio lewat kabel virtual (VB-CABLE/Voicemeeter) — keluarkan Bus A/B ke "CABLE Input" (Pengaturan → Audio), lalu tambahkan output host sebagai input Mic/Audio.') : null);
+        pc ? h('p.muted', { style: { fontSize: '11.5px' } }, KM.vst && KM.vst.ok
+          ? '"Pasang" menjalankan plugin VST3/VST2 aslinya di dalam KLM Mix (proses terpisah — bila plugin crash, suara asli tetap mengalir; pengaturan plugin ikut tersimpan di preset). Tombol nama efek memasang padanan bawaan KLM Mix (tanda ≈).'
+          : 'Tombol ＋ memasang efek bawaan KLM Mix yang setara (diberi tanda ≈ nama plugin). Host VST asli hanya tersedia di versi PC (.exe) Windows.') : null);
     }
+    if (KM.vst && KM.isElectron && !KM.vst.ok) KM.vst.ready().then((ok) => { if (ok && body.isConnected) draw(); });
     if (KM.isElectron && !FX.pc && !FX._autoScan) { FX._autoScan = true; FX.scanPC().then(() => draw()).catch(() => {}); }
     draw();
     UI.modal('🎚 Efek audio — ' + (isMaster ? 'Master' : (KM.inputNum(inp) + '. ' + inp.title)), body, [{ label: 'Selesai', cls: 'pri' }], 'wide');

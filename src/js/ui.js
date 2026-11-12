@@ -292,7 +292,7 @@
         q('score', 'trophy', 'UTC Score', 'Scoreboard olahraga')),
       h('div.row', { style: { marginTop: '14px', justifyContent: 'center' } },
         h('button.btn', { onclick: () => KM.dialogs.addInput() }, KI.el('grid'), 'Semua jenis input'),
-        h('button.btn', { onclick: () => UI.openProject() }, KI.el('folder-open'), 'Buka proyek'),
+        h('button.btn', { onclick: () => UI.openProject() }, KI.el('folder-open'), 'Buka preset'),
         h('button.btn', { onclick: () => UI.restoreAutosave(true) }, KI.el('rotate-ccw'), 'Pulihkan sesi terakhir')));
   }
 
@@ -558,7 +558,7 @@
     };
   };
   UI.loadProject = async function (p) {
-    if (!p || p.app !== 'KLM Mix') { KM.toast('File proyek tidak valid', 'err'); return; }
+    if (!p || p.app !== 'KLM Mix') { KM.toast('File preset tidak valid', 'err'); return; }
     S.inputs.slice().forEach((i) => KM.inputs.remove(i));
     S.previewId = S.programId = null;
     if (p.output) { Object.assign(KM.settings, p.output); KM.saveSettings(); KM.engine.resize(); }
@@ -575,22 +575,38 @@
     if (p.audio && KM.audio.master) ['M', 'A', 'B'].forEach((b) => { KM.audio.setBusVol(b, p.audio[b][0]); KM.audio.setBusMute(b, p.audio[b][1]); });
     renderTransSlots();
     KM.changed('inputs');
-    KM.toast('Proyek dimuat: ' + (p.inputs || []).length + ' input', 'ok');
+    KM.toast('Preset dimuat: ' + (p.inputs || []).length + ' input', 'ok');
+    markSaved(true);
   };
+  // ---- penanda "ada perubahan belum disimpan" (untuk dialog tutup ala vMix) ----
+  const sig = () => { try { const d = UI.projectData(); delete d.savedAt; return JSON.stringify(d); } catch (e) { return ''; } };
+  let savedSig = null, sigT = 0;
+  const setTitle = () => { const n = UI.closeInfo().name; document.title = (n ? n + ' — ' : '') + 'KLM Mix'; };
+  function markSaved(afterLoad) { savedSig = sig(); clearTimeout(sigT); setTitle(); if (afterLoad) sigT = setTimeout(() => { savedSig = sig(); setTitle(); }, 2500); } // input media butuh waktu memuat metadata
+  UI.isDirty = () => (savedSig == null ? S.inputs.length > 0 : sig() !== savedSig);
+  UI.closeInfo = function () {
+    const p = UI.projectPath || '';
+    const busy = [S.recording && 'Rekaman', S.streaming && 'Streaming', S.srt && 'SRT'].filter(Boolean);
+    return { path: p, name: p ? p.split(/[\\/]/).pop().replace(/\.(klmmix|json)$/i, '') : '', dirty: UI.isDirty(), inputs: S.inputs.length, busy };
+  };
+  /** dipanggil proses utama saat menutup aplikasi → true bila tersimpan (atau batal memilih file → false) */
+  UI.saveForClose = async function () { const ok = await UI.saveProject(false); return ok === true; };
   UI.saveProject = async function (asNew) {
+    try { if (KM.vst && KM.vst.flush) await KM.vst.flush(); } catch (e) {}
     const json = JSON.stringify(UI.projectData(), null, 1);
     if (KM.isElectron) {
       let path = !asNew && UI.projectPath;
-      if (!path) path = await window.klm.invoke('dialog:save', { title: 'Simpan Proyek KLM Mix', defaultPath: KM.joinPath(await KM.defaultFolder('doc'), 'Proyek-' + KM.stamp() + '.klmmix'), filters: [{ name: 'Proyek KLM Mix', extensions: ['klmmix'] }] });
-      if (!path) return;
+      if (!path) path = await window.klm.invoke('dialog:save', { title: 'Simpan Preset / Proyek KLM Mix', defaultPath: KM.joinPath(await KM.defaultFolder('doc'), 'Preset-' + KM.stamp() + '.klmmix'), filters: [{ name: 'Preset KLM Mix', extensions: ['klmmix'] }] });
+      if (!path) return false;
       await window.klm.invoke('file:write-text', path, json);
-      UI.projectPath = path; KM.toast('Proyek tersimpan: ' + path, 'ok');
-    } else KM.downloadBlob(new Blob([json], { type: 'application/json' }), 'Proyek-' + KM.stamp() + '.klmmix');
+      UI.projectPath = path; KM.toast('Preset tersimpan: ' + path, 'ok');
+    } else KM.downloadBlob(new Blob([json], { type: 'application/json' }), 'Preset-' + KM.stamp() + '.klmmix');
+    markSaved();
     return true;
   };
   UI.openProject = async function () {
     if (KM.isElectron) {
-      const [p] = await window.klm.invoke('dialog:open', { title: 'Buka Proyek', filters: [{ name: 'Proyek KLM Mix', extensions: ['klmmix', 'json'] }] });
+      const [p] = await window.klm.invoke('dialog:open', { title: 'Buka Preset KLM Mix', filters: [{ name: 'Preset KLM Mix', extensions: ['klmmix', 'json'] }] });
       if (!p) return;
       try { await UI.loadProject(JSON.parse(await window.klm.invoke('file:read-text', p))); UI.projectPath = p; } catch (e) { KM.toast('Gagal membuka: ' + e.message, 'err'); }
     } else {
@@ -599,9 +615,9 @@
     }
   };
   UI.newProject = async function () {
-    if (S.inputs.length && !(await UI.confirm('Mulai proyek baru? Semua input akan ditutup.', 'Proyek baru'))) return;
+    if (S.inputs.length && !(await UI.confirm(UI.isDirty() ? 'Mulai preset baru? Perubahan yang belum disimpan akan hilang dan semua input ditutup.' : 'Mulai preset baru? Semua input akan ditutup.', 'Preset baru'))) return;
     S.inputs.slice().forEach((i) => KM.inputs.remove(i));
-    KM.playlist.items = []; UI.projectPath = null; KM.changed('inputs');
+    KM.playlist.items = []; UI.projectPath = null; savedSig = null; KM.changed('inputs');
   };
   let lastAuto = '';
   UI.autosave = function () {
@@ -612,7 +628,9 @@
     let p; try { p = JSON.parse(localStorage.getItem('klmmix.autosave') || 'null'); } catch (e) {}
     if (!p || !p.inputs || !p.inputs.length) { if (ask) KM.toast('Tidak ada sesi tersimpan'); return; }
     if (ask !== 'silent' && !(await UI.confirm('Pulihkan sesi terakhir (' + p.inputs.length + ' input, ' + new Date(p.savedAt).toLocaleString('id-ID') + ')?', 'Pulihkan'))) return;
-    UI.loadProject(p);
+    await UI.loadProject(p);
+    clearTimeout(sigT); savedSig = null; // sesi pulihan belum tersimpan sebagai preset
+
   };
 
   // ---------- init ----------

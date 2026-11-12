@@ -34,6 +34,15 @@ let writerSeq = 1;
 const browsers = new Map();
 
 
+// layar pembuka instan (tanpa menunggu server) — tampilannya sama dengan layar pembuka halaman aplikasi
+const SPLASH = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:#0a0c0f;color:#eceff4;font-family:"Segoe UI",system-ui,sans-serif;overflow:hidden}'
+  + 'body{background:radial-gradient(ellipse at center,#161a21 0,#0a0c0f 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}'
+  + 'svg{width:64px;height:64px;filter:drop-shadow(0 8px 24px rgba(255,90,50,.35));animation:sp 1.4s cubic-bezier(.2,.7,.3,1) infinite alternate}.wm{font-size:26px;font-weight:800;letter-spacing:-.4px}.wm span{color:#a7afbd;font-weight:600}'
+  + '.sub{color:#6f7888;font-size:12px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase}.bar{width:180px;height:3px;border-radius:3px;background:#252a33;overflow:hidden;margin-top:6px}'
+  + '.bar i{display:block;width:40%;height:100%;background:linear-gradient(90deg,#ff4b3e,#ffb11f);border-radius:3px;animation:ld 1s ease-in-out infinite}@keyframes sp{to{transform:scale(1.06)}}@keyframes ld{from{transform:translateX(-100%)}to{transform:translateX(260%)}}</style></head>'
+  + '<body><svg viewBox="0 0 24 24"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4b3e"/><stop offset="1" stop-color="#ffb11f"/></linearGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#g)"/><path d="M7.6 6.5h2.9v4.6l4.2-4.6h3.5l-4.95 5.25L18.4 17.5h-3.6l-4.3-4.75v4.75H7.6Z" fill="#fff"/></svg>'
+  + '<div class="wm">KLM <span>Mix</span></div><div class="sub">Studio Produksi Live</div><div class="bar"><i></i></div></body></html>';
+
 function createMain() {
   mainWin = new BrowserWindow({
     width: 1600, height: 940, minWidth: 1180, minHeight: 700,
@@ -47,9 +56,9 @@ function createMain() {
     }
   });
   T.window = Date.now() - T0;
-  mainWin.webContents.once('did-finish-load', () => { T.load = Date.now() - T0; });
+  mainWin.webContents.on('did-finish-load', () => { if (!T.load && /^http/.test(mainWin.webContents.getURL())) T.load = Date.now() - T0; });
   Menu.setApplicationMenu(null);
-  mainWin.loadURL(`http://127.0.0.1:${netInfo.ports.http}/`);
+  mainWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(SPLASH)).catch(() => {});
   mainWin.webContents.setWindowOpenHandler(({ url }) => {
     const u = new URL(url);
     if (u.pathname.startsWith('/output')) {
@@ -91,20 +100,52 @@ function createMain() {
     shell.openExternal(url);
     return { action: 'deny' };
   });
+  // Tutup seperti vMix: Simpan / Jangan simpan / Batal. "Simpan" menulis ke preset (proyek) yang sedang dimuat,
+  // atau membuat preset baru bila belum ada.
+  let asking = false;
   mainWin.on('close', (e) => {
-    const choice = dialog.showMessageBoxSync(mainWin, {
-      type: 'question', buttons: ['Keluar', 'Batal'], defaultId: 1, cancelId: 1,
-      title: 'KLM Mix', message: 'Tutup KLM Mix?', detail: 'Rekaman dan streaming yang berjalan akan dihentikan.'
-    });
-    if (choice === 1) return e.preventDefault();
-    e.preventDefault(); hardQuit('tutup jendela');
+    if (quitting) return;
+    e.preventDefault();
+    if (asking) return;
+    asking = true;
+    askClose().catch(() => {}).finally(() => { asking = false; });
   });
+  mainWin.webContents.on('did-start-navigation', (e, url, inPlace, isMain) => { if (isMain && !inPlace && vstMgr) vstMgr.resetFor(mainWin.webContents.id); });
   mainWin.on('closed', () => { mainWin = null; hardQuit('closed'); });
+}
+
+const later = (ms, v) => new Promise((r) => setTimeout(() => r(v), ms));
+async function askClose() {
+  if (!mainWin || mainWin.isDestroyed()) return hardQuit('tutup');
+  const wc = mainWin.webContents;
+  const info = await Promise.race([wc.executeJavaScript('window.KM && KM.ui && KM.ui.closeInfo ? KM.ui.closeInfo() : null', true).catch(() => null), later(2500, null)]);
+  if (!info) { // halaman tidak menjawab: konfirmasi sederhana
+    const c = dialog.showMessageBoxSync(mainWin, { type: 'question', buttons: ['Keluar', 'Batal'], defaultId: 1, cancelId: 1, noLink: true, title: 'KLM Mix', message: 'Tutup KLM Mix?', detail: 'Rekaman dan streaming yang berjalan akan dihentikan.' });
+    if (c === 0) hardQuit('tutup jendela');
+    return;
+  }
+  const lines = [];
+  if (info.path) lines.push('Preset: ' + info.path);
+  lines.push(info.dirty ? (info.path ? 'Ada perubahan yang belum disimpan.' : info.inputs + ' input belum pernah disimpan sebagai preset.') : 'Tidak ada perubahan sejak terakhir disimpan.');
+  if (info.busy && info.busy.length) lines.push(info.busy.join(' & ') + ' sedang berjalan dan akan dihentikan.');
+  const r = await dialog.showMessageBox(mainWin, {
+    type: 'question', noLink: true, title: 'KLM Mix',
+    buttons: ['Simpan', 'Jangan simpan', 'Batal'], defaultId: info.dirty ? 0 : 1, cancelId: 2,
+    message: info.path ? 'Simpan preset "' + info.name + '" sebelum keluar?' : 'Simpan pengaturan saat ini sebagai preset baru sebelum keluar?',
+    detail: lines.join('\n')
+  });
+  if (r.response === 2) return;
+  if (r.response === 0) {
+    const ok = await wc.executeJavaScript('KM.ui.saveForClose()', true).catch((er) => { dialog.showErrorBox('KLM Mix', 'Gagal menyimpan preset: ' + er.message); return false; });
+    if (!ok) return; // batal memilih file / gagal → tetap terbuka
+  }
+  hardQuit('tutup jendela');
 }
 
 function toRenderer(ch, data) { if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send(ch, data); }
 
 // ---------------- IPC ----------------
+const vstMgr = require('./vst').setup({ win: () => mainWin });
 ipcMain.handle('app:info', () => ({
   version: app.getVersion(), ports: netInfo.ports, ips: server.localIPs(),
   videos: app.getPath('videos'), pictures: app.getPath('pictures'), documents: app.getPath('documents'),
@@ -181,6 +222,11 @@ ipcMain.handle('fx:scan-pc', async (e, extra) => {
   const CAT = [[/pro-?q|eq\b|equali|tone|filter|kirchhoff|nova|slick ?eq/i, 'EQ'], [/comp|limit|gate|expan|dynam|leveler|maximi|clip|transient|de-?ess|kotelnikov|molot|1176|la-?2a|bus ?comp|pro-[cldg]\\b/i, 'Dinamika'], [/verb|room|hall|plate|space|valhalla|convol/i, 'Reverb'], [/delay|echo/i, 'Delay'],
     [/tune|pitch|voice|vocal|harmon|autotune|melodyne/i, 'Vokal/Pitch'], [/noise|denois|hum|rx\b|restor|clean|dereverb|krisp/i, 'Restorasi'], [/chorus|flang|phase|trem|vibrato|modul/i, 'Modulasi'], [/sat|dist|drive|tape|warm|tube|amp|cab/i, 'Saturasi'], [/master|ozone|loud|meter|analy|span/i, 'Mastering/Meter'], [/synth|piano|drum|sampler|kontakt|instrument|serum|vital|surge/i, 'Instrumen']];
   const guess = (n, sub) => { const t = n + ' ' + (sub || ''); for (const [re, c] of CAT) if (re.test(t)) return c; return 'Efek'; };
+  const exists = async (p) => { try { await fsp.access(p); return true; } catch (er) { return false; } };
+  async function peArch(file) {
+    let fh; try { fh = await fsp.open(file, 'r'); const b = Buffer.alloc(1024); await fh.read(b, 0, 1024, 0); const pe = b.readUInt32LE(0x3c); if (pe + 6 > 1024 || b.readUInt32LE(pe) !== 0x4550) return ''; const m = b.readUInt16LE(pe + 4); return m === 0x14c ? 'x86' : m === 0x8664 ? 'x64' : m === 0xaa64 ? 'arm64' : ''; }
+    catch (er) { return ''; } finally { try { fh && (await fh.close()); } catch (er) {} }
+  }
   async function walk(fmt, dir, depth) {
     let ents; try { ents = await fsp.readdir(dir, { withFileTypes: true }); } catch (er) { return; }
     for (const d of ents) {
@@ -193,6 +239,8 @@ ipcMain.handle('fx:scan-pc', async (e, extra) => {
           try { const mi = JSON.parse(await fsp.readFile(path.join(full, 'Contents', 'moduleinfo.json'), 'utf8')); item.vendor = (mi['Factory Info'] && mi['Factory Info'].Vendor) || ''; item.version = mi.Version || '';
             const cl = (mi.Classes || []).find((c) => /Audio Module/i.test(c.Category || '')); if (cl) { item.name = cl.Name || item.name; item.sub = (cl['Sub Categories'] || []).join('|'); } } catch (er) {}
         }
+        if (f === 'VST3' && d.isDirectory()) { if (!(await exists(path.join(full, 'Contents', 'x86_64-win'))) && (await exists(path.join(full, 'Contents', 'x86-win')))) item.x86 = true; }
+        else if (f !== 'CLAP' && !d.isDirectory() && (await peArch(full)) === 'x86') item.x86 = true; // DLL 32-bit tidak bisa dimuat host 64-bit
         item.cat = /instrument/i.test(item.sub) ? 'Instrumen' : guess(item.name, item.sub);
         out.push(item);
         continue;
@@ -202,7 +250,6 @@ ipcMain.handle('fx:scan-pc', async (e, extra) => {
   }
   for (const [fmt, dir] of roots) { try { await fsp.access(dir); folders.push(dir); await walk(fmt, dir, 0); } catch (er) {} }
   // host VST & kabel audio virtual yang terpasang (untuk merutekan audio ke plugin VST)
-  const exists = async (p) => { try { await fsp.access(p); return true; } catch (er) { return false; } };
   const HOSTS = [['Equalizer APO', path.join(PF, 'EqualizerAPO')], ['Light Host', path.join(PF, 'Light Host')], ['Light Host', path.join(PF86, 'Light Host')], ['Cantabile', path.join(PF, 'Topten Software', 'Cantabile 4')], ['Element', path.join(PF, 'Element')],
     ['Voicemeeter', path.join(PF86, 'VB', 'Voicemeeter')], ['VB-CABLE', path.join(PF, 'VB', 'CABLE')], ['VB-CABLE', path.join(PF86, 'VB', 'CABLE')], ['REAPER', path.join(PF, 'REAPER (x64)')], ['Pedalboard 2', path.join(PF86, 'Pedalboard2')], ['Kushview Element', path.join(PF, 'Kushview', 'Element')]];
   const hosts = []; for (const [n, p] of HOSTS) if (!hosts.includes(n) && (await exists(p))) hosts.push(n);
@@ -249,10 +296,12 @@ app.whenReady().then(async () => {
     desktopCapturer.getSources({ types: ['screen'] }).then((s) => cb({ video: s[0], audio: 'loopback' })).catch(() => cb({}));
   });
   T.ready = Date.now() - T0;
+  createMain(); // jendela tampil dulu (latar gelap), server menyusul → terasa lebih cepat terbuka
   netInfo = await server.start();
   T.server = Date.now() - T0;
   utcOsr = setupUtcOsr({ port: () => netInfo.ports.http, scorePort: () => { const sc = server.score(); return sc ? sc.port() : 0; } });
-  createMain();
+  if (mainWin && !mainWin.isDestroyed()) mainWin.loadURL(`http://127.0.0.1:${netInfo.ports.http}/`).catch((e) => console.warn('loadURL', e.message));
+  T.window2 = Date.now() - T0;
   if (process.env.KLM_SMOKE) smokeTest();
 });
 app.on('second-instance', () => { if (mainWin) { if (mainWin.isMinimized()) mainWin.restore(); mainWin.focus(); } });
@@ -268,6 +317,7 @@ function hardQuit(why) {
   if (quitting) return; quitting = true;
   if (process.env.KLM_SMOKE) { try { fs.appendFileSync(path.join(process.env.KLM_SMOKE, 'smoke.log'), new Date().toISOString() + ' hardQuit ' + why + '\n'); } catch (e) {} }
   for (const w of browsers.values()) { try { w.destroy(); } catch (e) {} }
+  try { vstMgr.shutdown(); } catch (e) {}
   try { server.hub.shutdown(); } catch (e) {}
   const ends = [...writers.values()].map((w) => new Promise((r) => { try { w.end(r); } catch (x) { r(); } setTimeout(r, 2500); }));
   writers.clear();
@@ -397,6 +447,45 @@ function smokeTest() {
         const m = KM.audio.readMeter(st.meter); return JSON.stringify({ n: st.rack.inst.size, db: Math.round(KM.audio.toDb(Math.max(m.peakL, m.peakR))), ctx: KM.audio.ctx.state }); })()`);
       log('efek audio: ' + fx);
       { const f = JSON.parse(fx); if (f.n !== 6) { fail++; log('GAGAL: rak efek tidak lengkap'); } }
+      // --- host VST asli: plugin uji KLM Test Gain di rak input Tone (KLM_VSTTEST = path bundle .vst3) ---
+      if (process.env.KLM_VSTTEST) {
+        try {
+          const vr = JSON.parse(await js(`(async () => { const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); const ok = await KM.vst.ready();
+            const inp = KM.state.inputs.find((i) => i.title === 'Tone'); const st = KM.audio.strips.get(inp.id);
+            const db = () => { const m = KM.audio.readMeter(st.meter); return Math.round(KM.audio.toDb(Math.max(m.peakL, m.peakR)) * 10) / 10; };
+            inp.audio.fx = []; await st.rack.sync(inp.audio.fx); await sleep(1200); const d0 = db();
+            const it = KM.vst.newItem({ path: ${JSON.stringify(process.env.KLM_VSTTEST)}, name: 'KLM Test Gain', format: 'VST3' });
+            inp.audio.fx = [it]; await st.rack.sync(inp.audio.fx); const v = st.rack.inst.get(it.id).core.vst;
+            const t0 = performance.now(); for (let i = 0; i < 150 && v.status === 'loading'; i++) await sleep(100); const loadMs = Math.round(performance.now() - t0);
+            await sleep(1500); const d1 = db();
+            const params = await KM.vst.params(v);
+            KM.vst.setParam(v, 0, 1); await sleep(1800); const d2 = db();
+            const state = it.state || '';
+            KM.vst.reload(v); for (let i = 0; i < 150 && v.status === 'loading'; i++) await sleep(100); await sleep(1500); const d3 = db();
+            KM.vst.editor(v, 1); await sleep(400);
+            const res = { ok, helper: KM.vst.path, status: v.status, err: v.error, info: v.info, loadMs, d0, d1, d2, d3, state: state.length, params: params.map((p) => p.name + '=' + p.text), stat: v.stat, editor: v.editor };
+            inp.audio.fx = []; await st.rack.sync(inp.audio.fx);
+            return JSON.stringify(res); })()`));
+          log('host VST: ' + JSON.stringify(vr));
+          if (vr.status !== 'ok') { fail++; log('GAGAL: plugin VST tidak aktif'); }
+          else {
+            if (Math.abs(vr.d1 - vr.d0) > 1.5) { fail++; log('GAGAL: plugin uji (gain 1x) mengubah level'); }
+            if (Math.abs(vr.d2 - vr.d1 - 6) > 1.5) { fail++; log('GAGAL: parameter gain plugin tidak berpengaruh (+6 dB)'); }
+            if (!vr.state) { fail++; log('GAGAL: state plugin tidak tersimpan'); }
+            if (Math.abs(vr.d3 - vr.d2) > 1.5) { fail++; log('GAGAL: state plugin tidak dipulihkan setelah muat ulang'); }
+          }
+          await wait(800);
+        } catch (e) { fail++; log('GAGAL host VST: ' + e.message); }
+      } else log('host VST: dilewati (KLM_VSTTEST tidak diset)');
+      // --- dialog tutup ala vMix: info + simpan ke preset ---
+      {
+        const c0 = JSON.parse(await js('JSON.stringify(KM.ui.closeInfo())'));
+        const pp = path.join(out, 'preset-uji.klmmix');
+        const saved = await js('KM.ui.projectPath = ' + JSON.stringify(pp) + '; KM.ui.saveForClose()');
+        const c1 = JSON.parse(await js('JSON.stringify(KM.ui.closeInfo())'));
+        log('dialog tutup: sebelum ' + JSON.stringify(c0) + ' → simpan ' + saved + ' → ' + JSON.stringify(c1) + ', file ' + (fs.existsSync(pp) ? fs.statSync(pp).size + ' byte' : 'TIDAK ADA'));
+        if (!c0.dirty || saved !== true || c1.dirty || c1.name !== 'preset-uji' || !fs.existsSync(pp)) { fail++; log('GAGAL: simpan preset saat tutup'); }
+      }
       // --- SRT caller ke "gateway" lokal (ffmpeg listener) ---
       try {
         const { spawn } = require('child_process');

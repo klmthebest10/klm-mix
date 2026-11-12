@@ -5,3 +5,4 @@ mobile/www/
 mobile/android/
 *.log
 .DS_Store
+native/vsthost/build/
