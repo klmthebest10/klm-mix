@@ -617,6 +617,22 @@ function smokeTest() {
         if (enc && !/^e:/.test(enc)) log('catatan: token tidak terenkripsi (safeStorage tidak tersedia)');
       } catch (e) { fail++; log('GAGAL live banyak akun: ' + e.message); }
     } catch (e) { fail++; log('ERROR ' + (e && e.stack || e)); }
+    // --- Latar AI (segmentasi orang, offline) + input Mirroring HP ---
+    try {
+      const sg = JSON.parse(await js(`(async () => { const sleep = (ms) => new Promise((r) => setTimeout(r, ms)); const inp = KM.state.inputs.find((i) => i.title === 'Tone') || KM.state.inputs[0];
+        inp.seg = Object.assign({}, KM.seg.DEF, { mode: 'blur' }); KM.engine.cut(inp.id);
+        for (let i = 0; i < 80 && !(inp.rt.segA) && KM.seg.state !== 'error'; i++) await sleep(250);
+        await sleep(1500);
+        const r = { state: KM.seg.state, err: KM.seg.err || inp.rt.segErr || '', delegate: KM.seg.delegate, mask: inp.rt.segMask ? inp.rt.segMask.width + 'x' + inp.rt.segMask.height : '', out: inp.rt.segOut ? inp.rt.segOut.width + 'x' + inp.rt.segOut.height : '', person: !!inp.rt.person, cover: inp.rt.segCover, fps: KM.engine.fps };
+        inp.seg.mode = 'off'; KM.seg.release(inp);
+        const m = KM.inputs.create('mirror', { title: 'Mirroring uji' }); await sleep(600);
+        r.mirror = { sup: KM.mirror.supported(), port: KM.link.ports.mirror, link: KM.mirror.link(m).replace(/t=[a-f0-9]+/, 't=…'), ws: m.rt.mws && m.rt.mws.readyState };
+        KM.inputs.remove(m);
+        return JSON.stringify(r); })()`));
+      log('latar AI & mirroring: ' + JSON.stringify(sg));
+      if (sg.state !== 'ready' || !sg.mask) { fail++; log('GAGAL: mesin Latar AI tidak berjalan'); }
+      if (!sg.mirror.sup || !sg.mirror.port || sg.mirror.ws !== 1) { fail++; log('GAGAL: input Mirroring HP (WebCodecs / port / feed)'); }
+    } catch (e) { fail++; log('GAGAL latar AI: ' + e.message); }
     // --- Virtual Set dari template + penyusun tata letak ---
     try {
       const vs = JSON.parse(await js(`(async () => { const t = KM.vset.builtin.find((x) => x.id === 'trio-utama'); const v = KM.vset.create(t, { fill: false });

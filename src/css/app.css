@@ -749,3 +749,7 @@ body.lite .card, body.lite .screen, body.lite #dock, body.lite .modal { box-shad
 body.lite .card { transition: none !important; } body.lite .card:hover { transform: none !important; }
 body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .001s !important; transition-duration: .001s !important; } }
+
+/* Latar AI */
+.modesel { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; }
+.modesel .btn { justify-content: center; padding: 10px 8px; } .modesel .btn.on { border-color: var(--acc); color: var(--tx); background: rgba(255, 122, 26, .14); }

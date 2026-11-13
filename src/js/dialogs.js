@@ -42,7 +42,7 @@
   D.qr = (text) => h('div.qr', { html: window.KMQR ? KMQR.svg(text, { border: 2 }) : '' });
 
   // =================== TAMBAH INPUT ===================
-  const ORDER = ['video', 'image', 'list', 'camera', 'klmcam', 'virtualset', 'utc', 'score', 'stream', 'call', 'screen', 'title', 'audio', 'audiofile', 'colour', 'bars', 'browser', 'replay', 'urlvideo'];
+  const ORDER = ['video', 'image', 'list', 'camera', 'klmcam', 'mirror', 'virtualset', 'utc', 'score', 'stream', 'call', 'screen', 'title', 'audio', 'audiofile', 'colour', 'bars', 'browser', 'replay', 'urlvideo'];
   D.addInput = function (preset) {
     const form = h('div', { style: { marginTop: '12px' } });
     let current = null, creator = null;
@@ -198,6 +198,21 @@
       form.append(row('FPS', sel([15, 25, 30, 60], sfps, (v) => { o.fps = +v; }), chk('Rekam audio sistem (khusus layar penuh)', false, (v) => { o.sysAudio = v; })), h('div', { style: { marginTop: '8px' } }, grid));
       return () => { if (!o.sourceId) { KM.toast('Pilih layar/jendela'); return false; } KM.inputs.create('screen', { title: chosen || 'Layar', opts: o }); };
     },
+    mirror(form) {
+      const o = { token: Array.from(crypto.getRandomValues(new Uint8Array(6))).map((b) => b.toString(16).padStart(2, '0')).join(''), size: 1280, fps: 60, bitrate: 8000 };
+      const fake = { opts: o, rt: {}, title: 'Mirroring HP' };
+      KM.mirror.allow(o.token, 'Mirroring HP');
+      const qr = h('div');
+      const redraw = () => qr.replaceChildren(KM.mirror.connectBox(fake));
+      form.append(
+        row('Ketajaman', sel([[960, 'Ringan (sisi panjang 960)'], [1280, 'HD (1280) — disarankan'], [1920, 'Full HD (1920)']], o.size, (v) => { o.size = +v; redraw(); }),
+          h('label', 'Kehalusan'), sel([[30, '30 fps'], [60, '60 fps']], o.fps, (v) => { o.fps = +v; redraw(); })),
+        row('Bitrate', sel([[4000, '4 Mbps'], [8000, '8 Mbps'], [12000, '12 Mbps'], [20000, '20 Mbps (WiFi 5 GHz / USB)']], o.bitrate, (v) => { o.bitrate = +v; redraw(); })),
+        qr,
+        KM.mirror.supported() ? null : h('p.muted', '⚠ Mirroring hanya tersedia di versi PC (.exe).'));
+      redraw();
+      return () => { KM.inputs.create('mirror', { title: 'Mirroring HP', opts: o }); };
+    },
     klmcam(form) {
       const used = S.inputs.filter((i) => i.type === 'klmcam').map((i) => +i.opts.slot);
       let slot = 1; while (used.includes(slot)) slot++;
@@ -274,6 +289,7 @@
   // =================== PENGATURAN INPUT ===================
   D.inputSettings = function (inp, tab) {
     const tabs = [['umum', 'Umum'], ['posisi', 'Posisi & Crop'], ['warna', 'Koreksi Warna'], ['key', 'Chroma Key'], ['layer', 'Tata letak (Layer / MultiView)']];
+    if (['klmcam', 'camera', 'call', 'stream', 'video', 'urlvideo', 'mirror', 'list'].includes(inp.type)) tabs.splice(3, 0, ['latar', 'Latar AI (orang)']);
     if (KM.inputs.hasAudio(inp)) tabs.push(['audio', 'Audio']);
     tabs.push(['trigger', 'Trigger']);
     const body = h('div.inpset');
@@ -371,6 +387,38 @@
       build();
       return wrap;
     },
+    latar(inp) {
+      const SG = KM.seg, o = SG.cfg(inp), ch = () => KM.changed('input');
+      const box = h('div');
+      const MODES = [['off', 'Mati', 'x'], ['remove', 'Hapus latar', 'layers'], ['blur', 'Buramkan', 'eye'], ['image', 'Ganti gambar', 'image'], ['colour', 'Warna polos', 'palette']];
+      const draw = () => {
+        const on = SG.on(inp), rt = inp.rt;
+        const st = !on ? null : SG.state === 'error' ? h('span.pill.red', 'Tidak tersedia: ' + SG.err) : !rt.segger ? h('span.pill.warn', 'Menyiapkan mesin AI…') : rt.person ? h('span.pill.ok', '● Orang terdeteksi' + (rt.segCover ? ' (' + Math.round(rt.segCover * 100) + '% gambar)' : '')) : h('span.pill', 'Tidak ada orang di gambar');
+        box.replaceChildren(
+          h('div.sec', h('h4', 'Latar AI — deteksi orang'),
+            h('div.modesel', MODES.map(([k, t, ic]) => h('button.btn' + (o.mode === k ? '.on' : ''), { onclick: () => { o.mode = k; if (k === 'off') SG.release(inp); ch(); draw(); } }, KI.el(ic), t))),
+            h('div.row', { style: { marginTop: '8px', minHeight: '24px' } }, st, on && rt.segger ? h('span.muted', 'mesin: ' + SG.delegate) : null),
+            h('p.muted', 'Memisahkan orang dari latar secara langsung tanpa green screen dan tanpa internet. "Hapus latar" membuat latar transparan — taruh input ini sebagai kotak di Virtual Set / layer di atas input lain.')),
+          !on ? null : h('div.sec', h('h4', 'Latar'),
+            o.mode === 'blur' ? h('div.kv', ...slider('Kekuatan buram', 2, 40, 1, () => o.blur, (v) => { o.blur = v; ch(); })) : null,
+            o.mode === 'colour' ? row('Warna', h('input', { type: 'color', value: o.colour, oninput: (e) => { o.colour = e.target.value; ch(); } }), h('span.muted', 'hijau #00b140 cocok untuk chroma key di aplikasi lain')) : null,
+            o.mode === 'image' ? row('Gambar', h('button.btn', { onclick: async () => { const f = (await KM.pickFiles('image/*'))[0]; if (!f) return; o.bgUrl = f.url; o.bgPath = f.path || f.name; ch(); draw(); } }, KI.el('image'), o.bgUrl ? 'Ganti gambar…' : 'Pilih gambar…'),
+              h('span.muted.ell', o.bgUrl ? String(o.bgPath || '').split(/[\\/]/).pop() : 'belum dipilih'), sel([['fill', 'Penuh'], ['fit', 'Pas']], o.bgFit, (v) => { o.bgFit = v; ch(); })) : null,
+            o.mode === 'remove' ? h('p.muted', 'Latar transparan. Untuk latar video: buat Virtual Set berlatar video lalu isi kotaknya dengan input ini.') : null),
+          !on ? null : h('div.sec', h('h4', 'Tepi & bingkai'),
+            h('div.kv', ...slider('Kelembutan tepi', 0, 12, 0.5, () => o.feather, (v) => { o.feather = v; ch(); }), ...slider('Ketat ↔ longgar', 0.2, 0.8, 0.01, () => o.edge, (v) => { o.edge = v; ch(); })),
+            chk('Bingkai otomatis mengikuti orang (auto-frame)', o.follow, (v) => { o.follow = v; inp.rt.segF = null; ch(); draw(); }),
+            o.follow ? h('div.kv', ...slider('Zoom maksimum', 1, 3, 0.05, () => o.followZoom, (v) => { o.followZoom = v; ch(); })) : null,
+            chk('Sembunyikan input bila tidak ada orang', o.hideEmpty, (v) => { o.hideEmpty = v; ch(); }),
+            chk('Balik (yang dipertahankan latarnya)', o.invert, (v) => { o.invert = v; ch(); }),
+            h('p.muted', 'Chroma Key tetap ada di tab sebelah dan bisa digabung (mis. merapikan sisa layar hijau). Di perangkat lemah proses berjalan 15×/detik.')));
+      };
+      draw();
+      const off = KM.on('change', (w) => { if (w === 'seg') { if (!box.isConnected) return; draw(); } });
+      const iv = setInterval(() => { if (!box.isConnected) { clearInterval(iv); return; } if (SG.on(inp) && !inp.rt.segger) draw(); }, 700);
+      void off;
+      return box;
+    },
     key(inp) {
       const k = inp.key, ch = () => KM.changed('input');
       return h('div',
@@ -441,6 +489,7 @@
   };
 
   const INPUT_EXTRA = {
+    mirror(inp) { return KM.mirror.connectBox(inp); },
     colour(inp) {
       const o = inp.opts, p = () => KM.inputTypes.colour.paint(inp);
       return h('div.sec', h('h4', 'Warna'), row('Warna 1', h('input', { type: 'color', value: o.color, oninput: (e) => { o.color = e.target.value; p(); } }), h('label', 'Warna 2'), h('input', { type: 'color', value: o.color2, oninput: (e) => { o.color2 = e.target.value; p(); } })),

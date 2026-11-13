@@ -546,6 +546,7 @@
       const S = KM.state; inp = KM.getInput(inp); if (!inp) return;
       const t = T[inp.type];
       try { t.destroy && t.destroy(inp); } catch (e) {}
+      try { KM.seg && KM.seg.release(inp); } catch (e) {}
       const rt = inp.rt;
       if (rt.stream) rt.stream.getTracks().forEach((tr) => tr.stop());
       if (rt.el) { try { rt.el.pause && rt.el.pause(); rt.el.removeAttribute('src'); rt.el.srcObject = null; rt.el.load && rt.el.load(); rt.el.remove && rt.el.remove(); } catch (e) {} }

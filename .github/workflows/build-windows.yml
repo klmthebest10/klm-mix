@@ -22,6 +22,17 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      # Model segmentasi orang (MediaPipe Selfie Segmenter, Apache-2.0) untuk Latar AI — ikut dipaketkan agar jalan tanpa internet
+      - name: Unduh model Latar AI
+        shell: pwsh
+        run: |
+          $u = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite"
+          Invoke-WebRequest -Uri $u -OutFile web/selfie_segmenter.tflite -MaximumRetryCount 3 -RetryIntervalSec 5
+          $f = Get-Item web/selfie_segmenter.tflite
+          Write-Host ("model: {0:N0} KB" -f ($f.Length / 1KB))
+          if ($f.Length -lt 100000) { Write-Host "::error::model segmentasi tidak terunduh"; exit 1 }
+          Get-ChildItem node_modules/@mediapipe/tasks-vision/wasm | ForEach-Object { Write-Host ("{0}: {1:N0} KB" -f $_.Name, ($_.Length / 1KB)) }
+
       # Host plugin VST asli (klm-vsthost.exe) dibangun dengan VST 3 SDK (lisensi MIT) + plugin uji KLM Test Gain
       - name: Build host VST (VST3 SDK 3.8.1)
         shell: pwsh

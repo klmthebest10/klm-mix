@@ -82,10 +82,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
    - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.11.0.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.11.0.exe` (tanpa instal)
+     - `KLM-Mix-Setup-1.12.0.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Mix-Portable-1.12.0.exe` (tanpa instal)
    - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
-3. Untuk rilis resmi: buat tag `v1.11.0` → file otomatis muncul di halaman **Releases**.
+3. Untuk rilis resmi: buat tag `v1.12.0` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
 
@@ -139,6 +139,10 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Skrip JavaScript** (pengganti VB.NET): `API.Function("Cut")`, `Sleep()`, `Input()`, jalankan dari tombol/shortcut/trigger/Stream Deck
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
+
+### Baru di v1.12
+- **Latar AI — deteksi orang tanpa green screen** (⚙ input KLMCAM / kamera / tamu / video → tab *Latar AI*): **hapus latar** (transparan), **buramkan**, **ganti gambar**, atau **warna polos** secara realtime; indikator *orang terdeteksi*; **bingkai otomatis mengikuti orang**; sembunyikan input bila tidak ada orang; kelembutan & keketatan tepi. Berjalan di PC **tanpa internet** (model MediaPipe Selfie Segmenter + mesin WASM/GPU ikut terpasang). **Chroma Key tetap ada** dan bisa digabung
+- **Input baru: Mirroring HP** (Tambah Input → Mirroring HP → **scan QR**): layar HP Android tampil langsung di KLM Mix. Aplikasi KLM Mix (.apk) merekam layar dengan encoder H.264 hardware dan mengirim langsung lewat WiFi / hotspot / USB tethering (**tanpa internet**); PC mendekode dengan WebCodecs dan antrean sependek mungkin. Pilihan 960 / 1280 / 1920, 30 / 60 fps, 4–20 Mbps; rotasi layar diikuti; sambung ulang otomatis. Scan QR dari dalam aplikasi atau dengan kamera bawaan HP (tautan `klmmix://`)
 
 ### Baru di v1.11
 - **Daftar input tidak lagi patah-patah saat kamera dipakai di input lain**: kartu input gabungan (Virtual Set / layer berisi kamera, KLMCAM, video) kini digambar 16–30 fps walau Program sedang diam; kamera yang sama dipakai di dua input berbagi satu stream (perangkat tidak dibuka dua kali)
@@ -277,4 +281,4 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.11.0
+KLM Mix 1.12.0

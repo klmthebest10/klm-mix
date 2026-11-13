@@ -19,14 +19,15 @@ const createUtc = require('./utc');
 const createScore = require('./score');
 
 const ROOT = path.join(__dirname, '..');
-const DEFAULTS = { httpPort: 8620, httpsPort: 8621, tcpPort: 8622 };
+const DEFAULTS = { httpPort: 8620, httpsPort: 8621, tcpPort: 8622, mirrorPort: 8624 };
+const mirror = require('./mirror').create();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
   '.webp': 'image/webp', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.mp4': 'video/mp4', '.webm': 'video/webm',
   '.mov': 'video/quicktime', '.mkv': 'video/x-matroska', '.m4v': 'video/mp4', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.flac': 'audio/flac', '.woff2': 'font/woff2', '.ttf': 'font/ttf'
+  '.wasm': 'application/wasm', '.mjs': 'text/javascript; charset=utf-8', '.tflite': 'application/octet-stream', '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.flac': 'audio/flac', '.woff2': 'font/woff2', '.ttf': 'font/ttf'
 };
 
 // ---------- konfigurasi ----------
@@ -223,7 +224,7 @@ function esc(s) { return String(s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>'
 
 const ROUTES = {
   '/': 'src/index.html', '/index.html': 'src/index.html', '/output': 'src/output.html',
-  '/hp': 'web/index.html', '/call': 'web/call.html', '/favicon.ico': 'build/icon-256.png', '/cam': 'web/camera.html', '/camera': 'web/camera.html', '/remote': 'web/remote.html'
+  '/hp': 'web/index.html', '/call': 'web/call.html', '/favicon.ico': 'build/icon-256.png', '/mirror': 'web/mirror.html', '/cam': 'web/camera.html', '/camera': 'web/camera.html', '/remote': 'web/remote.html'
 };
 
 async function handleHttp(req, res, ports) {
@@ -253,6 +254,7 @@ async function handleHttp(req, res, ports) {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     return res.end(JSON.stringify(lastState || {}));
   }
+  if (p === '/api/mirror/allow') { if (!isLoopback(req)) { res.writeHead(403); return res.end(); } mirror.allow(u.searchParams.get('t'), u.searchParams.get('n')); res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end('{"ok":true}'); }
   if (p === '/info') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     return res.end(JSON.stringify({ app: 'KLM Mix', version: require('../package.json').version, ips: localIPs(), ports: Object.assign({ score: score ? score.port() : 0 }, ports), mixer: !!mixer() }));
@@ -270,6 +272,8 @@ async function handleHttp(req, res, ports) {
   }
   if (p === '/' || p === '/index.html') { const sh = appShell(); if (sh) return sendShell(req, res, sh.html, 'text/html; charset=utf-8', 'h' + sh.etag); }
   if (p === '/app.bundle.js') { const sh = appShell(); if (sh) return sendShell(req, res, sh.js, 'text/javascript; charset=utf-8', sh.etag); }
+  // mesin segmentasi orang (MediaPipe Tasks Vision, ikut terpasang → jalan tanpa internet)
+  if (p.startsWith('/vendor/mp/')) { const rel = path.normalize(p.slice(11)); if (rel.startsWith('..') || !/\.(mjs|js|wasm)$/.test(rel)) { res.writeHead(404); return res.end(); } return serveFile(req, res, path.join(ROOT, 'node_modules', '@mediapipe', 'tasks-vision', rel)); }
   if (ROUTES[p]) return serveFile(req, res, path.join(ROOT, ROUTES[p]));
   if (p.startsWith('/src/') || p.startsWith('/web/') || p.startsWith('/build/')) {
     const full = path.normalize(path.join(ROOT, p));
@@ -346,7 +350,7 @@ function listen(server, port, tries = 6) {
 async function start(opts) {
   const cfg = Object.assign(loadConfig(), opts || {});
   hub.setConfig(loadConfig);
-  const ports = { http: 0, https: 0, tcp: 0 };
+  const ports = { http: 0, https: 0, tcp: 0, mirror: 0 };
   if (!utc) {
     try {
       utc = createUtc({
@@ -371,6 +375,7 @@ async function start(opts) {
       if (!isLoopback(req)) return socket.destroy();
       return hub.wssOut.handleUpgrade(req, socket, head, (ws) => hub.wssOut.emit('connection', ws, req));
     }
+    if (req.url.startsWith('/mirror-feed')) { if (!isLoopback(req)) return socket.destroy(); return mirror.upgrade(req, socket, head); }
     if (!req.url.startsWith('/ws')) return socket.destroy();
     wssA.handleUpgrade(req, socket, head, (ws) => wssA.emit('connection', ws, req));
   };
@@ -390,13 +395,14 @@ async function start(opts) {
   else makeCert().then(startHttps).then(() => { if (ports.https) console.log('[KLM Mix] HTTPS :' + ports.https + ' siap'); });
   const tcpServer = net.createServer(handleTcp);
   ports.tcp = await listen(tcpServer, cfg.tcpPort);
+  try { ports.mirror = mirror.port = await listen(mirror.server, cfg.mirrorPort || DEFAULTS.mirrorPort); } catch (e) { console.warn('[KLM] port mirroring gagal dibuka:', e.message); }
 
   console.log(`[KLM Mix] HTTP :${ports.http}  HTTPS :${ports.https}  TCP :${ports.tcp}`);
   for (const ip of localIPs()) console.log(`   Mixer   : http://${ip.address}:${ports.http}/\n   Menu HP : http://${ip.address}:${ports.http}/hp\n   KLMCAM  : ${ports.https ? `https://${ip.address}:${ports.https}` : `http://${ip.address}:${ports.http}`}/cam\n   Remote  : http://${ip.address}:${ports.http}/remote\n   UTC     : http://${ip.address}:${ports.http}/utc${score && score.port() ? `\n   Score   : http://${ip.address}:${score.port()}/  (HP: /hp)` : ''}`);
   return { ports, ips: localIPs() };
 }
 
-module.exports = { start, localIPs, loadConfig, saveConfig, configDir, hub, utc: () => utc, score: () => score };
+module.exports = { start, localIPs, loadConfig, saveConfig, configDir, hub, mirror, utc: () => utc, score: () => score };
 
 function cleanup() { try { hub.shutdown(); } catch (e) {} try { if (utc) utc.shutdown(); } catch (e) {} try { if (score) score.shutdown(); } catch (e) {} }
 process.on('exit', cleanup);

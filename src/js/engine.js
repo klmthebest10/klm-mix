@@ -48,6 +48,10 @@
     const t = KM.inputTypes[inp.type];
     if (t.tick) t.tick(inp, KM.now());
     let s = KM.inputs.source(inp);
+    if (s && s.w && KM.seg && KM.seg.on(inp)) { // latar AI (hapus/ganti/buram latar) sebelum chroma key & koreksi warna
+      const c = s.src === rt.ph ? null : KM.seg.process(inp, s);
+      if (c) s = { src: c, w: c.width, h: c.height };
+    }
     if (s && KM.fx.needs(inp)) {
       const c = KM.fx.process(inp, s.src, s.w, s.h);
       if (c) s = { src: c, w: c.width, h: c.height };
@@ -375,6 +379,7 @@
   E.liveStream = (inp) => {
     if (KM.inputTypes[inp.type].noVideo) return null;
     const rt = inp.rt;
+    if (KM.seg && KM.seg.on(inp)) return null; // kartu menampilkan hasil olahan, bukan video mentah
     if (rt.stream && rt.stream.getVideoTracks().some((t) => t.readyState === 'live')) return rt.stream;
     const md = KM.inputs.media(inp);
     if (!md || md.tagName !== 'VIDEO' || md.paused || md.readyState < 2 || !md.captureStream || rt.capFail) return null;

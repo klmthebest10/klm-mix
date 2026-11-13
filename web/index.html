@@ -21,12 +21,13 @@
   </div>
 
   <button class="big c-cam" id="goCam"><i>📷</i><div><b>Kamera (KLMCAM)</b><span>Jadikan HP ini kamera wireless latensi rendah + tally</span></div></button>
+  <button class="big c-cam" id="goMirror"><i>📲</i><div><b>Mirroring Layar HP</b><span>Tampilkan layar HP ini di KLM Mix secara langsung — scan QR, tanpa internet</span></div></button>
   <button class="big" id="goRemote"><i>🎛️</i><div><b>Remote Switcher</b><span>Cut, transisi, overlay, rekam, streaming, replay</span></div></button>
   <button class="big c-utc" id="goUtc"><i>🎬</i><div><b>UTC KLM Acara (Panel Lengkap)</b><span>Lower third, title, running text, logo, lokasi, sosmed, opening/closing, preset</span></div></button>
   <button class="big c-utc" id="goScore"><i>🏆</i><div><b>UTC KLM Scoreboard</b><span>Skor, jam pertandingan, kartu, foul, timeout — sepak bola, futsal, basket, voli, badminton</span></div></button>
   <button class="big c-call" id="goCall"><i>📞</i><div><b>KLM Call (Tamu)</b><span>Narasumber jarak jauh: lihat tayangan studio + suara tanpa gema</span></div></button>
   <button class="big c-aud" id="goAudio"><i>🎚️</i><div><b>Mixer Audio</b><span>Volume & mute tiap input dari HP</span></div></button>
-  <p class="foot">KLM Mix v1.7.0 · Studio Produksi Live</p>
+  <p class="foot">KLM Mix · Studio Produksi Live</p>
 </div>
 <script src="icons.js"></script>
 <script src="common.js"></script>
@@ -56,6 +57,9 @@
       fetch('/info').then(r => r.json()).then(j => { if (j.ports.https) location.href = 'https://' + location.hostname + ':' + j.ports.https + '/cam'; else go('cam'); }).catch(() => go('cam'));
     } else go('cam');
   };
+  document.getElementById('goMirror').onclick = () => { location.href = KMP.servedByPc ? '/mirror' : 'mirror.html'; };
+  // aplikasi dibuka dari QR Mirroring (klmmix://mirror?...) → langsung ke halaman Mirroring
+  try { const MP = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.KlmMirror; if (MP) { MP.getLaunchUrl().then((d) => { if (d && d.url) location.href = 'mirror.html'; }).catch(() => {}); MP.addListener('link', () => { location.href = 'mirror.html'; }); } } catch (e) {}
   document.getElementById('goRemote').onclick = () => go('remote');
   document.getElementById('goCall').onclick = () => {
     if (KMP.servedByPc && location.protocol !== 'https:') fetch('/info').then(r => r.json()).then(j => { location.href = j.ports.https ? 'https://' + location.hostname + ':' + j.ports.https + '/call' : '/call'; }).catch(() => go('call'));
