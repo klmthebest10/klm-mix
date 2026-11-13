@@ -195,7 +195,8 @@
       window.klm.invoke('desktop:sources').then((list) => {
         grid.replaceChildren(...list.map((s) => h('button.tile', { onclick: (e) => { o.sourceId = s.id; chosen = s.name; KM.$$('.tile', grid).forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); } }, h('img', { src: s.thumb }), h('span', s.name))));
       });
-      form.append(row('FPS', sel([15, 25, 30, 60], sfps, (v) => { o.fps = +v; }), chk('Rekam audio sistem (khusus layar penuh)', false, (v) => { o.sysAudio = v; })), h('div', { style: { marginTop: '8px' } }, grid));
+      form.append(row('FPS', sel([15, 25, 30, 60], sfps, (v) => { o.fps = +v; }), chk('Suara PC (tanpa suara KLM Mix — tidak menggema)', false, (v) => { o.pcAudio = v; })),
+        h('div.row', h('label', ''), chk('Rekam audio sistem lama (khusus layar penuh, ikut suara KLM Mix)', false, (v) => { o.sysAudio = v; })), h('div', { style: { marginTop: '8px' } }, grid));
       return () => { if (!o.sourceId) { KM.toast('Pilih layar/jendela'); return false; } KM.inputs.create('screen', { title: chosen || 'Layar', opts: o }); };
     },
     mirror(form) {
@@ -207,6 +208,7 @@
         ['miracast', '📡', 'Android tanpa aplikasi — Miracast', 'Fitur "Cast / Smart View" bawaan HP ke Windows']];
       const body = h('div');
       let mc = { sourceId: '', name: '' }; // Miracast: jendela yang ditangkap
+      let mcAudio = true;
       const tiles = h('div.tiles.mirror-modes', MODES.map(([k, ic, t, d]) => h('button.tile' + (k === o.mode ? '.on' : ''), { type: 'button', 'data-mode': k, onclick: () => { o.mode = k; KM.$$('.tile', tiles).forEach((x) => x.classList.toggle('on', x.dataset.mode === k)); draw(); } }, h('b', ic), h('span', t), h('small.muted', d))));
       const findMiracast = (grid, auto) => window.klm.invoke('desktop:sources').then((list) => {
         const wins = list.filter((x) => !/^screen:/.test(x.id));
@@ -240,6 +242,7 @@
             h('p', '1. Sekali saja: pasang fitur Windows ', h('b', '"Tampilan Nirkabel" (Wireless Display)'), ' ', btn('Buka Fitur opsional', () => window.klm.invoke('sys:open-settings', 'features')), ' → Tambah fitur → cari "Wireless Display".'),
             h('p', '2. Buka ', btn('Proyeksikan ke PC ini', () => window.klm.invoke('sys:open-settings', 'project')), ' → izinkan "Tersedia di mana saja", lalu tekan ', h('b', 'Luncurkan aplikasi Tampilan Nirkabel'), '.'),
             h('p', '3. Di HP: tarik panel atas → ', h('b', 'Cast / Smart View / Screen Cast / Tampilan nirkabel'), ' → pilih nama PC ini → terima di PC.'),
+            chk('Ambil suara HP (suara PC tanpa suara KLM Mix — tidak menggema; Windows 10 versi 2004+)', mcAudio, (v) => { mcAudio = v; }),
             h('p', '4. ', btn('🔍 Cari jendela Miracast', () => findMiracast(grid, true).then((n) => KM.toast(n ? 'Jendela Miracast ditemukan' : 'Jendela Miracast belum ditemukan — pilih manual', n ? 'ok' : ''))), ' lalu tekan ', h('b', 'Tambah'), ' — jendela itu ditangkap sebagai input (tidak perlu dibuka penuh).'),
             h('p.muted', 'Butuh WiFi PC yang mendukung Miracast (kebanyakan laptop). HP Samsung: Smart View; Xiaomi: Cast; Oppo/Realme/Vivo: Screen Cast / Proyeksi layar. iPhone tidak mendukung Miracast — pakai mode AirPlay.')), grid);
           if (KM.isElectron) findMiracast(grid, true).catch(() => {});
@@ -251,7 +254,7 @@
       return () => {
         if (o.mode === 'miracast') {
           if (!mc.sourceId) { KM.toast('Pilih jendela Miracast dulu (langkah 4)'); return false; }
-          KM.inputs.create('screen', { title: 'Miracast HP', opts: { sourceId: mc.sourceId, sysAudio: false, fps: KM.settings.fps >= 50 ? 60 : 30 } });
+          KM.inputs.create('screen', { title: 'Miracast HP', opts: { sourceId: mc.sourceId, sysAudio: false, pcAudio: mcAudio, fps: KM.settings.fps >= 50 ? 60 : 30 } });
           return;
         }
         if (o.mode === 'airplay') { KM.settings.airplayName = o.apName; try { KM.saveSettings && KM.saveSettings(); } catch (e) {} KM.inputs.create('mirror', { title: 'iPhone (AirPlay)', opts: o }); return; }

@@ -242,7 +242,7 @@
   T.screen = {
     label: 'Tangkap Layar / Jendela', icon: '🖥️',
     async create(inp) {
-      inp.opts = Object.assign({ sourceId: '', sysAudio: false, fps: 30 }, inp.opts);
+      inp.opts = Object.assign({ sourceId: '', sysAudio: false, pcAudio: false, fps: 30 }, inp.opts);
       try {
         let st;
         if (KM.isElectron && inp.opts.sourceId) {
@@ -257,9 +257,12 @@
         if (st.getAudioTracks().length) KM.audio && KM.audio.attach(inp);
         KM.changed('input');
       } catch (e) { inp.rt.err = 'Capture gagal: ' + e.name; KM.changed('input'); }
+      // suara PC tanpa suara KLM Mix sendiri (Miracast: suara HP) — helper Windows, tanpa gema
+      if (inp.opts.pcAudio && KM.mirror && KM.mirror.pcAudioStart) KM.mirror.pcAudioStart(inp);
     },
+    destroy(inp) { if (inp.opts.pcAudio && KM.mirror) KM.mirror.pcAudioStop(inp); },
     source: (inp) => vSrc(inp) || placeholder(inp, inp.title, inp.rt.err || 'Memulai capture…'),
-    hasAudio: (inp) => !!(inp.rt.stream && inp.rt.stream.getAudioTracks().length)
+    hasAudio: (inp) => !!(inp.rt.pcmNode || inp.opts.pcAudio || (inp.rt.stream && inp.rt.stream.getAudioTracks().length))
   };
 
   T.klmcam = {

@@ -108,7 +108,8 @@
           if (!inp.rt.sink) { inp.rt.sink = new Audio(); inp.rt.sink.muted = true; }
           inp.rt.sink.srcObject = inp.rt.stream; inp.rt.sink.play().catch(() => {});
         }
-      } else if (inp.rt.toneSrc) src = inp.rt.toneSrc;
+      } else if (inp.rt.pcmNode) src = inp.rt.pcmNode; // suara Mirroring (AirPlay) dari AudioWorklet
+      else if (inp.rt.toneSrc) src = inp.rt.toneSrc;
     } catch (e) { console.warn('audio attach', e); }
     if (!src) return null;
     if (st && force) { st.src = src; src.connect(st.trim); return st; }

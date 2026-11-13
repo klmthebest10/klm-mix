@@ -254,10 +254,20 @@
       pals: [pal('Hijau Emas', '#0f6b4f', '#06301f', '#f2c45a', '#ffffff', '#f7e7b4'), pal('Biru Malam Emas', '#17407c', '#081a36', '#f2c45a'), pal('Hitam Emas', '#2b2b2b', '#0a0a0a', '#d4af37'), pal('Toska Perak', '#0e7c86', '#05343a', '#c9f5ee', '#ffffff', '#dff7f3')],
       fonts: ['Montserrat', 'Poppins', 'Cinzel', 'Amiri'],
       lt: ['arabesque', 'sweep', 'lightWipe'], tt: ['arch', 'beam', 'unfold'], tk: ['arabesque', 'sweep', 'riseFlash'], badge: 'INFO',
-      roles: ['Penceramah', "Qori'", 'Sari Tilawah', 'Pembawa Acara', 'Sambutan Ketua Panitia', 'Sambutan Tuan Rumah', 'Pembaca Doa', 'Pembaca Shalawat', 'Tim Hadrah'],
+      roles: ['Penceramah', 'Imam', 'Khotib', 'Imam & Khotib', 'Bilal', "Qori'", 'Sari Tilawah', 'Pembawa Acara', 'Sambutan Ketua Panitia', 'Sambutan Tuan Rumah', 'Pembaca Doa', 'Pembaca Shalawat', 'Tim Hadrah'],
       lts: [['Ustadz Ahmad Fauzi, Lc.', 'Penceramah'], ["Qori' Muhammad Rizki", "Tilawah Al-Qur'an"], ['Bapak H. Sulaiman', 'Ketua Panitia'], ['Saudara Fikri Ramadhan', 'Pembawa Acara']],
       tts: [{ label: 'Judul Utama', ar: 'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ', eb: 'Majelis Taklim', title: 'Pengajian Akbar', sub: 'Meraih Keberkahan Hidup', info: 'Ahad, 12 Oktober 2026 • Masjid Agung' }, { label: 'Sesi Tausiyah', ar: '', eb: 'Tausiyah', title: 'Hikmah & Keteladanan', sub: 'Bersama Ustadz Ahmad Fauzi, Lc.', info: '' }],
       tks: ['Selamat datang para jamaah pengajian akbar', 'Mohon nada dering HP diaktifkan mode senyap selama acara berlangsung', 'Infaq & sedekah dapat disalurkan melalui kotak amal yang tersedia']
+    },
+    {
+      id: 'jumat', n: 'Sholat Jumat / Khutbah', orn: 'crescent',
+      pals: [pal('Hijau Emas', '#0f6b4f', '#06301f', '#f2c45a', '#ffffff', '#f7e7b4'), pal('Biru Malam Emas', '#17407c', '#081a36', '#f2c45a'), pal('Hitam Emas', '#2b2b2b', '#0a0a0a', '#d4af37'), pal('Toska Perak', '#0e7c86', '#05343a', '#c9f5ee', '#ffffff', '#dff7f3')],
+      fonts: ['Montserrat', 'Poppins', 'Cinzel', 'Amiri'],
+      lt: ['arabesque', 'sweep', 'lightWipe'], tt: ['arch', 'beam', 'unfold'], tk: ['arabesque', 'sweep', 'riseFlash'], badge: 'JUMAT',
+      roles: ['Imam & Khotib', 'Khotib', 'Imam', 'Bilal', 'Muadzin', 'Pembaca Pengumuman', 'Takmir Masjid'],
+      lts: [['Ustadz Ahmad Fauzi, Lc.', 'Khotib'], ['Ustadz Ahmad Fauzi, Lc.', 'Imam'], ['Saudara Fikri Ramadhan', 'Bilal']],
+      tts: [{ label: 'Judul Utama', ar: 'بِسْمِ اللّٰهِ الرَّحْمٰنِ الرَّحِيْمِ', eb: 'Khutbah Jumat', title: 'Tema Khutbah', sub: 'Masjid …', info: 'Jumat, … • Pukul 12.00' }],
+      tks: ['Mohon HP diaktifkan mode senyap selama khutbah berlangsung', 'Infaq Jumat dapat disalurkan melalui kotak amal yang tersedia']
     },
     {
       id: 'pernikahan', n: 'Pernikahan / Walimatul \'Ursy', orn: 'rings',
@@ -441,6 +451,31 @@
     if (!Array.isArray(arr)) return [];
     return arr.filter(isObj).map(it => { fill(it, tpl || {}); if (!it.id) it.id = K.uid(); return it; });
   }
+  /** Lower third dengan NAMA ORANG SAMA digabung jadi satu: mis. "Ust. Hasan | Imam" + "Ust. Hasan | Khotib"
+   *  → satu lower third "Imam & Khotib". Urutan peran: Imam, Khotib, lalu sesuai urutan daftar.
+   *  Mengubah items di tempat; mengembalikan daftar gabungan [{name, role}] (kosong bila tidak ada). */
+  const normName = s => String(s || '').toLowerCase().replace(/[.,'’`"]/g, '').replace(/\s+/g, ' ').trim();
+  const ROLE_ORDER = ['imam', 'khotib', 'khatib', 'khatib jumat', 'bilal', 'muadzin', 'muazin'];
+  const roleRank = r => { const i = ROLE_ORDER.indexOf(String(r || '').toLowerCase().trim()); return i < 0 ? 99 : i; };
+  K.mergeSameName = function (cfgLt) {
+    const items = (cfgLt && cfgLt.items) || [], out = [];
+    const groups = new Map();
+    items.forEach(it => { const k = normName(it.name); if (!k) return; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(it); });
+    for (const g of groups.values()) {
+      if (g.length < 2) continue;
+      const keep = g[0];
+      const roles = [];
+      g.forEach(it => String(it.role || '').split(/\s*&\s*/).map(r => r.trim()).filter(Boolean).forEach(r => { if (!roles.some(x => x.toLowerCase() === r.toLowerCase())) roles.push(r); }));
+      const ordered = roles.map((r, i) => [r, i]).sort((a, b) => (roleRank(a[0]) - roleRank(b[0])) || (a[1] - b[1])).map(x => x[0]);
+      const oldLabelWasRole = !keep.label || keep.label === keep.role || keep.label === keep.name;
+      keep.role = ordered.join(' & ');
+      if (oldLabelWasRole) keep.label = keep.role || keep.name;
+      if (!keep.extra) { const e = g.find(it => it.extra); if (e) keep.extra = e.extra; }
+      g.slice(1).forEach(it => { const i = items.indexOf(it); if (i >= 0) items.splice(i, 1); if (cfgLt.activeId === it.id) cfgLt.activeId = keep.id; });
+      out.push({ id: keep.id, name: keep.name, role: keep.role });
+    }
+    return out;
+  };
   K.normalizeEvent = function (id, ev) {
     if (!K.EVENTS.some(e => e.id === id)) id = K.EVENTS[0].id;
     if (!isObj(ev)) ev = {};
@@ -476,7 +511,7 @@
   };
   K.makeEventConfig = function (id) {
     const E = K.ev(id), P = E.pals[0];
-    return {
+    const c = {
       theme: { pal: 0, p: P.p, s: P.s, a: P.a, t: P.t, st: P.st, fn: E.fonts[0], fr: E.fonts[1], ft: E.fonts[2], far: E.fonts[3], orn: E.orn },
       lt: {
         layout: E.lt[0], light: E.lt[1], animIn: E.lt[2], animOut: E.lt[2], dur: 900, pos: 'left', bottom: 120, side: 90, scale: 1,
@@ -498,6 +533,8 @@
       soc: K.makeSoc(id),
       oc: K.makeOC(id)
     };
+    K.mergeSameName(c.lt); // contoh bawaan (mis. Jumat: imam = khotib) langsung satu lower third
+    return c;
   };
   K.defaultState = function () {
     const s = { v: 1, eventType: 'pengajian', events: {}, logos: [], defaultLogo: '' };

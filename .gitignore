@@ -7,3 +7,4 @@ mobile/android/
 .DS_Store
 native/vsthost/build/
 native/airplay/build/
+native/procaudio/build/

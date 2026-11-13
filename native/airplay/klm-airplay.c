@@ -5,10 +5,11 @@
  * dilisensikan GPL-3.0-or-later. Ia berjalan sebagai proses terpisah dari KLM Mix: menerima layar perangkat Apple,
  * lalu meneruskan video H.264 (sudah didekripsi) ke port Mirroring KLM Mix lewat TCP lokal dengan protokol:
  *   "KLMM" u8 versi, u16 panjang, JSON {token,name,model,w,h,fps}; lalu paket [u8 tipe][u32 panjang][i64 ptsUs][data]
- *   tipe 1 = SPS/PPS, 2 = frame kunci, 3 = frame biasa.
+ *   tipe 1 = SPS/PPS, 2 = frame kunci, 3 = frame biasa, 4 = info JSON,
+ *   tipe 5 = suara PCM s16le stereo 44100 Hz (didekode di sini dari AAC-ELD / AAC-LC / ALAC dengan libavcodec, LGPL).
  * Status dicetak ke stdout sebagai baris JSON untuk dibaca KLM Mix.
  *
- * uji  : klm-airplay --port 8624 --token <hex> --selftest video.h264 [detik]
+ * uji  : klm-airplay --port 8624 --token <hex> --selftest video.h264 [detik] [suara-aac-lc.adts]
  * pakai: klm-airplay --name "KLM Mix" --port 8624 --token <hex> --mac AA:BB:CC:DD:EE:FF --keyfile <path> [--fps 60] [--debug]
  */
 #include <stdio.h>
@@ -39,6 +40,10 @@ typedef int sock_t;
 #endif
 #include <pthread.h>
 
+#ifdef HAVE_AVCODEC
+#include <libavcodec/avcodec.h>
+#include <libavutil/channel_layout.h>
+#endif
 #include "raop.h"
 #include "dnssd.h"
 #include "logger.h"
@@ -58,7 +63,7 @@ static pthread_mutex_t out_mx = PTHREAD_MUTEX_INITIALIZER;
 static sock_t out_sock = SOCK_BAD;
 static char client_name[160] = "", client_model[96] = "";
 static int vid_w = 0, vid_h = 0, need_cfg = 1;
-static uint64_t pts0 = 0, frames = 0;
+static uint64_t pts0 = 0, frames = 0, audio_frames = 0;
 
 /* ---------- status ke KLM Mix ---------- */
 static void jesc(const char *s, char *o, size_t n) {
@@ -103,7 +108,12 @@ static int out_open_locked(void) {
     int one = 1; setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (const char *) &one, sizeof one);
     char n1[400], n2[240], js[1100];
     jesc(client_name[0] ? client_name : "Perangkat Apple", n1, sizeof n1); jesc(client_model, n2, sizeof n2);
-    int jl = snprintf(js, sizeof js, "{\"token\":\"%s\",\"name\":\"%s\",\"model\":\"%s\",\"w\":%d,\"h\":%d,\"fps\":%d,\"airplay\":true}", g_token, n1, n2, vid_w, vid_h, g_fps);
+    #ifdef HAVE_AVCODEC
+    const int has_audio = 44100;
+#else
+    const int has_audio = 0;
+#endif
+    int jl = snprintf(js, sizeof js, "{\"token\":\"%s\",\"name\":\"%s\",\"model\":\"%s\",\"w\":%d,\"h\":%d,\"fps\":%d,\"airplay\":true,\"audio\":%d}", g_token, n1, n2, vid_w, vid_h, g_fps, has_audio);
     unsigned char hd[7] = { 'K', 'L', 'M', 'M', 1, (unsigned char) (jl >> 8), (unsigned char) (jl & 255) };
     if (send_all(s, hd, 7) || send_all(s, js, jl)) { sock_close(s); return -1; }
     out_sock = s; need_cfg = 1; pts0 = 0;
@@ -139,7 +149,7 @@ static void cb_video_process(void *cls, raop_ntp_t *ntp, video_decode_struct *da
     pthread_mutex_lock(&out_mx);
     if (out_open_locked() == 0) {
         if (!pts0) pts0 = data->ntp_time_remote;
-        uint64_t pts = (data->ntp_time_remote - pts0) / 1000ULL;
+        uint64_t pts = data->ntp_time_remote > pts0 ? (data->ntp_time_remote - pts0) / 1000ULL : 0;
         int ok = 0;
         if (cfg_end > 0) { ok = out_packet_locked(1, 0, p, cfg_end); if (!ok) need_cfg = 0; }
         if (!ok && n > cfg_end && !(need_cfg && !key)) ok = out_packet_locked(key ? 2 : 3, pts, p + cfg_end, n - cfg_end);
@@ -147,7 +157,79 @@ static void cb_video_process(void *cls, raop_ntp_t *ntp, video_decode_struct *da
     }
     pthread_mutex_unlock(&out_mx);
 }
-static void cb_audio_process(void *cls, raop_ntp_t *ntp, audio_decode_struct *data) { (void) cls; (void) ntp; (void) data; /* suara belum diteruskan */ }
+#ifdef HAVE_AVCODEC
+/* ---------- suara: AAC-ELD (mirroring), AAC-LC, ALAC (AirPlay audio) → PCM ---------- */
+static AVCodecContext *adec = NULL;
+static int adec_ct = -1;
+static AVPacket *apkt = NULL;
+static AVFrame *afrm = NULL;
+static int16_t *apcm = NULL;
+static int apcm_cap = 0;
+static int hexbytes(const char *h, uint8_t *o) { int n = 0; while (h[0] && h[1]) { unsigned v; sscanf(h, "%2x", &v); o[n++] = (uint8_t) v; h += 2; } return n; }
+static void adec_close(void) { if (adec) avcodec_free_context(&adec); adec_ct = -1; }
+static int adec_open(int ct) {
+    adec_close();
+    const char *cfg = NULL; enum AVCodecID id = AV_CODEC_ID_AAC;
+    if (ct == 8) cfg = "f8e85000";                 /* AAC-ELD 44100/2, 480 sampel per frame */
+    else if (ct == 4) cfg = "1210";                /* AAC-LC 44100/2 */
+    else if (ct == 2) { id = AV_CODEC_ID_ALAC; cfg = "00000024616c616300000000000001600010280a0e0200ff00000000000000000000ac44"; }
+    else return -1;
+    const AVCodec *c = avcodec_find_decoder(id);
+    if (!c) return -1;
+    adec = avcodec_alloc_context3(c);
+    uint8_t ex[64]; int n = hexbytes(cfg, ex);
+    adec->extradata = av_mallocz((size_t) n + AV_INPUT_BUFFER_PADDING_SIZE);
+    memcpy(adec->extradata, ex, (size_t) n); adec->extradata_size = n;
+    adec->sample_rate = 44100;
+    av_channel_layout_default(&adec->ch_layout, 2);
+    if (avcodec_open2(adec, c, NULL) < 0) { adec_close(); return -1; }
+    if (!apkt) apkt = av_packet_alloc();
+    if (!afrm) afrm = av_frame_alloc();
+    adec_ct = ct;
+    return 0;
+}
+static inline int16_t f2s(float v) { if (v > 1.f) v = 1.f; else if (v < -1.f) v = -1.f; return (int16_t) (v * 32767.f); }
+static void cb_audio_process(void *cls, raop_ntp_t *ntp, audio_decode_struct *data) {
+    (void) cls; (void) ntp;
+    if (!data || !data->data || data->data_len <= 0) return;
+    if (data->ct != adec_ct && adec_open(data->ct) != 0) return;
+    if (av_new_packet(apkt, data->data_len) < 0) return;
+    memcpy(apkt->data, data->data, (size_t) data->data_len);
+    int r = avcodec_send_packet(adec, apkt);
+    av_packet_unref(apkt);
+    if (r < 0) return;
+    while (avcodec_receive_frame(adec, afrm) == 0) {
+        int ns = afrm->nb_samples, ch = afrm->ch_layout.nb_channels;
+        if (ns <= 0 || ch <= 0) { av_frame_unref(afrm); continue; }
+        if (apcm_cap < ns * 2) { apcm_cap = ns * 2; apcm = (int16_t *) realloc(apcm, (size_t) apcm_cap * 2); }
+        for (int i = 0; i < ns; i++) {
+            for (int c = 0; c < 2; c++) {
+                int cc = c < ch ? c : 0; int16_t v = 0;
+                switch (afrm->format) {
+                case AV_SAMPLE_FMT_FLTP: v = f2s(((float *) afrm->extended_data[cc])[i]); break;
+                case AV_SAMPLE_FMT_FLT:  v = f2s(((float *) afrm->data[0])[i * ch + cc]); break;
+                case AV_SAMPLE_FMT_S16P: v = ((int16_t *) afrm->extended_data[cc])[i]; break;
+                case AV_SAMPLE_FMT_S16:  v = ((int16_t *) afrm->data[0])[i * ch + cc]; break;
+                case AV_SAMPLE_FMT_S32P: v = (int16_t) (((int32_t *) afrm->extended_data[cc])[i] >> 16); break;
+                case AV_SAMPLE_FMT_S32:  v = (int16_t) (((int32_t *) afrm->data[0])[i * ch + cc] >> 16); break;
+                default: break;
+                }
+                apcm[i * 2 + c] = v;
+            }
+        }
+        pthread_mutex_lock(&out_mx);
+        if (out_open_locked() == 0) {
+            if (!pts0) pts0 = data->ntp_time_remote;
+            uint64_t pts = data->ntp_time_remote > pts0 ? (data->ntp_time_remote - pts0) / 1000ULL : 0;
+            if (!out_packet_locked(5, pts, (const unsigned char *) apcm, ns * 4)) audio_frames++;
+        }
+        pthread_mutex_unlock(&out_mx);
+        av_frame_unref(afrm);
+    }
+}
+#else
+static void cb_audio_process(void *cls, raop_ntp_t *ntp, audio_decode_struct *data) { (void) cls; (void) ntp; (void) data; }
+#endif
 static void cb_noop(void *cls) { (void) cls; }
 static void cb_conn_init(void *cls) { (void) cls; open_conns++; missed = 0; }
 static void cb_conn_destroy(void *cls) {
@@ -207,7 +289,7 @@ static void on_signal(int s) { (void) s; running = 0; }
 
 /* --selftest <file.h264>: tanpa perangkat Apple — membaca H.264 Annex-B, menyusunnya seperti keluaran pustaka AirPlay
  * (SPS/PPS di depan frame IDR, kode awal 4 byte) lalu memanggil callback yang sama. Untuk uji otomatis (CI). */
-static int selftest(const char *file, int seconds) {
+static int selftest(const char *file, int seconds, const char *afile) {
     FILE *f = fopen(file, "rb");
     if (!f) { fprintf(stderr, "selftest: file tidak bisa dibuka\n"); return 7; }
     fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
@@ -218,6 +300,9 @@ static int selftest(const char *file, int seconds) {
     cb_conn_init(NULL);
     cb_client_request(NULL, "00:00:00:00:00:00", "iPhone15,2", "iPhone Uji", &admit);
     cb_video_size(NULL, VIDEO_CODEC_H264, 960, 540, 0, 0, 960, 540);
+    /* suara uji (opsional): file AAC-LC ADTS → frame mentah seperti AirPlay (ct = 4) */
+    unsigned char *ab = NULL; long an = 0, ai = 0; double atime = 0.0;
+    if (afile) { FILE *g = fopen(afile, "rb"); if (g) { fseek(g, 0, SEEK_END); an = ftell(g); fseek(g, 0, SEEK_SET); ab = (unsigned char *) malloc((size_t) an); if (fread(ab, 1, (size_t) an, g) != (size_t) an) an = 0; fclose(g); } }
     unsigned char *au = (unsigned char *) malloc((size_t) n * 2 + 64);
     int aul = 0, nal = 0; uint64_t t = 1000000000ULL; long i = 0;
     int64_t until = (int64_t) seconds * 30, sent = 0;
@@ -239,11 +324,22 @@ static int selftest(const char *file, int seconds) {
             v.is_h265 = false; v.nal_count = nal; v.data = au; v.data_len = aul; v.ntp_time_local = t; v.ntp_time_remote = t;
             cb_video_process(NULL, NULL, &v);
             aul = 0; nal = 0; t += 33333333ULL; sent++;
+            while (ab && an > 7 && atime < sent / 30.0) {
+                if (ai + 7 > an || ab[ai] != 0xFF || (ab[ai + 1] & 0xF0) != 0xF0) { ai = 0; if (ab[0] != 0xFF) break; continue; }
+                int hl = (ab[ai + 1] & 1) ? 7 : 9;
+                int fl = ((ab[ai + 3] & 3) << 11) | (ab[ai + 4] << 3) | (ab[ai + 5] >> 5);
+                if (fl <= hl || ai + fl > an) { ai = 0; continue; }
+                audio_decode_struct a; memset(&a, 0, sizeof a);
+                a.data = ab + ai + hl; a.data_len = fl - hl; a.ct = 4;
+                a.ntp_time_remote = a.ntp_time_local = 1000000000ULL + (uint64_t) (atime * 1e9);
+                cb_audio_process(NULL, NULL, &a);
+                ai += fl; atime += 1024.0 / 44100.0;
+            }
             msleep(33);
         }
     }
-    status("selftest-done", "");
-    free(au); free(b);
+    { char m[64]; snprintf(m, sizeof m, "video %d, suara %d", (int) frames, (int) audio_frames); status("selftest-done", m); }
+    free(au); free(b); free(ab);
     return 0;
 }
 
@@ -265,7 +361,13 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--fps")) { g_fps = atoi(v); i++; }
         else if (!strcmp(a, "--size")) { if (sscanf(v, "%dx%d", &g_w, &g_h) != 2) { g_w = 1920; g_h = 1080; } i++; }
         else if (!strcmp(a, "--debug")) g_debug = 1;
-        else if (!strcmp(a, "--version")) { printf("klm-airplay 1.0 (pustaka AirPlay: UxPlay, GPL-3.0)\n"); return 0; }
+        else if (!strcmp(a, "--version")) { printf("klm-airplay 1.1 (pustaka AirPlay: UxPlay, GPL-3.0; suara: %s)\n",
+#ifdef HAVE_AVCODEC
+            "libavcodec " LIBAVCODEC_IDENT
+#else
+            "tidak ada"
+#endif
+        ); return 0; }
     }
     for (int i = 1; i + 1 < argc; i++) if (!strcmp(argv[i], "--selftest")) {
 #ifdef _WIN32
@@ -276,7 +378,7 @@ int main(int argc, char **argv) {
         signal(SIGPIPE, SIG_IGN);
 #endif
         snprintf(client_name, sizeof client_name, "iPhone Uji");
-        return selftest(argv[i + 1], i + 2 < argc ? atoi(argv[i + 2]) : 20);
+        return selftest(argv[i + 1], i + 2 < argc ? atoi(argv[i + 2]) : 20, i + 3 < argc ? argv[i + 3] : NULL);
     }
 #ifdef _WIN32
     { WSADATA wsa; WSAStartup(MAKEWORD(2, 2), &wsa); }

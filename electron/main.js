@@ -204,6 +204,7 @@ process.on('unhandledRejection', (e) => { console.warn('[KLM] unhandledRejection
 // ---------------- IPC ----------------
 const vstMgr = require('./vst').setup({ win: () => mainWin });
 const airplay = require('./airplay').setup({ win: () => mainWin, server, configDir: server.configDir });
+const procAudio = require('./procaudio').setup({ win: () => mainWin, server });
 // buka halaman Pengaturan Windows tertentu (Proyeksikan ke PC ini / Fitur opsional) untuk Miracast bawaan
 ipcMain.handle('sys:open-settings', (e, page) => {
   const ok = { project: 'ms-settings:project', features: 'ms-settings:optionalfeatures', firewall: 'ms-settings:windowsdefender' };
@@ -390,6 +391,7 @@ function hardQuit(why) {
   for (const w of browsers.values()) { try { w.destroy(); } catch (e) {} }
   try { vstMgr.shutdown(); } catch (e) {}
   try { airplay.shutdown(); } catch (e) {}
+  try { procAudio.shutdown(); } catch (e) {}
   try { server.hub.shutdown(); } catch (e) {}
   const ends = [...writers.values()].map((w) => new Promise((r) => { try { w.end(r); } catch (x) { r(); } setTimeout(r, 2500); }));
   writers.clear();
@@ -651,15 +653,21 @@ function smokeTest() {
         log('airplay: ' + JSON.stringify(a1.ap));
         if (a1.ap.ev !== 'ready' || !a1.ap.running) { fail++; log('GAGAL: penerima AirPlay tidak siap'); }
         const exe = require('./airplay').findExe();
-        const st = require('child_process').spawn(exe, ['--port', String(server.mirror.port), '--token', a1.token, '--selftest', process.env.KLM_APTEST, '8'], { windowsHide: true });
+        const st = require('child_process').spawn(exe, ['--port', String(server.mirror.port), '--token', a1.token, '--selftest', process.env.KLM_APTEST, '8'].concat(process.env.KLM_APTEST_AUDIO ? [process.env.KLM_APTEST_AUDIO] : []), { windowsHide: true });
         let so = ''; st.stdout.on('data', (d) => { so += d; });
         await wait(6000);
-        const a2 = JSON.parse(await js(`(() => { const m = KM.state.inputs.find((i) => i.id === window.__apId); const r = { w: m.rt.mw, h: m.rt.mh, fps: m.rt.mfps, name: m.rt.minfo && m.rt.minfo.name, st: m.rt.mstat }; KM.inputs.remove(m); return JSON.stringify(r); })()`));
+        const a2 = JSON.parse(await js(`(() => { const m = KM.state.inputs.find((i) => i.id === window.__apId); const r = { w: m.rt.mw, h: m.rt.mh, fps: m.rt.mfps, name: m.rt.minfo && m.rt.minfo.name, st: m.rt.mstat, pcm: !!m.rt.pcmNode, strip: !!KM.audio.strips.get(m.id), nets: (KM.mirror.ap.nets || []).length, fw: KM.mirror.ap.fw }; KM.inputs.remove(m); return JSON.stringify(r); })()`));
         try { st.kill(); } catch (e) {}
         await wait(1200);
         const off = await js(`JSON.stringify(KM.mirror.ap.running)`);
         log('airplay video uji: ' + JSON.stringify(a2) + ', helper: ' + so.trim().split('\n').pop() + ', setelah input dihapus berjalan=' + off);
         if (!(a2.w > 0 && a2.st && a2.st.out > 30)) { fail++; log('GAGAL: video AirPlay uji tidak terdekode'); }
+        if (process.env.KLM_APTEST_AUDIO && !(a2.st && a2.st.audio > 50 && a2.pcm && a2.strip)) { fail++; log('GAGAL: suara AirPlay uji tidak sampai ke strip audio'); }
+        // suara PC tanpa KLM Mix (process loopback) — runner CI tanpa kartu suara bisa menolak; dicatat saja
+        try {
+          const pa = await js(`(async () => { const t = 'abcabc' + Date.now().toString(16).slice(-6); const ev = []; window.klm.on('procaudio:status', (d) => ev.push(d.st.ev + (d.st.msg ? ':' + d.st.msg : ''))); const st = await window.klm.invoke('procaudio:start', { token: t, name: 'uji' }); await new Promise((r) => setTimeout(r, 3000)); await window.klm.invoke('procaudio:stop', { token: t }); return JSON.stringify({ avail: await window.klm.invoke('procaudio:available'), st, ev }); })()`);
+          log('suara PC (process loopback): ' + pa);
+        } catch (e) { log('catatan suara PC: ' + e.message); }
         if (off !== 'false') log('catatan: penerima AirPlay masih berjalan setelah input dihapus');
       } catch (e) { fail++; log('GAGAL airplay: ' + e.message); }
     }

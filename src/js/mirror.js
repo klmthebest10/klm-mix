@@ -20,6 +20,7 @@
   MR.apText = () => {
     const a = MR.ap || {};
     if (a.ev === 'error') return '⚠ ' + (a.msg || 'penerima AirPlay bermasalah');
+    if (a.fw === 'need') return '⚠ ' + (a.fwMsg || 'Windows Firewall belum mengizinkan penerima AirPlay');
     if (!a.running && a.ev !== 'starting') return a.available === false ? 'Penerima AirPlay tidak tersedia di instalasi ini' : 'Penerima AirPlay mati';
     if (a.ev === 'starting') return 'Menyalakan penerima AirPlay…';
     if (a.ev === 'client' || a.ev === 'mirror') return (a.name || 'Perangkat Apple') + ' menyambung…';
@@ -40,6 +41,69 @@
     }
     return 'avc1.640028';
   }
+  // ---------- suara Mirroring: PCM s16 stereo 44,1 kHz → AudioWorklet (penyangga kecil, resample ke rate mixer) ----------
+  const PCM_WORKLET = `class KlmPcm extends AudioWorkletProcessor {
+    constructor(o) { super(); const p = (o && o.processorOptions) || {}; this.inRate = p.rate || 44100; this.cap = this.inRate * 2;
+      this.L = new Float32Array(this.cap); this.R = new Float32Array(this.cap); this.w = 0; this.r = 0; this.n = 0; this.pos = 0; this.wait = true;
+      this.target = Math.round(this.inRate * (p.target || 0.08)); this.max = Math.round(this.inRate * 0.3); this.under = 0;
+      this.port.onmessage = (e) => { const d = new Int16Array(e.data); const k = d.length >> 1;
+        for (let i = 0; i < k; i++) { this.L[this.w] = d[2 * i] / 32768; this.R[this.w] = d[2 * i + 1] / 32768; this.w = (this.w + 1) % this.cap; }
+        this.n = Math.min(this.cap, this.n + k);
+        if (this.n > this.max) { const drop = this.n - this.target; this.r = (this.r + drop) % this.cap; this.n -= drop; this.pos = 0; } }; }
+    process(_, outs) { const o = outs[0], L = o[0], R = o[1] || o[0], m = L.length, step = this.inRate / sampleRate;
+      if (this.wait) { if (this.n < this.target) { L.fill(0); R.fill(0); return true; } this.wait = false; }
+      for (let i = 0; i < m; i++) {
+        if (this.n < 2) { L.fill(0, i); R.fill(0, i); this.wait = true; this.under++; break; }
+        const a = this.r, b = (a + 1) % this.cap, f = this.pos;
+        L[i] = this.L[a] + (this.L[b] - this.L[a]) * f; R[i] = this.R[a] + (this.R[b] - this.R[a]) * f;
+        this.pos += step; while (this.pos >= 1) { this.pos -= 1; this.r = (this.r + 1) % this.cap; this.n--; } }
+      return true; } }
+  registerProcessor('klm-pcm', KlmPcm);`;
+  let pcmMod = null;
+  async function pcmNode(inp, rate) {
+    const A = KM.audio; A.init(); const ctx = A.ctx;
+    if (!pcmMod) pcmMod = ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([PCM_WORKLET], { type: 'text/javascript' })));
+    await pcmMod;
+    const node = new AudioWorkletNode(ctx, 'klm-pcm', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2], processorOptions: { rate: rate || 44100, target: 0.08 } });
+    inp.rt.pcmNode = node; A.attach(inp, true); KM.changed('audio');
+    return node;
+  }
+
+  /** dorong PCM s16 stereo ke strip audio input (membuat AudioWorklet saat paket pertama) */
+  function feedPcm(inp, data, rate) {
+    const rt = inp.rt;
+    if (rt.pcmNode) { rt.pcmNode.port.postMessage(data.slice().buffer, []); return; }
+    if (rt.pcmWait) return;
+    rt.pcmWait = true; pcmNode(inp, rate || 44100).catch((x) => { rt.pcmWait = false; console.warn('[mirror] suara', x); });
+  }
+  /** suara PC tanpa suara KLM Mix (helper klm-procaudio, Windows): dipakai input tangkap layar / Miracast */
+  MR.pcAudioStart = function (inp) {
+    const rt = inp.rt, o = inp.opts;
+    if (!window.klm || !window.klm.invoke) return;
+    if (!/^[a-f0-9]{8,32}$/.test(o.audioToken || '')) o.audioToken = rnd();
+    MR.allow(o.audioToken, inp.title).then(() => window.klm.invoke('procaudio:start', { token: o.audioToken, name: inp.title })).then((st) => { rt.pcSt = st; if (st && st.ev === 'error') { rt.pcErr = st.msg; KM.toast('Suara PC: ' + st.msg, 'warn'); } KM.changed('input'); }).catch(() => {});
+    let rate = 48000;
+    const connect = () => {
+      if (rt.gone || rt.pcStop) return;
+      const ws = rt.aws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/mirror-feed?t=' + o.audioToken + '&n=' + encodeURIComponent(inp.title || ''));
+      ws.binaryType = 'arraybuffer';
+      ws.onmessage = (e) => {
+        if (typeof e.data === 'string') { try { const m = JSON.parse(e.data); if (m.info && m.info.audio) rate = m.info.audio; } catch (x) {} return; }
+        const u = new Uint8Array(e.data); if (u[0] !== 5) return;
+        rt.pcPkts = (rt.pcPkts || 0) + 1; feedPcm(inp, u.subarray(9), rate);
+      };
+      ws.onclose = () => { if (!rt.gone && !rt.pcStop) setTimeout(connect, 1000); };
+      ws.onerror = () => {};
+    };
+    connect();
+  };
+  MR.pcAudioStop = function (inp) {
+    const rt = inp.rt; rt.pcStop = true;
+    try { rt.aws && rt.aws.close(); } catch (e) {}
+    if (rt.pcmNode) { try { rt.pcmNode.port.close(); rt.pcmNode.disconnect(); } catch (e) {} rt.pcmNode = null; rt.pcmWait = false; }
+    if (inp.opts.audioToken && window.klm && window.klm.invoke) window.klm.invoke('procaudio:stop', { token: inp.opts.audioToken }).catch(() => {});
+  };
+
   MR.link = function (inp, ip) {
     const L = KM.link, ips = (L.ips && L.ips.length ? L.ips : [{ address: location.hostname }]).map((x) => x.address);
     const host = ip || ips[0], port = L.ports.http || location.port;
@@ -89,6 +153,11 @@
           return;
         }
         const u = new Uint8Array(e.data), type = u[0], pts = new DataView(e.data).getFloat64(1, true), data = u.subarray(9);
+        if (type === 5) { // suara
+          st.audio = (st.audio || 0) + 1;
+          feedPcm(inp, data, (rt.minfo && rt.minfo.audio) || 44100);
+          return;
+        }
         if (type === 1) { st.cfg++; cfg = data.slice(); const cs = codecOf(cfg); if (cs !== codec || !dec || dec.state !== 'configured') { codec = cs; mk(); } needKey = true; return; }
         if (!cfg || !dec || dec.state !== 'configured') return ask();
         if (type === 2) {
@@ -112,6 +181,7 @@
     if (isAp(inp) && window.klm && window.klm.invoke) setTimeout(() => { if (!apInputs().some((i) => i !== inp && !i.rt.gone)) window.klm.invoke('airplay:stop').catch(() => {}); }, 300);
     try { rt.mws && rt.mws.send('{"t":"stop"}'); } catch (e) {}
     try { rt.mws && rt.mws.close(); } catch (e) {}
+    if (rt.pcmNode) { try { rt.pcmNode.port.close(); rt.pcmNode.disconnect(); } catch (e) {} rt.pcmNode = null; }
   };
 
   KM.inputTypes.mirror = {
@@ -129,6 +199,7 @@
       MR.open(inp);
     },
     destroy(inp) { MR.close(inp); },
+    hasAudio: (inp) => !!inp.rt.pcmNode || isAp(inp),
     source(inp) {
       const rt = inp.rt;
       if (rt.mw && rt.minfo) return { src: rt.canvas, w: rt.mw, h: rt.mh };
@@ -161,18 +232,30 @@
   /** petunjuk + status penerima AirPlay (dialog tambah & pengaturan input) */
   MR.airplayBox = function (inp) {
     const box = h('div');
+    let detOpen = false;
+    const inv = (ch) => window.klm && window.klm.invoke ? window.klm.invoke(ch).catch(() => {}) : Promise.resolve();
     const draw = () => {
-      const a = MR.ap || {}, info = inp.rt && inp.rt.minfo;
+      const a = MR.ap || {}, info = inp.rt && inp.rt.minfo, nm = (inp.opts && inp.opts.apName) || a.rname || 'KLM Mix';
       const pill = info ? h('span.pill.ok', 'Tersambung') : a.ev === 'error' ? h('span.pill.red', 'Masalah') : a.running ? h('span.pill.ok', 'Siap menerima') : h('span.pill', inp.rt && inp.rt.ready ? 'Mati' : 'Belum dibuat');
+      const nets = (a.nets || []).filter((n) => n.ip);
+      const hot = nets.find((n) => n.hotspot);
       box.replaceChildren(h('div.sec', h('h4', '📲 Pencerminan layar iPhone / iPad / Mac — tanpa aplikasi'),
-        h('p', pill, ' ', info ? h('span', h('b', info.name || info.model || 'Perangkat Apple'), ' • ' + (inp.rt.mw || info.w || '?') + '×' + (inp.rt.mh || info.h || '?') + ' • ' + (inp.rt.mfps || 0) + ' fps') : h('span.muted', MR.apText())),
-        h('p', '1. iPhone & PC di ', h('b', 'jaringan yang sama'), ' (satu WiFi, atau PC tersambung ke hotspot iPhone). Tanpa internet pun bisa.'),
-        h('p', '2. Di iPhone buka ', h('b', 'Pusat Kontrol'), ' → ', h('b', 'Pencerminan Layar'), ' (Screen Mirroring) → pilih ', h('b', '"' + ((inp.opts && inp.opts.apName) || 'KLM Mix') + '"'), '.'),
-        h('p', '3. Saat pertama kali, Windows menanyakan izin firewall untuk ', h('b', 'klm-airplay'), ' → centang jaringan ', h('b', 'Pribadi'), ' dan ', h('b', 'Publik'), ' lalu Izinkan.'),
-        h('p.muted', 'Suara iPhone belum ikut (gunakan kabel audio / mic bila perlu). Tidak muncul di daftar? Pastikan WiFi PC tidak memakai "isolasi klien" (WiFi tamu/kantor), lalu matikan-nyalakan WiFi iPhone. Konten ber-DRM (Netflix, dll.) ditolak oleh iPhone.')));
+        h('p', pill, ' ', info ? h('span', h('b', info.name || info.model || 'Perangkat Apple'), ' • ' + (inp.rt.mw || info.w || '?') + '×' + (inp.rt.mh || info.h || '?') + ' • ' + (inp.rt.mfps || 0) + ' fps' + (inp.rt.mstat && inp.rt.mstat.audio ? ' • 🔊 suara masuk' : '')) : h('span.muted', MR.apText())),
+        a.fw === 'need' ? h('p', h('span.pill.warn', 'Firewall'), ' ' + (a.fwMsg || 'Windows Firewall belum mengizinkan penerima AirPlay') + ' ', h('button.btn', { type: 'button', onclick: () => inv('airplay:firewall') }, '🛡 Izinkan di firewall')) : null,
+        h('p', '1. iPhone & PC di ', h('b', 'jaringan yang sama'), ' — satu WiFi, PC tersambung ke hotspot iPhone, atau iPhone tersambung ke ', h('b', 'Hotspot Seluler PC'), '. Tanpa internet pun bisa.'),
+        h('p', '2. Di iPhone buka ', h('b', 'Pusat Kontrol'), ' → ', h('b', 'Pencerminan Layar'), ' (Screen Mirroring) → pilih ', h('b', '"' + nm + '"'), '. Layar & ', h('b', 'suara'), ' iPhone langsung masuk.'),
+        nets.length ? h('p.muted', 'Diumumkan di: ' + nets.map((n) => n.ip + (n.hotspot ? ' (hotspot PC)' : '')).join(', ')) : null,
+        h('details', { ontoggle: (e) => { detOpen = e.currentTarget.open; } }, h('summary', '"' + nm + '" tidak muncul di iPhone? (WiFi tamu / kantor / sekolah sering memblokir)'),
+          h('p', 'WiFi seperti itu memisahkan perangkat satu sama lain. Pakai jaringan sendiri, salah satu:'),
+          h('p', 'A. ', h('b', 'Hotspot Seluler PC'), ': ', h('button.btn', { type: 'button', onclick: () => inv('airplay:hotspot') }, '📶 Buka Hotspot Seluler Windows'), ' → nyalakan → di iPhone sambungkan WiFi ke nama hotspot PC → "' + nm + '" muncul otomatis' + (hot ? ' (hotspot PC sudah aktif: ' + hot.ip + ')' : '') + '.'),
+          h('p', 'B. ', h('b', 'Hotspot Pribadi iPhone'), ': nyalakan di iPhone (Pengaturan → Hotspot Pribadi), sambungkan WiFi PC ke iPhone.'),
+          h('p.muted', 'Lalu matikan-nyalakan WiFi iPhone bila perlu. KLM Mix mengumumkan diri di semua jaringan PC sekaligus dan mengikuti bila jaringan berubah.')),
+        null,
+        h('p.muted', 'Atur suara di strip audio input ini (A/V sync tersedia). Video ber-DRM (Netflix, Disney+, dll.) memang tidak boleh dicerminkan oleh iPhone — itu aturan Apple untuk semua penerima, bukan dari KLM Mix.')));
     };
-    draw();
-    const iv = setInterval(() => { if (!box.isConnected) return clearInterval(iv); draw(); }, 1500);
+    const draw2 = () => { draw(); const d = box.querySelector('details'); if (d) d.open = detOpen; };
+    draw2();
+    const iv = setInterval(() => { if (!box.isConnected) return clearInterval(iv); draw2(); }, 1500);
     return box;
   };
 })(window.KM);

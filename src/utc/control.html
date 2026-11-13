@@ -1227,7 +1227,8 @@ document.addEventListener('click', async e=>{
     case 'bulkAdd': {
       const lines = ($('#bulkTxt').value||'').split('\n').map(s=>s.trim()).filter(Boolean);
       lines.forEach(l=>{ const [n,r='',x=''] = l.split('|').map(s=>s.trim()); ev.lt.items.push({ id:K.uid(), label:r||n, name:n, role:r, extra:x }); });
-      ui.bulk=false; commit(true); toast(lines.length+' lower third ditambahkan'); break; }
+      const mg = K.mergeSameName(ev.lt);
+      ui.bulk=false; commit(true); toast(lines.length+' lower third ditambahkan'+(mg.length?' • nama sama digabung: '+mg.map(m=>m.role).join(', '):'')); break; }
     case 'replay': ui.n++; sendPvw(); break;
     case 'pal': { const p = K.ev(S.eventType).pals[Number(a.dataset.i)]; Object.assign(ev.theme,{pal:Number(a.dataset.i),p:p.p,s:p.s,a:p.a,t:p.t,st:p.st}); commit(true); break; }
     case 'resetEv': if (confirm('Kembalikan semua pengaturan jenis acara ini ke bawaan?')){ S.events[S.eventType] = K.makeEventConfig(S.eventType); ui.sel={lt:'',tt:''}; commit(true);} break;
@@ -1312,6 +1313,17 @@ function onField(e){
   if (el.dataset.logo){ const l = S.logos.find(x=>x.id===el.dataset.logo); if (l){ l.name = val; commit(false); } }
 }
 document.addEventListener('input', onField);
+// nama orang yang sama di dua lower third (mis. Imam & Khotib) → otomatis jadi satu lower third "Imam & Khotib"
+// (dicek saat kolom selesai diisi, bukan saat mengetik, agar nama yang belum lengkap tidak ikut tergabung)
+document.addEventListener('change', e=>{
+  const el = e.target;
+  if (!S || !el.dataset || el.dataset.it!=='lt' || !/^(name|role)$/.test(el.dataset.f||'')) return;
+  const mg = K.mergeSameName(cfg().lt);
+  if (!mg.length) return;
+  ui.sel.lt = mg[0].id; commit(false); ui.pending = true;
+  setTimeout(()=>{ if (!isTyping()) { ui.pending=false; renderAll(); } }, 60);
+  toast('Nama sama → digabung jadi satu: "'+mg.map(m=>m.role).join('", "')+'" ('+mg[0].name+')');
+});
 document.addEventListener('focusout', ()=>{ setTimeout(()=>{ if (ui.pending && !isTyping()){ ui.pending=false; renderAll(); } }, 50); });
 
 function isTyping(){ const a = document.activeElement; return a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.type!=='range' && a.type!=='checkbox'; }

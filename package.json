@@ -1,7 +1,7 @@
 {
   "name": "klm-mix",
   "productName": "KLM Mix",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "description": "KLM Mix - Studio produksi live dengan KLMCAM & UTC KLM Acara terintegrasi",
   "author": "KLM",
   "license": "UNLICENSED",
@@ -43,7 +43,8 @@
     ],
     "extraResources": [
    { "from": "native/vsthost/build/bin/Release/klm-vsthost.exe", "to": "vsthost/klm-vsthost.exe" },
-   { "from": "native/airplay/dist", "to": "airplay" }
+   { "from": "native/airplay/dist", "to": "airplay" },
+   { "from": "native/procaudio/build/Release/klm-procaudio.exe", "to": "procaudio/klm-procaudio.exe" }
   ],
   "asarUnpack": [
       "node_modules/ffmpeg-static/**",
