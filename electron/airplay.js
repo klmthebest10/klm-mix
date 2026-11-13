@@ -16,7 +16,7 @@ function findExe() {
   if (process.env.KLM_AIRPLAY_EXE) c.push(process.env.KLM_AIRPLAY_EXE);
   if (app.isPackaged) c.push(path.join(process.resourcesPath, 'airplay', exe));
   const nat = path.join(__dirname, '..', 'native', 'airplay');
-  c.push(path.join(nat, 'build', exe), path.join(nat, 'build', 'Release', exe), path.join(nat, 'dist', exe));
+  c.push(path.join(nat, 'dist', exe), path.join(nat, 'build', exe), path.join(nat, 'build', 'Release', exe)); // dist = exe + DLL
   return c.find((p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }) || '';
 }
 
@@ -65,11 +65,12 @@ function setup({ win, server, configDir }) {
     p.on('exit', (code) => {
       if (A.proc !== p) return;
       A.proc = null;
-      if (A.want && A.restarts < 5) { // keluar tak terduga → nyalakan lagi
+      if (A.want && A.restarts < 5 && code !== 3221225781) { // keluar tak terduga → nyalakan lagi
         A.restarts++;
         A.st = { ev: 'error', msg: 'penerima berhenti (kode ' + code + '), menyalakan ulang… ' + (err.split('\n').filter(Boolean).pop() || '') };
         send();
         setTimeout(() => { if (A.want && !A.proc) start(A.want.token, A.want.name); }, 1500 * A.restarts);
+      } else if (code === 3221225781) { A.st = { ev: 'error', msg: 'file pendukung penerima AirPlay (DLL) hilang — pasang ulang KLM Mix' }; send();
       } else { if (A.want) A.st = { ev: 'error', msg: 'penerima AirPlay gagal berjalan: ' + (err.split('\n').filter(Boolean).pop() || 'kode ' + code) }; else A.st = { ev: 'off' }; send(); }
     });
     return A.status();
