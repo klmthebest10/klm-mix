@@ -60,7 +60,11 @@
     if (now - (rt.segAt || 0) >= every) {
       rt.segAt = now;
       try {
-        rt.segger.segmentForVideo(s.src, Math.round(now), (res) => {
+        // model bekerja di 256 px: beri gambar kecil saja → mask kecil, olah & baca-balik sangat ringan (bukan seukuran video)
+        const tin = rt.segTmp, iw = 256, ih = Math.max(16, Math.round(256 * s.h / s.w));
+        if (tin.width !== iw || tin.height !== ih) { tin.width = iw; tin.height = ih; }
+        tin.getContext('2d', { willReadFrequently: false }).drawImage(s.src, 0, 0, iw, ih);
+        rt.segger.segmentForVideo(tin, Math.round(now), (res) => {
           const masks = res.confidenceMasks; if (!masks || !masks.length) return;
           const m = masks[masks.length - 1], mw = m.width, mh = m.height, f = m.getAsFloat32Array();
           const mc = rt.segMask; if (mc.width !== mw || mc.height !== mh) { mc.width = mw; mc.height = mh; rt.segA = null; }
