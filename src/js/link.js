@@ -4,8 +4,56 @@
   const S = KM.state;
   const L = KM.link = { ws: null, id: null, peers: new Map(), connected: false, ips: [], ports: {} };
 
-  function send(o) { if (L.ws && L.ws.readyState === 1) L.ws.send(JSON.stringify(o)); }
+  function send(o) {
+    if (o && typeof o.to === 'string' && o.to.startsWith('net:')) { if (L.net.room) L.net.room.publish('c/' + o.to.slice(4), o); return; } // HP di jaringan lain
+    if (L.ws && L.ws.readyState === 1) L.ws.send(JSON.stringify(o));
+  }
   L.send = send;
+
+  // ---------- KLMCAM lewat internet (HP di WiFi lain / data seluler) ----------
+  // Sinyal lewat NetLink (terenkripsi dengan kode ruang); gambar & suara tetap langsung HP → PC (WebRTC + STUN/TURN).
+  L.net = { room: null, online: 0, starting: false, err: '' };
+  const netCfg = () => { const st = KM.settings; if (!st.net || typeof st.net !== 'object') st.net = {}; const c = st.net; if (!c.turn) c.turn = { url: '', user: '', pass: '' }; if (!c.page) c.page = 'https://klmthebest10.github.io/klm-mix/web/camera.html'; return c; };
+  L.netCfg = netCfg;
+  L.netLink = (slot) => { const c = netCfg(); return c.page + '#r=' + (c.room || '') + (slot ? '&s=' + slot : ''); };
+  L.netStop = function () {
+    if (L.net.room) { try { L.net.room.close(); } catch (e) {} L.net.room = null; }
+    L.net.online = 0; clearInterval(L.net.timer);
+    for (const p of [...L.peers.values()]) if (p.net) onMsg({ t: 'peer-leave', id: p.id });
+    KM.changed('peers');
+  };
+  L.netStart = async function () {
+    const c = netCfg();
+    if (!window.KLMNet) { L.net.err = 'modul NetLink tidak termuat'; return false; }
+    if (L.net.starting) return false;
+    L.netStop(); L.net.starting = true; L.net.err = '';
+    try {
+      if (!c.room) { c.room = KLMNet.newRoom(); KM.saveSettings(); }
+      L.net.room = await KLMNet.join(c.room, ['m'], {
+        status: (n) => { L.net.online = n; KM.changed('peers'); },
+        message: (m) => {
+          if (!m || !m.id) return;
+          const id = 'net:' + String(m.id).slice(0, 40);
+          let p = L.peers.get(id);
+          if (m.t === 'bye') { if (p) onMsg({ t: 'peer-leave', id }); return; }
+          if (!p) {
+            if (m.t !== 'hello') return; // belum kenal → tunggu salam berikutnya
+            onMsg({ t: 'peer-join', id, role: m.role === 'guest' ? 'guest' : 'camera', name: m.name, slot: m.slot, ip: 'internet', meta: m.meta || {} });
+            p = L.peers.get(id); if (p) p.net = true;
+            send({ t: 'welcome', to: id, mixer: true });
+            L.bindCams();
+          }
+          p.seen = KM.now();
+          if (m.t !== 'hello') onMsg(Object.assign({}, m, { from: id }));
+        }
+      });
+      // HP yang tidak lagi memberi kabar & videonya tidak tersambung dianggap pergi
+      L.net.timer = setInterval(() => { const now = KM.now(); for (const p of [...L.peers.values()]) if (p.net && now - (p.seen || 0) > 15000 && !(p.pc && p.pc.connectionState === 'connected')) onMsg({ t: 'peer-leave', id: p.id }); }, 5000);
+      return true;
+    } catch (e) { L.net.err = e.message; KM.toast('KLMCAM internet: ' + e.message, 'err', 6000); return false; }
+    finally { L.net.starting = false; KM.changed('peers'); }
+  };
+  L.netToggle = async (on) => { netCfg().on = !!on; KM.saveSettings(); if (on) await L.netStart(); else L.netStop(); };
 
   L.connect = function () {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -94,23 +142,35 @@
   function startCam(inp, peer) {
     inp.rt.camId = peer.id;
     if (peer.pc) { try { peer.pc.close(); } catch (e) {} }
-    const pc = new RTCPeerConnection({ iceServers: [], bundlePolicy: 'max-bundle' });
-    peer.pc = pc; peer.inputId = inp.id;
+    const ice = peer.net && window.KLMNet ? KLMNet.ice(netCfg().turn) : []; // LAN: langsung; internet: STUN (+TURN bila diisi)
+    const pc = new RTCPeerConnection({ iceServers: ice, bundlePolicy: 'max-bundle' });
+    peer.pc = pc; peer.inputId = inp.id; clearTimeout(peer.discT);
     pc.onicecandidate = (e) => { if (e.candidate) send({ t: 'signal', to: peer.id, data: { ice: e.candidate } }); };
     const ms = new MediaStream();
     pc.ontrack = (e) => {
-      try { e.receiver.playoutDelayHint = 0; } catch (x) {}
-      try { e.receiver.jitterBufferTarget = 0; } catch (x) {}
+      // penyangga sekecil mungkin: video langsung tampil (latensi ±1–2 frame di LAN), audio diberi sedikit agar tidak putus
+      const tgt = e.track.kind === 'audio' ? (peer.net ? 60 : 30) : (peer.net ? 30 : 0);
+      try { e.receiver.playoutDelayHint = tgt / 1000; } catch (x) {}
+      try { e.receiver.jitterBufferTarget = tgt; } catch (x) {}
       ms.addTrack(e.track);
       clearTimeout(inp.rt.setT);
       inp.rt.setT = setTimeout(() => KM.inputTypes[inp.type].setStream(inp, ms), 50);
     };
     pc.onconnectionstatechange = () => {
       peer.state = pc.connectionState; KM.changed('peers');
-      if (pc.connectionState === 'failed') { KM.toast('KLMCAM ' + inp.opts.slot + ': koneksi gagal, mencoba ulang…', 'warn'); setTimeout(() => { if (L.peers.has(peer.id)) startCam(inp, peer); }, 1500); }
+      if (peer.pc !== pc) return;
+      clearTimeout(peer.discT);
+      if (pc.connectionState === 'connected') peer.fails = 0;
+      // putus sesaat (pindah WiFi, sinyal turun): tunggu sebentar lalu sambung ulang otomatis
+      if (pc.connectionState === 'disconnected') peer.discT = setTimeout(() => { if (peer.pc === pc && pc.connectionState !== 'connected' && L.peers.has(peer.id)) startCam(inp, peer); }, 3500);
+      if (pc.connectionState === 'failed') {
+        peer.fails = (peer.fails || 0) + 1;
+        KM.toast('KLMCAM ' + inp.opts.slot + ': koneksi gagal' + (peer.net && peer.fails >= 2 ? ' — jaringan HP/PC ini memblokir sambungan langsung; isi server TURN di panel KLMCAM' : ', mencoba ulang…'), 'warn', peer.net ? 7000 : 3000);
+        setTimeout(() => { if (peer.pc === pc && L.peers.has(peer.id)) startCam(inp, peer); }, Math.min(1500 * peer.fails, 8000));
+      }
     };
     // HP yang membuat offer
-    send({ t: inp.type === 'call' ? 'call-start' : 'cam-start', to: peer.id, settings: qualityOf(inp) });
+    send({ t: inp.type === 'call' ? 'call-start' : 'cam-start', to: peer.id, settings: qualityOf(inp), ice: peer.net ? ice : undefined });
     sendTally();
     KM.changed('peers');
   }

@@ -193,16 +193,34 @@
     label: 'Kamera / Capture Card', icon: '📷',
     async create(inp) {
       inp.opts = Object.assign({ deviceId: '', width: 1920, height: 1080, fps: 30, audioDeviceId: '' }, inp.opts);
-      try {
-        const st = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: inp.opts.deviceId ? { exact: inp.opts.deviceId } : undefined, width: { ideal: inp.opts.width }, height: { ideal: inp.opts.height }, frameRate: { ideal: inp.opts.fps } },
-          audio: inp.opts.audioDeviceId ? { deviceId: { exact: inp.opts.audioDeviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false
-        });
-        inp.rt.stream = st; inp.rt.el = streamVideo(st); inp.rt.ready = true;
+      const o = inp.opts;
+      const open = async () => {
+        // kamera yang sama dipakai lagi di input lain: pakai salinan stream yang sudah terbuka (perangkat tidak dibuka dua kali
+        // dengan pengaturan berbeda → tidak patah-patah / saling mengganggu)
+        const twin = KM.state.inputs.find((i) => i !== inp && i.type === 'camera' && i.rt.stream && (i.opts.deviceId || '') === (o.deviceId || '') && i.rt.stream.getVideoTracks().some((t) => t.readyState === 'live'));
+        let st;
+        if (twin && o.deviceId) { st = new MediaStream(twin.rt.stream.getVideoTracks().map((t) => t.clone())); inp.rt.shared = twin.id; }
+        else {
+          st = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: o.deviceId ? { exact: o.deviceId } : undefined, width: { ideal: o.width }, height: { ideal: o.height }, frameRate: { ideal: o.fps } },
+            audio: o.audioDeviceId ? { deviceId: { exact: o.audioDeviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false } : false
+          });
+        }
+        if (inp.rt.gone) { st.getTracks().forEach((t) => t.stop()); return; }
+        if (inp.rt.el) { try { inp.rt.el.srcObject = null; inp.rt.el.remove(); } catch (e) {} }
+        inp.rt.stream = st; inp.rt.el = streamVideo(st); inp.rt.ready = true; inp.rt.err = ''; inp.rt.retry = 0;
+        // kabel tercabut / perangkat direbut aplikasi lain → coba buka lagi otomatis
+        const vt = st.getVideoTracks()[0];
+        if (vt) vt.addEventListener('ended', () => { if (inp.rt.gone || inp.rt.stream !== st) return; inp.rt.err = 'Kamera terputus — menyambung ulang…'; KM.changed('input'); again(); });
         if (st.getAudioTracks().length) KM.audio && KM.audio.attach(inp);
         KM.changed('input');
-      } catch (e) { inp.rt.err = 'Kamera gagal: ' + e.name; KM.changed('input'); }
+      };
+      const again = () => { clearTimeout(inp.rt.retryT); if (inp.rt.gone) return; inp.rt.retry = (inp.rt.retry || 0) + 1; inp.rt.retryT = setTimeout(() => open().catch(() => again()), Math.min(1500 * inp.rt.retry, 8000)); };
+      inp.rt.reopen = () => { inp.rt.retry = 0; again(); };
+      try { await open(); }
+      catch (e) { inp.rt.err = 'Kamera gagal: ' + e.name + (e.name === 'NotReadableError' ? ' (dipakai aplikasi lain?)' : ''); KM.changed('input'); if (e.name !== 'NotAllowedError' && e.name !== 'NotFoundError' && e.name !== 'OverconstrainedError') again(); }
     },
+    destroy(inp) { inp.rt.gone = true; clearTimeout(inp.rt.retryT); },
     source: (inp) => vSrc(inp) || placeholder(inp, inp.title, inp.rt.err || 'Membuka kamera…'),
     hasAudio: (inp) => !!(inp.rt.stream && inp.rt.stream.getAudioTracks().length)
   };
@@ -533,7 +551,7 @@
       if (rt.el) { try { rt.el.pause && rt.el.pause(); rt.el.removeAttribute('src'); rt.el.srcObject = null; rt.el.load && rt.el.load(); rt.el.remove && rt.el.remove(); } catch (e) {} }
       KM.audio && KM.audio.detach(inp);
       S.inputs.splice(S.inputs.indexOf(inp), 1);
-      S.inputs.forEach((o) => { o.layers = o.layers.filter((l) => l.inputId !== inp.id); });
+      S.inputs.forEach((o) => { if (o.type === 'virtualset') o.layers.forEach((l) => { if (l.inputId === inp.id) l.inputId = ''; }); else o.layers = o.layers.filter((l) => l.inputId !== inp.id); }); // kotak virtual set tetap ada (kosong)
       if (S.previewId === inp.id) S.previewId = S.inputs[0] ? S.inputs[0].id : null;
       if (S.programId === inp.id) S.programId = null;
       S.overlays.forEach((o) => { if (o.inputId === inp.id) { o.inputId = null; o.phase = 'off'; } });

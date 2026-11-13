@@ -33,15 +33,18 @@
     await stage(46, 'Menghubungkan grafis UTC…', 'utc', () => KM.utc.boot());
     if (KM.isElectron && KM.settings.srt && KM.settings.srt.autoStart) setTimeout(() => KM.rec.startSrt(), 2500);
     await stage(62, 'Menyusun ruang kendali…', 'ui', () => { KM.ui.init(); KM.ui.dockTab('audio'); fitCanvases(); KM.on('resized', fitCanvases); });
-    await stage(78, 'Menghubungkan jaringan & perangkat…', 'link', async () => { KM.link.connect(); if (KM.isElectron) { try { KM._appInfo = await Promise.race([window.klm.invoke('app:info'), new Promise((r) => setTimeout(r, 1500))]); } catch (e) {} } });
+    await stage(78, 'Menghubungkan jaringan & perangkat…', 'link', async () => { KM.link.connect(); if (KM.settings.net && KM.settings.net.on) setTimeout(() => KM.link.netStart(), 2000); if (KM.isElectron) { try { KM._appInfo = await Promise.race([window.klm.invoke('app:info'), new Promise((r) => setTimeout(r, 1500))]); } catch (e) {} } });
     await stage(92, 'Merapikan tampilan…', 'font', async () => { try { await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 700))]); } catch (e) {} await frame(); await frame(); });
     await stage(100, 'Siap', 'siap');
     hideSplash(KM.isElectron);
     if (KM.isElectron) { try { window.klm.invoke('app:ready'); } catch (e) {} }
+    if (KM.perf.autoPicked) { KM.saveSettings(); setTimeout(() => KM.toast('Perangkat ini terdeteksi ringan — KLM Mix memakai mode Hemat (720p 30fps). Bisa diubah di pojok kanan atas.', 'info', 8000), 1200); }
+    const recovering = location.hash === '#pulih';
+    if (recovering) { history.replaceState(null, '', location.pathname); setTimeout(async () => { await KM.ui.restoreAutosave('silent'); KM.toast('KLM Mix dipulihkan otomatis setelah gangguan — sesi terakhir dimuat kembali', 'warn', 8000); }, 400); }
     if (KM.bootErrors.length) setTimeout(() => KM.toast && KM.toast('Sebagian modul gagal dimuat: ' + KM.bootErrors.join(' • ') + ' — fitur lain tetap berjalan.', 'warn', 9000), 800);
     try {
       const p = JSON.parse(localStorage.getItem('klmmix.autosave') || 'null');
-      if (p && p.inputs && p.inputs.length) setTimeout(() => KM.ui.restoreAutosave(), 600);
+      if (p && p.inputs && p.inputs.length && !recovering) setTimeout(() => KM.ui.restoreAutosave(), 600);
     } catch (e) {}
     window.addEventListener('beforeunload', () => { try { KM.ui.autosave(); } catch (e) {} });
     KM.readyAt = performance.timeOrigin + performance.now();

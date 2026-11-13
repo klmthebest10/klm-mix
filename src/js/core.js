@@ -7,7 +7,7 @@ window.KM = window.KM || {};
     const orig = Element.prototype[fn];
     Element.prototype[fn] = function (...kids) { return orig.apply(this, kids.filter((x) => x != null && x !== false)); };
   }
-  KM.version = '1.10.0';
+  KM.version = '1.11.0';
   KM.isElectron = !!(window.klm && window.klm.isElectron);
 
   // ---------- event bus ----------
@@ -85,7 +85,8 @@ window.KM = window.KM || {};
   };
   function loadSettings() {
     try {
-      const s = JSON.parse(localStorage.getItem('klmmix.settings') || '{}');
+      const raw = localStorage.getItem('klmmix.settings'); KM.firstRun = !raw;
+      const s = JSON.parse(raw || '{}');
       const out = Object.assign(KM.deepClone(DEFAULT_SETTINGS), s);
       out.stream = Object.assign(KM.deepClone(DEFAULT_SETTINGS.stream), s.stream || {});
       out.replay = Object.assign(KM.deepClone(DEFAULT_SETTINGS.replay), s.replay || {});

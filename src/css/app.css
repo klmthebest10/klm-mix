@@ -700,3 +700,52 @@ p { line-height: 1.5; }
 .modal:has(.closedlg) .mh, .modal:has(.closedlg) .mf { display: none; }
 .modal:has(.closedlg) .mb { padding: 20px; }
 #closing .st { border: 0; background: none; padding: 0; }
+
+/* ===================== responsif: layar kecil, laptop 1366×768, jendela sempit ===================== */
+#trans { overflow-y: auto; scrollbar-width: none; min-height: 0; } /* kontrol transisi tidak pernah terpotong: bisa digulir */
+#trans::-webkit-scrollbar { display: none; }
+#topbar { min-width: 0; } #topbar nav { min-width: 0; flex-shrink: 1; } #topbar .status { flex: 0 1 auto; min-width: 0; overflow: hidden; justify-content: flex-end; }
+#topbar .status .st { flex: none; }
+/* tinggi terbatas (768 / 720): panggung lebih ringkas agar daftar input tetap lega */
+@media (max-height: 820px) {
+  #app { grid-template-rows: 44px minmax(200px, 47vh) 1fr 50px; }
+  #stage { padding: 8px 8px 6px; gap: 8px; }
+  #trans { gap: 5px; } #trans .tb.cut { min-height: 38px; } #trans .tbar-wrap { padding-top: 4px; padding-bottom: 4px; }
+  .card .cbtns { gap: 3px; }
+}
+@media (max-height: 700px) { #app { grid-template-rows: 42px minmax(170px, 44vh) 1fr 46px; } #trans .tbar-wrap { display: none; } }
+@media (max-width: 1280px) {
+  #topbar .ver, #topbar .brand .ver { display: none; }
+  .mbtn { padding: 0 7px; gap: 5px; }
+  #lower { --dockw: 380px; } #inputs { --cardw: 168px; gap: 8px; }
+  #inputsPanel .ihead .hint { display: none; }
+  #bottombar .bb { padding-left: 8px; padding-right: 8px; font-size: 12px; }
+}
+@media (max-width: 1100px) {
+  #st-hp, #st-clock { display: none; }
+  .mbtn { font-size: 0; gap: 0; padding: 0 9px; } .mbtn svg { width: 17px; height: 17px; } .mbtn .ki-chev-down, .mbtn svg + svg { display: none; }
+  #stage { grid-template-columns: 1fr 138px 1fr; } #lower { --dockw: 340px; } #inputs { --cardw: 150px; }
+  #trans .tb { font-size: 12px; }
+}
+/* jendela sempit / tablet: Preview & Program berdampingan, transisi jadi baris di bawahnya, panel samping pindah ke bawah, halaman bisa digulir */
+@media (max-width: 900px) {
+  html, body { overflow: auto; }
+  #app { height: auto; min-height: 100vh; grid-template-rows: 44px auto auto 50px; }
+  #stage { grid-template-columns: 1fr 1fr; grid-template-areas: "pvw pgm" "tr tr"; gap: 8px; }
+  #pvwBox { grid-area: pvw; } #pgmBox { grid-area: pgm; } #trans { grid-area: tr; flex-direction: row; flex-wrap: wrap; align-items: stretch; overflow: visible; gap: 6px; }
+  #trans > * { flex: 1 1 110px; min-width: 0; } #trans .tlbl, #trans .tbar-wrap { display: none; } #trans #tslots { flex: 3 1 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
+  #trans .sting { flex: 2 1 200px; }
+  .screen .cwrap { aspect-ratio: 16 / 9; }
+  #lower { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; padding: 0 8px; }
+  #splitter { display: none; } #inputsPanel { max-height: 62vh; display: flex; flex-direction: column; } #inputs { overflow: auto; }
+  #dock { height: 70vh; margin: 8px 0; }
+  #bottombar { position: sticky; bottom: 0; z-index: 50; }
+  .modal { width: 96vw !important; max-height: 94vh; } .split { grid-template-columns: minmax(0, 1fr) !important; }
+}
+@media (max-width: 620px) { #stage { grid-template-columns: 1fr; grid-template-areas: "pgm" "pvw" "tr"; } #inputs { --cardw: 132px; } #topbar .brand b + span, #st-res, #st-perf { display: none; } }
+/* mode ringan (Hemat / performa otomatis): tanpa blur, bayangan besar & animasi dekoratif → GPU laptop lawas tidak terbebani */
+body.lite *, body.lite *::before, body.lite *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+body.lite .card, body.lite .screen, body.lite #dock, body.lite .modal { box-shadow: none !important; }
+body.lite .card { transition: none !important; } body.lite .card:hover { transform: none !important; }
+body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
+@media (prefers-reduced-motion: reduce) { * { animation-duration: .001s !important; transition-duration: .001s !important; } }

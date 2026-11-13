@@ -82,10 +82,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
    - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.10.0.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.10.0.exe` (tanpa instal)
+     - `KLM-Mix-Setup-1.11.0.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Mix-Portable-1.11.0.exe` (tanpa instal)
    - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
-3. Untuk rilis resmi: buat tag `v1.10.0` → file otomatis muncul di halaman **Releases**.
+3. Untuk rilis resmi: buat tag `v1.11.0` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
 
@@ -139,6 +139,14 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Skrip JavaScript** (pengganti VB.NET): `API.Function("Cut")`, `Sleep()`, `Input()`, jalankan dari tombol/shortcut/trigger/Stream Deck
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
+
+### Baru di v1.11
+- **Daftar input tidak lagi patah-patah saat kamera dipakai di input lain**: kartu input gabungan (Virtual Set / layer berisi kamera, KLMCAM, video) kini digambar 16–30 fps walau Program sedang diam; kamera yang sama dipakai di dua input berbagi satu stream (perangkat tidak dibuka dua kali)
+- **KLMCAM lewat internet** (panel KLMCAM → *HP di jaringan lain*): HP di WiFi lain / hotspot / data seluler bisa jadi kamera dengan **kode internet** atau scan QR. Proses penyambungan lewat NetLink (terenkripsi AES dengan kode itu, beberapa jalur sekaligus); video & suara tetap langsung HP → PC (WebRTC + STUN). Untuk jaringan yang memblokir sambungan langsung tersedia kolom server TURN
+- **KLMCAM lebih mulus & tahan gangguan**: penyangga video nol di LAN, pemulihan jalur otomatis saat sinyal sempat hilang (ICE restart dari HP, sambung ulang dari PC), bitrate otomatis turun saat jaringan berat lalu pulih sendiri, info jeda (ms) & paket hilang di panel
+- **Super ringan**: perangkat lemah (≤ 4 inti CPU / ≤ 4 GB RAM) otomatis memakai mode Hemat saat pertama dibuka; **performa otomatis** menurunkan beban bertahap bila frame rate nyata tertinggal (tampilan ringan tanpa blur/bayangan → monitor Preview diperkecil → 30 fps → 720p; tidak mengubah output saat sedang rekam/live)
+- **Responsif**: tata letak menyesuaikan 1366×768, 1280×720, 1024×768 hingga jendela sempit ±820 px (Preview & Program berdampingan, transisi jadi baris, panel samping pindah ke bawah); kontrol transisi tidak pernah terpotong; ukuran jendela minimum diturunkan
+- **Stabil**: bila tampilan macet/berhenti, aplikasi memuat ulang sendiri dan memulihkan sesi terakhir; kamera USB yang tercabut/direbut aplikasi lain disambung ulang otomatis; menghapus input tidak lagi menghapus kotak Virtual Set (kotaknya dikosongkan)
 
 ### Baru di v1.10
 - **Buka & tutup yang rapi**: layar pembuka tersendiri (tanda K dengan dua cincin sinyal) menampilkan tahap penyiapan yang sebenarnya — audio, video, grafis UTC, ruang kendali, jaringan — lalu jendela utama muncul sekaligus dalam keadaan siap dengan pudar halus. Saat menutup: dialog bermerek (Simpan preset & keluar / Keluar tanpa menyimpan / Batal), kemudian urutan penutupan yang **ditunggu sampai tuntas** — file rekaman diselesaikan, live diakhiri, SRT ditutup, pengaturan plugin & sesi disimpan, kamera dilepas — baru aplikasi keluar
@@ -269,4 +277,4 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.10.0
+KLM Mix 1.11.0

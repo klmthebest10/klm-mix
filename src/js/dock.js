@@ -212,7 +212,7 @@
         badge: h('span.pill' + (peer ? '.ok' : '.warn'), peer ? 'Terhubung' : 'Slot ' + o.slot + ' menunggu'),
         tools: [tool('PVW', 'Ke Preview', () => KM.engine.setPreview(inp.id), tl === 'preview' ? '.pri' : ''), tool('CUT', 'Cut ke Program', () => KM.engine.cut(inp.id), tl === 'program' ? '.red' : '')]
       },
-        peer ? h('p.muted.cinfo', (peer.name || peer.ip) + (peer.info ? ` • ${peer.info.w}×${peer.info.h} @${peer.info.fps}fps` : '') + (peer.info && peer.info.battery != null ? ' • 🔋 ' + peer.info.battery + '%' : '')) : h('p.muted.cinfo', 'Buka KLMCAM di HP lalu pilih slot ' + o.slot + '.'),
+        peer ? h('p.muted.cinfo', (peer.net ? '🌐 ' : '') + (peer.name || peer.ip) + (peer.info ? ` • ${peer.info.w}×${peer.info.h} @${peer.info.fps}fps` + (peer.info.rtt ? ' • ' + peer.info.rtt + ' ms' : '') + (peer.info.loss ? ' • hilang ' + peer.info.loss + '%' : '') : '') + (peer.info && peer.info.battery != null ? ' • 🔋 ' + peer.info.battery + '%' : '')) : h('p.muted.cinfo', 'Buka KLMCAM di HP lalu pilih slot ' + o.slot + '.'),
         h('div.bgrid',
           h('button.btn.sm', { onclick: () => L.camControl(inp, 'switch', 1), title: 'Ganti kamera depan/belakang' }, '🔄 Balik'),
           h('button.btn.sm' + (inp.rt.torch ? '.pri' : ''), { onclick: () => { inp.rt.torch = !inp.rt.torch; L.camControl(inp, 'torch', inp.rt.torch); renderPhone(); }, title: 'Senter' }, '🔦 Senter'),
@@ -228,7 +228,31 @@
         h('div.qrrow', KM.dialogs.qr(u.cam || u.hp || ''), h('div.grow',
           h('p', 'Kamera langsung (HTTPS):'), ...urls.map((x) => h('div.urlbox', x.cam)),
           h('p', 'Menu HP:'), ...urls.map((x) => h('div.urlbox', x.hp)),
-          h('p.muted', 'Atau aplikasi KLM Mix .apk → mode Kamera → IP: ' + urls.map((x) => x.ip).join(' / ') + ' • pilih slot yang sama.'))))));
+          h('p.muted', 'Atau aplikasi KLM Mix .apk → mode Kamera → IP: ' + urls.map((x) => x.ip).join(' / ') + ' • pilih slot yang sama.')))),
+      netFold()));
+  }
+  // KLMCAM lewat internet: HP di WiFi lain / data seluler
+  function netFold() {
+    const L = KM.link, c = L.netCfg(), N = L.net, on = !!c.on;
+    const copy = async (t, w) => { try { await navigator.clipboard.writeText(t); KM.toast(w + ' disalin', 'ok'); } catch (e) { KM.toast('Gagal menyalin', 'err'); } };
+    const nNet = [...L.peers.values()].filter((p) => p.net).length;
+    const link = L.netLink();
+    const tr = c.turn;
+    return fold('cam-net', '🌐 HP di jaringan lain (internet)', { wide: true, badge: on ? h('span.pill' + (N.online ? '.ok' : '.warn'), N.online ? (nNet ? nNet + ' HP' : 'siap') : N.starting ? 'menyambung…' : 'offline') : null,
+      tools: [tool(on ? 'Matikan' : 'Aktifkan', 'Terima KLMCAM dari WiFi lain / data seluler', async () => { await L.netToggle(!on); renderPhone(); }, on ? '' : '.pri')] },
+      !on ? h('p.muted', 'Aktifkan agar HP yang tidak satu WiFi (WiFi lain, hotspot, data seluler 4G/5G) bisa menjadi kamera. Video tetap dikirim langsung HP → PC; hanya proses penyambungan yang lewat internet (terenkripsi dengan kode di bawah).')
+        : h('div',
+          h('div.qrrow', KM.dialogs.qr(link), h('div.grow',
+            h('p', 'Kode internet:'), h('div.urlbox', { style: { letterSpacing: '3px', fontWeight: '800', fontSize: '15px' } }, c.room || '…'),
+            h('div.bgrid', h('button.btn.sm', { onclick: () => copy(c.room, 'Kode') }, KI.el('copy'), 'Salin kode'), h('button.btn.sm', { onclick: () => copy(link, 'Tautan') }, KI.el('link'), 'Salin tautan'),
+              h('button.btn.sm', { title: 'Buat kode baru (HP lama harus memakai kode baru)', onclick: async () => { c.room = KLMNet.newRoom(); KM.saveSettings(); await L.netStart(); renderPhone(); } }, KI.el('refresh'), 'Kode baru')),
+            h('p.muted', 'Di HP: aplikasi KLM Mix (.apk) → Kamera → ⚙ → isi "Kode internet", atau scan QR / buka tautan di Chrome. Pilih slot yang sama dengan input KLMCAM.'))),
+          h('p.muted.cinfo', 'Jalur sinyal: ' + N.online + ' dari ' + KLMNet.BROKERS.length + ' tersambung' + (N.err ? ' • ' + N.err : '')),
+          h('details', { open: !!tr.url }, h('summary', { style: { cursor: 'pointer', color: 'var(--tx2)', fontWeight: '600' } }, 'Server TURN (bila sambungan langsung diblokir)'),
+            h('p.muted', 'Sebagian jaringan seluler / kantor memblokir sambungan langsung. Isi server TURN milik sendiri atau sewaan agar tetap tersambung (video lewat server itu).'),
+            h('div.kv2', h('span.muted', 'URL'), h('input', { value: tr.url, placeholder: 'turn:host:3478', onchange: (e) => { tr.url = e.target.value.trim(); KM.saveSettings(); } }),
+              h('span.muted', 'User'), h('input', { value: tr.user, onchange: (e) => { tr.user = e.target.value.trim(); KM.saveSettings(); } }),
+              h('span.muted', 'Sandi'), h('input', { type: 'password', value: tr.pass, autocomplete: 'off', onchange: (e) => { tr.pass = e.target.value; KM.saveSettings(); } })))));
   }
 
   // =================== PLAYLIST ===================

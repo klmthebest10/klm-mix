@@ -85,7 +85,7 @@ function reveal(why) {
 
 function createMain() {
   mainWin = new BrowserWindow({
-    width: 1600, height: 940, minWidth: 1180, minHeight: 700,
+    width: 1600, height: 940, minWidth: 820, minHeight: 560,
     backgroundColor: '#0a0c0f', title: 'KLM Mix', show: false,
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
@@ -99,7 +99,27 @@ function createMain() {
   mainWin.webContents.on('did-finish-load', () => { if (!T.load && /^http/.test(mainWin.webContents.getURL())) T.load = Date.now() - T0; });
   Menu.setApplicationMenu(null);
   mainWin.webContents.on('did-fail-load', (e, code, desc, url, isMain) => { if (isMain && code !== -3) { splashStep(null, 'Gagal memuat antarmuka (' + desc + ') — mencoba lagi…'); setTimeout(() => { if (mainWin && !mainWin.isDestroyed() && netInfo) mainWin.loadURL(`http://127.0.0.1:${netInfo.ports.http}/`).catch(() => {}); }, 800); } });
-  mainWin.webContents.on('render-process-gone', () => reveal('renderer-gone'));
+  // stabilitas: bila proses tampilan mati/macet, muat ulang sendiri dan pulihkan sesi terakhir (autosave tiap 10 detik)
+  let crashes = [];
+  mainWin.webContents.on('render-process-gone', (e, d) => {
+    reveal('renderer-gone');
+    if (quitting || !d || d.reason === 'clean-exit' || d.reason === 'killed') return;
+    console.warn('[KLM] proses tampilan berhenti:', d.reason, d.exitCode);
+    const now = Date.now(); crashes = crashes.filter((t) => now - t < 120000); crashes.push(now);
+    if (crashes.length > 3) { dialog.showErrorBox('KLM Mix', 'Tampilan berhenti berulang kali (' + d.reason + '). Coba mode Hemat, perbarui driver grafis, atau jalankan ulang aplikasi.'); return; }
+    setTimeout(() => { if (mainWin && !mainWin.isDestroyed() && netInfo) mainWin.loadURL(`http://127.0.0.1:${netInfo.ports.http}/#pulih`).catch(() => {}); }, 600);
+  });
+  let hungT = null;
+  mainWin.on('unresponsive', () => {
+    if (quitting || process.env.KLM_SMOKE) return;
+    clearTimeout(hungT);
+    hungT = setTimeout(async () => { // masih macet setelah 12 detik → tawarkan muat ulang
+      if (!mainWin || mainWin.isDestroyed()) return;
+      const r = await dialog.showMessageBox(mainWin, { type: 'warning', noLink: true, title: 'KLM Mix', message: 'KLM Mix tidak merespons', detail: 'Tunggu sebentar lagi, atau muat ulang tampilan (sesi terakhir dipulihkan otomatis).', buttons: ['Tunggu', 'Muat ulang'], defaultId: 0, cancelId: 0 });
+      if (r.response === 1 && mainWin && !mainWin.isDestroyed()) { try { mainWin.webContents.forcefullyCrashRenderer(); } catch (er) { mainWin.loadURL(`http://127.0.0.1:${netInfo.ports.http}/#pulih`).catch(() => {}); } }
+    }, 12000);
+  });
+  mainWin.on('responsive', () => clearTimeout(hungT));
   setTimeout(() => reveal('timeout'), 25000); // pengaman: jangan pernah tertahan di layar pembuka
   mainWin.webContents.setWindowOpenHandler(({ url }) => {
     const u = new URL(url);
@@ -179,6 +199,8 @@ async function askClose() {
 
 function toRenderer(ch, data) { if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send(ch, data); }
 
+process.on('uncaughtException', (e) => { console.error('[KLM] uncaughtException', e && e.stack || e); }); // jangan biarkan satu galat menjatuhkan aplikasi
+process.on('unhandledRejection', (e) => { console.warn('[KLM] unhandledRejection', e && e.message || e); });
 // ---------------- IPC ----------------
 const vstMgr = require('./vst').setup({ win: () => mainWin });
 require('./live').setup({ configDir: () => server.configDir() });

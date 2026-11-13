@@ -3,10 +3,11 @@
 window.KMP = (function () {
   const DEFAULT_PORT = 8620;
   const isApp = !!(window.Capacitor) || location.hostname === 'localhost' || location.protocol === 'file:' || location.protocol === 'capacitor:';
-  const servedByPc = !isApp && /^https?:$/.test(location.protocol) && !!location.hostname;
+  const hosted = /(^|\.)github\.io$|\.pages\.dev$|\.netlify\.app$|\.vercel\.app$/.test(location.hostname); // halaman di-host di internet (bukan dari PC)
+  const servedByPc = !isApp && !hosted && /^https?:$/.test(location.protocol) && !!location.hostname;
 
   const P = {
-    isApp, servedByPc,
+    isApp, servedByPc, hosted,
     get(k, d) { try { const v = localStorage.getItem('klmhp.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem('klmhp.' + k, JSON.stringify(v)); } catch (e) {} },
     server() {

@@ -82,6 +82,8 @@
   <div class="brand"><b>KLM</b>CAM <span class="muted" style="font-weight:400">pengaturan</span></div>
   <div class="card">
     <div id="srvBox"><label>Alamat PC (IP KLM Mix)</label><input id="sSrv" inputmode="url" placeholder="192.168.1.10"></div>
+    <label>Kode internet (untuk HP di WiFi lain / data seluler — lihat panel KLMCAM di PC)</label>
+    <input id="sRoom" placeholder="kosongkan bila HP & PC satu WiFi" autocapitalize="characters" autocomplete="off" style="letter-spacing:2px;text-transform:uppercase">
     <label>Nama kamera</label><input id="sName">
     <label>Slot kamera (harus sama dengan input KLMCAM di PC)</label>
     <select id="sSlot"></select>
@@ -93,11 +95,12 @@
     <label><input type="checkbox" id="sMirror" style="width:auto"> Cermin preview kamera depan</label>
   </div>
   <div class="row" style="margin-top:14px"><button id="sCancel">Batal</button><button class="pri" id="sSave">Simpan & sambung</button></div>
-  <p class="muted" style="margin-top:16px">Tips latensi rendah & halus: Wi-Fi 5 GHz, HP dekat router, mode pesawat + Wi-Fi aktif, tutup aplikasi lain, colok charger.</p>
+  <p class="muted" style="margin-top:16px">Tips latensi rendah & halus: Wi-Fi 5 GHz, HP dekat router, tutup aplikasi lain, colok charger. Lewat internet: pakai sinyal 4G/5G yang kuat; bila jaringan berat, KLMCAM otomatis menurunkan ketajaman agar gerakan tetap mulus.</p>
 </div></div>
 
 <script src="icons.js"></script>
 <script src="common.js"></script>
+<script src="netlink.js"></script>
 <script src="camera.js"></script>
 </body>
 </html>
