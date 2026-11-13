@@ -87,7 +87,7 @@ jobs:
           (cd "$FFS" && ./configure --prefix="$FFP" --disable-everything --enable-decoder=aac,alac --disable-programs --disable-doc \
             --enable-static --disable-shared --disable-avformat --disable-swscale --disable-avfilter --disable-avdevice --disable-swresample \
             --disable-network --disable-autodetect --disable-iconv --disable-x86asm --disable-debug && make -j4 && make install)
-          export PKG_CONFIG_PATH="$FFP/lib/pkgconfig:$PKG_CONFIG_PATH"
+          export PKG_CONFIG_PATH="$(cygpath -u "$RUNNER_TEMP")/ffmin/lib/pkgconfig:$PKG_CONFIG_PATH"
           pkg-config --modversion libavcodec
           cmake -S native/airplay -B native/airplay/build -G Ninja -DUXPLAY_DIR="$(cygpath -m "$UX")" -DCMAKE_BUILD_TYPE=Release
           grep -q "HAVE_AVCODEC" native/airplay/build/build.ninja || { echo "::error::klm-airplay dibangun tanpa suara"; exit 1; }
