@@ -141,7 +141,6 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
 ### Baru di v1.14
-- **UTC Acara — Imam & Khotib jadi satu**: bila dua lower third berisi **nama orang yang sama** (mis. *Ust. Hasan — Imam* dan *Ust. Hasan — Khotib*), otomatis digabung menjadi **satu** lower third **"Imam & Khotib"** (urutan Imam lalu Khotib; berlaku juga untuk peran lain dan untuk *Tambah banyak sekaligus*). Jenis acara baru **Sholat Jumat / Khutbah** (peran Imam, Khotib, Imam & Khotib, Bilal, Muadzin)
 - **Suara iPhone ikut** (AirPlay): suara dari iPhone/iPad/Mac (AAC-ELD saat mirroring, AAC/ALAC saat AirPlay audio) didekode di PC dan masuk ke strip audio input — bisa diatur volume, EQ, kompresor, A/V sync seperti input lain
 - **Firewall otomatis**: KLM Mix memeriksa Windows Firewall untuk penerima AirPlay; bila belum diizinkan atau terblokir, izin diminta sekali (jendela UAC) — juga di versi portable; tombol *Izinkan di firewall* bila dibatalkan
 - **Tidak terhalang WiFi tamu/kantor**: penerima AirPlay kini diumumkan di **semua jaringan PC sekaligus** (WiFi, LAN, **Hotspot Seluler PC**) dan mengikuti bila jaringan berubah. WiFi memblokir antar-perangkat? Nyalakan Hotspot Seluler PC (tombol langsung di panel) dan sambungkan iPhone ke situ, atau sambungkan PC ke Hotspot Pribadi iPhone
