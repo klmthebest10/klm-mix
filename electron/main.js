@@ -333,10 +333,12 @@ app.whenReady().then(async () => {
     desktopCapturer.getSources({ types: ['screen'] }).then((s) => cb({ video: s[0], audio: 'loopback' })).catch(() => cb({}));
   });
   T.ready = Date.now() - T0;
-  createSplash(); // layar pembuka tampil seketika; jendela utama dimuat tersembunyi dan muncul saat benar-benar siap
+  createSplash(); // layar pembuka tampil dulu; jendela utama dimuat tersembunyi dan muncul saat benar-benar siap
+  const serverP = server.start();
+  await Promise.race([new Promise((r) => splashWin.once('show', r)), later(700)]); // beri giliran layar pembuka tergambar sebelum pekerjaan berat
   createMain();
   splashStep(10, 'Menyalakan server lokal…');
-  netInfo = await server.start();
+  netInfo = await serverP;
   splashStep(22, 'Memuat antarmuka…');
   T.server = Date.now() - T0;
   utcOsr = setupUtcOsr({ port: () => netInfo.ports.http, scorePort: () => { const sc = server.score(); return sc ? sc.port() : 0; } });
