@@ -24,7 +24,7 @@ function setup({ win, server, configDir }) {
   const A = { proc: null, token: '', name: '', st: { ev: 'off' }, want: null, restarts: 0 };
   const dir = configDir();
   const send = () => { const w = win(); if (w && !w.isDestroyed()) w.webContents.send('airplay:status', A.status()); };
-  A.status = () => Object.assign({ available: !!findExe(), running: !!A.proc, name: A.name }, A.st);
+  A.status = () => Object.assign({ available: !!findExe(), running: !!A.proc }, A.st, { rname: A.name }); // name = perangkat Apple, rname = nama penerima
 
   /** alamat MAC tetap untuk PC ini (dipakai perangkat Apple untuk mengenali penerima); dibuat sekali, disimpan */
   function mac() {

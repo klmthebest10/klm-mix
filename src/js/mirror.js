@@ -23,7 +23,7 @@
     if (!a.running && a.ev !== 'starting') return a.available === false ? 'Penerima AirPlay tidak tersedia di instalasi ini' : 'Penerima AirPlay mati';
     if (a.ev === 'starting') return 'Menyalakan penerima AirPlay…';
     if (a.ev === 'client' || a.ev === 'mirror') return (a.name || 'Perangkat Apple') + ' menyambung…';
-    return 'Siap — di iPhone: Pusat Kontrol → Pencerminan Layar → "' + (a.name || 'KLM Mix') + '"';
+    return 'Siap — di iPhone: Pusat Kontrol → Pencerminan Layar → "' + (a.rname || 'KLM Mix') + '"';
   };
   MR.apStart = (inp) => {
     if (!window.klm || !window.klm.invoke) { inp.rt.err = 'AirPlay hanya tersedia di versi PC (.exe)'; return; }
