@@ -46,6 +46,50 @@ jobs:
           Get-ChildItem native/vsthost/build/bin/Release | ForEach-Object { Write-Host ("{0}: {1:N0} KB" -f $_.Name, ($_.Length / 1KB)) }
           Get-ChildItem -Recurse native/vsthost/build/KLMTestGain.vst3 | ForEach-Object { Write-Host $_.FullName }
 
+      # Penerima AirPlay (klm-airplay.exe, GPL-3.0) dari pustaka UxPlay — iPhone/iPad/Mac mirroring tanpa aplikasi
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-openssl
+            mingw-w64-ucrt-x86_64-libplist
+
+      - name: Build penerima AirPlay (UxPlay lib, MSYS2 UCRT64)
+        shell: msys2 {0}
+        run: |
+          set -e
+          UX="$(cygpath -u "$RUNNER_TEMP")/uxplay"
+          git clone https://github.com/FDH2/UxPlay.git "$UX"
+          git -C "$UX" checkout 05b0275cb1b726592700e47a6e0307544b3d3a52
+          cmake -S native/airplay -B native/airplay/build -G Ninja -DUXPLAY_DIR="$(cygpath -m "$UX")" -DCMAKE_BUILD_TYPE=Release
+          cmake --build native/airplay/build
+          mkdir -p native/airplay/dist
+          cp native/airplay/build/klm-airplay.exe native/airplay/dist/
+          strip native/airplay/dist/klm-airplay.exe || true
+          ldd native/airplay/dist/klm-airplay.exe | awk '/\/ucrt64\//{print $3}' | sort -u | while read d; do cp "$d" native/airplay/dist/; done
+          cp "$UX/LICENSE" native/airplay/dist/COPYING-GPL3.txt
+          cp native/airplay/README.md native/airplay/dist/README.txt
+          ls -la native/airplay/dist
+
+      - name: Uji penerima AirPlay (berjalan tanpa MSYS2, mengumumkan layanan)
+        shell: pwsh
+        run: |
+          $exe = "native/airplay/dist/klm-airplay.exe"
+          & $exe --version
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::klm-airplay.exe tidak bisa dijalankan (DLL kurang?)"; exit 1 }
+          $out = "$env:RUNNER_TEMP\ap-out.txt"
+          $p = Start-Process -FilePath $exe -ArgumentList "--name","KLM Mix CI","--port","8624","--token","abcdef0123456789","--mac","02:11:22:33:44:55","--keyfile","$env:RUNNER_TEMP\ap.key" -RedirectStandardOutput $out -RedirectStandardError "$env:RUNNER_TEMP\ap-err.txt" -PassThru -NoNewWindow
+          Start-Sleep -Seconds 4
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Content $out; Get-Content "$env:RUNNER_TEMP\ap-err.txt" -ErrorAction SilentlyContinue | Select-Object -First 20
+          if (-not (Select-String -Path $out -Pattern '"ev":"ready"' -Quiet)) { Write-Host "::error::penerima AirPlay tidak siap"; exit 1 }
+
       - name: Uji host VST (protokol, parameter, state, throughput)
         run: node native/vsthost/test/host-test.js native/vsthost/build/bin/Release/klm-vsthost.exe native/vsthost/build/KLMTestGain.vst3
 
@@ -55,6 +99,7 @@ jobs:
         run: |
           $env:KLM_SMOKE = "$env:RUNNER_TEMP\smoke"
           $env:KLM_VSTTEST = "$env:GITHUB_WORKSPACE\native\vsthost\build\KLMTestGain.vst3"
+          $env:KLM_APTEST = "$env:GITHUB_WORKSPACE\native\airplay\test\uji.h264"
           $p = Start-Process -FilePath "node_modules\electron\dist\electron.exe" -ArgumentList "." -PassThru
           Write-Host "PID utama: $($p.Id)"
           $t = 0
@@ -88,6 +133,7 @@ jobs:
           Write-Host ("win-unpacked: {0:N0} MB" -f $sz)
           Get-ChildItem dist/*.exe | ForEach-Object { Write-Host ("{0}: {1:N0} MB" -f $_.Name, ($_.Length / 1MB)) }
           if (Test-Path dist/win-unpacked/resources/vsthost/klm-vsthost.exe) { Write-Host "host VST ikut terpasang: resources/vsthost/klm-vsthost.exe" } else { Write-Host "::error::klm-vsthost.exe tidak ada di paket"; exit 1 }
+          if (Test-Path dist/win-unpacked/resources/airplay/klm-airplay.exe) { Get-ChildItem dist/win-unpacked/resources/airplay | ForEach-Object { Write-Host ("airplay: {0} {1:N0} KB" -f $_.Name, ($_.Length / 1KB)) } } else { Write-Host "::error::klm-airplay.exe tidak ada di paket"; exit 1 }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

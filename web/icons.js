@@ -122,6 +122,7 @@
     'zoom-in': '<circle cx="11" cy="11" r="7.5"/><path d="m21 21-4.35-4.35M11 8v6M8 11h6"/>',
     'zoom-out': '<circle cx="11" cy="11" r="7.5"/><path d="m21 21-4.35-4.35M8 11h6"/>',
     focus: '<circle cx="12" cy="12" r="3"/><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/>',
+    airplay: '<path d="M5 17H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-1"/><path d="m12 15 5 6H7Z"/>',
     signal: '<path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 4v16"/>',
     power: '<path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>',
     send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
@@ -139,7 +140,7 @@
     '📐': 'layout', '📂': 'folder-open', '🖱': 'pointer', '🎦': 'film', '🔁': 'repeat', '✎': 'pencil', '✂': 'scissors', '🎧': 'headphones',
     '📥': 'download', '📺': 'tv', '○': 'circle', '⌂': 'home', '🪄': 'wand', '🔤': 'type', '▭': 'rect', '◯': 'circle', '🚫': 'ban', '⬆': 'arrow-up',
     '⬇': 'arrow-down', '📚': 'library', '💾': 'save', '📊': 'bars', '🏛': 'landmark', '🔗': 'link', '⛶': 'maximize', '⏺': 'rec', '🧩': 'layers',
-    '🟢': 'dot', '⚪': 'circle', '＋': 'plus', '🔒': 'lock', '⌨': 'keyboard', '💡': 'sun', '🖌': 'pencil', '📋': 'copy', '🔔': 'bell', '⏱': 'timer', '⭐': 'star'
+    '🟢': 'dot', '⚪': 'circle', '＋': 'plus', '🔒': 'lock', '⌨': 'keyboard', '💡': 'sun', '🖌': 'pencil', '📋': 'copy', '🔔': 'bell', '⏱': 'timer', '⭐': 'star', '📲': 'airplay'
   };
   const COLOR = { '🟢': '#22c55e', '⚪': '#9aa3b5' };
   const keys = Object.keys(MAP).sort((a, b) => b.length - a.length).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));

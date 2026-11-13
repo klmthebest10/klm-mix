@@ -203,6 +203,13 @@ process.on('uncaughtException', (e) => { console.error('[KLM] uncaughtException'
 process.on('unhandledRejection', (e) => { console.warn('[KLM] unhandledRejection', e && e.message || e); });
 // ---------------- IPC ----------------
 const vstMgr = require('./vst').setup({ win: () => mainWin });
+const airplay = require('./airplay').setup({ win: () => mainWin, server, configDir: server.configDir });
+// buka halaman Pengaturan Windows tertentu (Proyeksikan ke PC ini / Fitur opsional) untuk Miracast bawaan
+ipcMain.handle('sys:open-settings', (e, page) => {
+  const ok = { project: 'ms-settings:project', features: 'ms-settings:optionalfeatures', firewall: 'ms-settings:windowsdefender' };
+  if (!ok[page] || process.platform !== 'win32') return false;
+  return shell.openExternal(ok[page]).then(() => true, () => false);
+});
 require('./live').setup({ configDir: () => server.configDir() });
 ipcMain.handle('app:boot', (e, pct, text) => { splashStep(22 + (+pct || 0) * 0.78, text); return true; });
 ipcMain.handle('app:ready', () => { reveal('ready'); return true; });
@@ -382,6 +389,7 @@ function hardQuit(why) {
   if (process.env.KLM_SMOKE) { try { fs.appendFileSync(path.join(process.env.KLM_SMOKE, 'smoke.log'), new Date().toISOString() + ' hardQuit ' + why + '\n'); } catch (e) {} }
   for (const w of browsers.values()) { try { w.destroy(); } catch (e) {} }
   try { vstMgr.shutdown(); } catch (e) {}
+  try { airplay.shutdown(); } catch (e) {}
   try { server.hub.shutdown(); } catch (e) {}
   const ends = [...writers.values()].map((w) => new Promise((r) => { try { w.end(r); } catch (x) { r(); } setTimeout(r, 2500); }));
   writers.clear();
@@ -633,6 +641,28 @@ function smokeTest() {
       if (sg.state !== 'ready' || !sg.mask) { fail++; log('GAGAL: mesin Latar AI tidak berjalan'); }
       if (!sg.mirror.sup || !sg.mirror.port || sg.mirror.ws !== 1) { fail++; log('GAGAL: input Mirroring HP (WebCodecs / port / feed)'); }
     } catch (e) { fail++; log('GAGAL latar AI: ' + e.message); }
+    // --- Penerima AirPlay (iPhone tanpa aplikasi): helper menyala, mengumumkan diri, video uji terdekode di input ---
+    if (process.env.KLM_APTEST) {
+      try {
+        const a1 = JSON.parse(await js(`(async () => { const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+          const m = KM.inputs.create('mirror', { title: 'iPhone uji', opts: { mode: 'airplay', apName: 'KLM Mix Uji' } }); KM.engine.cut(m.id);
+          for (let i = 0; i < 40 && KM.mirror.ap.ev !== 'ready'; i++) await sleep(250);
+          window.__apId = m.id; return JSON.stringify({ token: m.opts.token, ap: KM.mirror.ap }); })()`));
+        log('airplay: ' + JSON.stringify(a1.ap));
+        if (a1.ap.ev !== 'ready' || !a1.ap.running) { fail++; log('GAGAL: penerima AirPlay tidak siap'); }
+        const exe = require('./airplay').findExe();
+        const st = require('child_process').spawn(exe, ['--port', String(server.mirror.port), '--token', a1.token, '--selftest', process.env.KLM_APTEST, '8'], { windowsHide: true });
+        let so = ''; st.stdout.on('data', (d) => { so += d; });
+        await wait(6000);
+        const a2 = JSON.parse(await js(`(() => { const m = KM.state.inputs.find((i) => i.id === window.__apId); const r = { w: m.rt.mw, h: m.rt.mh, fps: m.rt.mfps, name: m.rt.minfo && m.rt.minfo.name, st: m.rt.mstat }; KM.inputs.remove(m); return JSON.stringify(r); })()`));
+        try { st.kill(); } catch (e) {}
+        await wait(1200);
+        const off = await js(`JSON.stringify(KM.mirror.ap.running)`);
+        log('airplay video uji: ' + JSON.stringify(a2) + ', helper: ' + so.trim().split('\n').pop() + ', setelah input dihapus berjalan=' + off);
+        if (!(a2.w > 0 && a2.st && a2.st.out > 30)) { fail++; log('GAGAL: video AirPlay uji tidak terdekode'); }
+        if (off !== 'false') log('catatan: penerima AirPlay masih berjalan setelah input dihapus');
+      } catch (e) { fail++; log('GAGAL airplay: ' + e.message); }
+    }
     // --- Virtual Set dari template + penyusun tata letak ---
     try {
       const vs = JSON.parse(await js(`(async () => { const t = KM.vset.builtin.find((x) => x.id === 'trio-utama'); const v = KM.vset.create(t, { fill: false });

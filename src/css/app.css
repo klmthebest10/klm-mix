@@ -330,6 +330,8 @@ p { line-height: 1.5; }
 .tile b .ki { width: 22px; height: 22px; margin: 0; vertical-align: 0; }
 .tile.on b { background: var(--acc); color: #fff; border-color: var(--acc); }
 .tile span { font-size: 12px; font-weight: 700; line-height: 1.3; }
+.tile small { font-size: 10.5px; line-height: 1.3; font-weight: 400; }
+.mirror-modes { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 10px; }
 .src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 10px; }
 .src-grid .tile img { width: 100%; aspect-ratio: 16/9; object-fit: contain; background: #000; border-radius: 6px; }
 .split { display: grid; grid-template-columns: 1fr 350px; gap: 14px; }

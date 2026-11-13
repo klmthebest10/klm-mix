@@ -6,3 +6,4 @@ mobile/android/
 *.log
 .DS_Store
 native/vsthost/build/
+native/airplay/build/

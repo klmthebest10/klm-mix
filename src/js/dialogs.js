@@ -199,19 +199,64 @@
       return () => { if (!o.sourceId) { KM.toast('Pilih layar/jendela'); return false; } KM.inputs.create('screen', { title: chosen || 'Layar', opts: o }); };
     },
     mirror(form) {
-      const o = { token: Array.from(crypto.getRandomValues(new Uint8Array(6))).map((b) => b.toString(16).padStart(2, '0')).join(''), size: 1280, fps: 60, bitrate: 8000 };
+      const o = { mode: 'app', token: Array.from(crypto.getRandomValues(new Uint8Array(6))).map((b) => b.toString(16).padStart(2, '0')).join(''), size: 1280, fps: 60, bitrate: 8000, apName: KM.settings.airplayName || 'KLM Mix' };
       const fake = { opts: o, rt: {}, title: 'Mirroring HP' };
       KM.mirror.allow(o.token, 'Mirroring HP');
-      const qr = h('div');
-      const redraw = () => qr.replaceChildren(KM.mirror.connectBox(fake));
-      form.append(
-        row('Ketajaman', sel([[960, 'Ringan (sisi panjang 960)'], [1280, 'HD (1280) — disarankan'], [1920, 'Full HD (1920)']], o.size, (v) => { o.size = +v; redraw(); }),
-          h('label', 'Kehalusan'), sel([[30, '30 fps'], [60, '60 fps']], o.fps, (v) => { o.fps = +v; redraw(); })),
-        row('Bitrate', sel([[4000, '4 Mbps'], [8000, '8 Mbps'], [12000, '12 Mbps'], [20000, '20 Mbps (WiFi 5 GHz / USB)']], o.bitrate, (v) => { o.bitrate = +v; redraw(); })),
-        qr,
-        KM.mirror.supported() ? null : h('p.muted', '⚠ Mirroring hanya tersedia di versi PC (.exe).'));
-      redraw();
-      return () => { KM.inputs.create('mirror', { title: 'Mirroring HP', opts: o }); };
+      const MODES = [['app', '📱', 'Android — aplikasi KLM Mix', 'Paling halus & latensi terendah (scan QR)'],
+        ['airplay', '📲', 'iPhone / iPad / Mac — AirPlay', 'Tanpa aplikasi: Pencerminan Layar bawaan iPhone'],
+        ['miracast', '📡', 'Android tanpa aplikasi — Miracast', 'Fitur "Cast / Smart View" bawaan HP ke Windows']];
+      const body = h('div');
+      let mc = { sourceId: '', name: '' }; // Miracast: jendela yang ditangkap
+      const tiles = h('div.tiles.mirror-modes', MODES.map(([k, ic, t, d]) => h('button.tile' + (k === o.mode ? '.on' : ''), { type: 'button', 'data-mode': k, onclick: () => { o.mode = k; KM.$$('.tile', tiles).forEach((x) => x.classList.toggle('on', x.dataset.mode === k)); draw(); } }, h('b', ic), h('span', t), h('small.muted', d))));
+      const findMiracast = (grid, auto) => window.klm.invoke('desktop:sources').then((list) => {
+        const wins = list.filter((x) => !/^screen:/.test(x.id));
+        const re = /wireless display|tampilan nirkabel|miracast|connect|sambungkan|hubungkan|proyeksi|project/i;
+        const hit = wins.filter((x) => re.test(x.name));
+        const show = hit.length ? hit.concat(wins.filter((x) => !hit.includes(x))) : wins;
+        grid.replaceChildren(...show.slice(0, 12).map((x) => h('button.tile' + (mc.sourceId === x.id ? '.on' : ''), { type: 'button', onclick: (e) => { mc = { sourceId: x.id, name: x.name }; KM.$$('.tile', grid).forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); } }, h('img', { src: x.thumb }), h('span', (re.test(x.name) ? '📡 ' : '') + x.name))));
+        if (auto && hit.length && !mc.sourceId) { mc = { sourceId: hit[0].id, name: hit[0].name }; grid.firstChild && grid.firstChild.classList.add('on'); }
+        if (!show.length) grid.replaceChildren(h('p.muted', 'Belum ada jendela. Sambungkan HP dulu (langkah 3), lalu tekan Cari lagi.'));
+        return hit.length;
+      });
+      const draw = () => {
+        if (o.mode === 'app') {
+          const qr = h('div');
+          const redraw = () => qr.replaceChildren(KM.mirror.connectBox(fake));
+          body.replaceChildren(
+            row('Ketajaman', sel([[960, 'Ringan (sisi panjang 960)'], [1280, 'HD (1280) — disarankan'], [1920, 'Full HD (1920)']], o.size, (v) => { o.size = +v; redraw(); }),
+              h('label', 'Kehalusan'), sel([[30, '30 fps'], [60, '60 fps']], o.fps, (v) => { o.fps = +v; redraw(); })),
+            row('Bitrate', sel([[4000, '4 Mbps'], [8000, '8 Mbps'], [12000, '12 Mbps'], [20000, '20 Mbps (WiFi 5 GHz / USB)']], o.bitrate, (v) => { o.bitrate = +v; redraw(); })),
+            qr);
+          redraw();
+        } else if (o.mode === 'airplay') {
+          const nm = h('input', { value: o.apName, maxlength: 40, placeholder: 'KLM Mix', oninput: () => { o.apName = nm.value.trim() || 'KLM Mix'; box.replaceChildren(KM.mirror.connectBox(fake)); } });
+          const box = h('div', KM.mirror.connectBox(fake));
+          body.replaceChildren(row('Nama di iPhone', nm), box,
+            KM.isElectron ? null : h('p.muted', '⚠ Penerima AirPlay hanya ada di versi PC (.exe).'));
+        } else {
+          const grid = h('div.src-grid', h('p.muted', 'Tekan "Cari jendela Miracast" setelah HP tersambung.'));
+          const btn = (t, f) => h('button.btn', { type: 'button', onclick: f }, t);
+          body.replaceChildren(h('div.sec', h('h4', '📡 Android tanpa aplikasi — lewat Miracast bawaan Windows'),
+            h('p', '1. Sekali saja: pasang fitur Windows ', h('b', '"Tampilan Nirkabel" (Wireless Display)'), ' ', btn('Buka Fitur opsional', () => window.klm.invoke('sys:open-settings', 'features')), ' → Tambah fitur → cari "Wireless Display".'),
+            h('p', '2. Buka ', btn('Proyeksikan ke PC ini', () => window.klm.invoke('sys:open-settings', 'project')), ' → izinkan "Tersedia di mana saja", lalu tekan ', h('b', 'Luncurkan aplikasi Tampilan Nirkabel'), '.'),
+            h('p', '3. Di HP: tarik panel atas → ', h('b', 'Cast / Smart View / Screen Cast / Tampilan nirkabel'), ' → pilih nama PC ini → terima di PC.'),
+            h('p', '4. ', btn('🔍 Cari jendela Miracast', () => findMiracast(grid, true).then((n) => KM.toast(n ? 'Jendela Miracast ditemukan' : 'Jendela Miracast belum ditemukan — pilih manual', n ? 'ok' : ''))), ' lalu tekan ', h('b', 'Tambah'), ' — jendela itu ditangkap sebagai input (tidak perlu dibuka penuh).'),
+            h('p.muted', 'Butuh WiFi PC yang mendukung Miracast (kebanyakan laptop). HP Samsung: Smart View; Xiaomi: Cast; Oppo/Realme/Vivo: Screen Cast / Proyeksi layar. iPhone tidak mendukung Miracast — pakai mode AirPlay.')), grid);
+          if (KM.isElectron) findMiracast(grid, true).catch(() => {});
+          else body.append(h('p.muted', '⚠ Hanya di versi PC (.exe) untuk Windows.'));
+        }
+      };
+      form.append(tiles, body, KM.mirror.supported() ? null : h('p.muted', '⚠ Mirroring hanya tersedia di versi PC (.exe).'));
+      draw();
+      return () => {
+        if (o.mode === 'miracast') {
+          if (!mc.sourceId) { KM.toast('Pilih jendela Miracast dulu (langkah 4)'); return false; }
+          KM.inputs.create('screen', { title: 'Miracast HP', opts: { sourceId: mc.sourceId, sysAudio: false, fps: KM.settings.fps >= 50 ? 60 : 30 } });
+          return;
+        }
+        if (o.mode === 'airplay') { KM.settings.airplayName = o.apName; try { KM.saveSettings && KM.saveSettings(); } catch (e) {} KM.inputs.create('mirror', { title: 'iPhone (AirPlay)', opts: o }); return; }
+        KM.inputs.create('mirror', { title: 'Mirroring HP', opts: o });
+      };
     },
     klmcam(form) {
       const used = S.inputs.filter((i) => i.type === 'klmcam').map((i) => +i.opts.slot);

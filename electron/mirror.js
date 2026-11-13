@@ -4,6 +4,7 @@
  * (/mirror-feed) untuk didekode dengan WebCodecs.
  * HP → PC : 'KLMM' u8 versi, u16 panjang, JSON {token,name,w,h,fps,model}; lalu paket: u8 tipe, u32 panjang, i64 ptsUs, data
  *            tipe 1 = konfigurasi (SPS/PPS Annex-B), 2 = frame kunci, 3 = frame biasa, 4 = info JSON (rotasi/ukuran)
+ * Penerima AirPlay bawaan (klm-airplay, iPhone/iPad/Mac) memakai protokol yang sama dari 127.0.0.1 (JSON salam berisi airplay:true).
  * PC → HP : u8 perintah (1 = minta frame kunci, 2 = berhenti, 3 = bitrate u32 kbps) */
 'use strict';
 const net = require('net');
@@ -56,6 +57,10 @@ function create() {
         ses.bytes += len;
         if (type === 1) ses.config = Buffer.from(data);
         if (type === 2 || type === 3) ses.frames++;
+        // simpan frame sejak frame kunci terakhir: halaman yang baru menyambung langsung dapat gambar
+        // (AirPlay hampir tidak pernah mengirim frame kunci baru, jadi tanpa ini layar bisa hitam sampai lama)
+        if (type === 2) { ses.gop = [[pts, Buffer.from(data)]]; ses.gopBytes = len; ses.gopKey = 2; }
+        else if (type === 3 && ses.gop) { if (ses.gopBytes + len > 24e6 || ses.gop.length > 900) ses.gop = null; else { ses.gop.push([pts, Buffer.from(data)]); ses.gopBytes += len; } }
         if (type === 4) { try { Object.assign(ses.info, JSON.parse(data.toString('utf8'))); state(token, { t: 'info', info: ses.info }); } catch (e) {} continue; }
         tell(ses, type, pts, data);
       }
@@ -72,7 +77,9 @@ function create() {
     M.allow(token, u.searchParams.get('n') || '');
     ws.token = token;
     if (!tokens.has(token)) return ws.close();
-    const attach = () => { const s = sessions.get(token); if (!s) return false; s.feeds.add(ws); ws.send(JSON.stringify({ t: 'hello', info: s.info })); if (s.config) ws.send(Buffer.concat(pkt(1, 0, s.config)), { binary: true }); M.cmd(token, 1); return true; };
+    const attach = () => { const s = sessions.get(token); if (!s) return false; s.feeds.add(ws); ws.send(JSON.stringify({ t: 'hello', info: s.info })); if (s.config) ws.send(Buffer.concat(pkt(1, 0, s.config)), { binary: true });
+      if (s.config && s.gop) s.gop.forEach(([pts, d], i) => ws.send(Buffer.concat(pkt(i ? 3 : 2, pts, d)), { binary: true }));
+      M.cmd(token, 1); return true; };
     attach();
     const iv = setInterval(() => { const s = sessions.get(token); if (s && !s.feeds.has(ws)) attach(); }, 500); // HP menyambung belakangan / menyambung ulang
     ws.on('message', (d, bin) => { if (bin) return; let m; try { m = JSON.parse(String(d)); } catch (e) { return; } if (m.t === 'key') M.cmd(token, 1); else if (m.t === 'stop') M.cmd(token, 2); else if (m.t === 'bitrate') M.cmd(token, 3, +m.kbps || 0); });
