@@ -58,9 +58,10 @@ const splashHtml = (ver) => '<!DOCTYPE html><html><head><meta charset="utf-8"><s
   + '<script>window.S=function(p,t){if(t)document.getElementById("st").textContent=t;if(p!=null)document.getElementById("pb").style.width=Math.max(6,Math.min(100,p))+"%"}</script></body></html>';
 let splashWin = null, revealed = false, splashAt = 0;
 function createSplash() {
-  splashWin = new BrowserWindow({ width: 600, height: 300, frame: false, resizable: false, maximizable: false, minimizable: false, fullscreenable: false, center: true, show: false, skipTaskbar: false,
+  splashWin = new BrowserWindow({ width: 600, height: 300, frame: false, resizable: false, maximizable: false, minimizable: false, fullscreenable: false, center: true, show: true, skipTaskbar: false,
     backgroundColor: '#090b0f', title: 'KLM Mix', icon: path.join(__dirname, '..', 'build', 'icon.png'), webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
-  splashWin.once('ready-to-show', () => { if (splashWin && !revealed) { splashWin.show(); splashAt = Date.now(); T.splash = Date.now() - T0; } });
+  splashAt = Date.now(); T.splash = Date.now() - T0; // jendela langsung tampil (latar gelap), isinya menyusul beberapa saat kemudian
+  splashWin.webContents.once('did-finish-load', () => { T.splashPaint = Date.now() - T0; });
   splashWin.on('closed', () => { splashWin = null; });
   splashWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(splashHtml(app.getVersion()))).catch(() => {});
 }
@@ -335,7 +336,6 @@ app.whenReady().then(async () => {
   T.ready = Date.now() - T0;
   createSplash(); // layar pembuka tampil dulu; jendela utama dimuat tersembunyi dan muncul saat benar-benar siap
   const serverP = server.start();
-  await Promise.race([new Promise((r) => splashWin.once('show', r)), later(700)]); // beri giliran layar pembuka tergambar sebelum pekerjaan berat
   createMain();
   splashStep(10, 'Menyalakan server lokal…');
   netInfo = await serverP;
