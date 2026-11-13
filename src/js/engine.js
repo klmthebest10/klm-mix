@@ -83,19 +83,62 @@
       } catch (e) {}
       ctx.restore();
     }
-    if (inp.type === 'virtualset' && inp.opts.camId) {
-      const cam = KM.getInput(inp.opts.camId);
-      if (cam && cam !== inp) {
-        const o = inp.opts, cw = rw * o.camScale, ch = rh * o.camScale;
-        drawInputRect(ctx, cam, rx + o.camX * rw - cw / 2, ry + o.camY * rh - ch / 2, cw, ch, depth + 1);
-      }
-    }
+    if (inp.type === 'virtualset' && inp.opts.bgDim > 0) { ctx.fillStyle = 'rgba(0,0,0,' + Math.min(0.9, inp.opts.bgDim) + ')'; ctx.fillRect(rx, ry, rw, rh); }
     for (const l of inp.layers) {
       if (!l.on) continue;
-      const li = KM.getInput(l.inputId); if (!li || li === inp) continue;
-      const lx = rx + l.x * rw, ly = ry + l.y * rh, lw = l.w * rw, lh = l.h * rh;
-      if (l.bw) { ctx.fillStyle = l.bc || '#ffffff'; const b = l.bw * rw / 1920; ctx.fillRect(lx - b, ly - b, lw + 2 * b, lh + 2 * b); }
-      drawInputRect(ctx, li, lx, ly, lw, lh, depth + 1);
+      const li = KM.getInput(l.inputId);
+      if (li === inp) continue;
+      drawLayer(ctx, l, li, rx + l.x * rw, ry + l.y * rh, l.w * rw, l.h * rh, depth, rw / 1920);
+    }
+    if (inp.type === 'virtualset' && inp.rt.fg && inp.rt.fg.complete && inp.rt.fg.naturalWidth) { try { ctx.drawImage(inp.rt.fg, rx, ry, rw, rh); } catch (e) {} }
+  }
+  function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); if (r > 0.5 && ctx.roundRect) ctx.roundRect(x, y, w, h, Math.min(r, w / 2, h / 2)); else ctx.rect(x, y, w, h); }
+  /** satu layer/kotak: bingkai, sudut bulat, bayangan, transparansi, isi (zoom/geser/pangkas sendiri), label */
+  function drawLayer(ctx, l, li, x, y, w, h, depth, k) {
+    if (w <= 0 || h <= 0) return;
+    const r = (l.rad || 0) * Math.min(w, h) / 2, b = (l.bw || 0) * k;
+    ctx.save();
+    if (l.op != null && l.op < 1) ctx.globalAlpha *= Math.max(0, l.op);
+    if (l.sh && (li || l.bg || b)) { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 40 * k * l.sh; ctx.shadowOffsetY = 14 * k * l.sh; ctx.fillStyle = '#000'; rrect(ctx, x - b, y - b, w + 2 * b, h + 2 * b, r + b); ctx.fill(); ctx.restore(); }
+    if (b) { ctx.fillStyle = l.bc || '#ffffff'; rrect(ctx, x - b, y - b, w + 2 * b, h + 2 * b, r + b); ctx.fill(); }
+    if (l.bg) { ctx.fillStyle = l.bg; rrect(ctx, x, y, w, h, r); ctx.fill(); }
+    if (li) {
+      ctx.save();
+      if (l.fit) { rrect(ctx, x, y, w, h, r); ctx.clip(); drawView(ctx, l, li, x, y, w, h, depth); }
+      else { if (r) { rrect(ctx, x, y, w, h, r); ctx.clip(); } drawInputRect(ctx, li, x, y, w, h, depth + 1); } // layer lama: ikut posisi input sumber
+      ctx.restore();
+    }
+    if (l.label) {
+      const fs = Math.max(11 * k, Math.min(h * 0.085, 34 * k)), pad = fs * 0.55;
+      ctx.font = '700 ' + fs + 'px "Plus Jakarta Sans", "Segoe UI", Arial, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+      const tw = Math.min(ctx.measureText(l.label).width, w - pad * 4), bx = x + pad, bh = fs * 1.75, by = y + h - bh - pad;
+      ctx.fillStyle = 'rgba(8,10,14,.78)'; rrect(ctx, bx, by, tw + pad * 2.4, bh, bh * 0.22); ctx.fill();
+      ctx.fillStyle = l.bc && l.bw ? l.bc : '#ff7a1a'; ctx.fillRect(bx, by, Math.max(2, fs * 0.16), bh);
+      ctx.fillStyle = '#fff'; ctx.fillText(l.label, bx + pad * 1.2, by + bh / 2 + fs * 0.04, tw);
+    }
+    ctx.restore();
+  }
+  /** isi kotak dengan framing milik layer: pangkas → fit/fill → zoom → geser (tidak mengubah input aslinya) */
+  function drawView(ctx, l, li, x, y, w, h, depth) {
+    if (depth > 3) return;
+    const t = KM.inputTypes[li.type]; if (!t || t.noVideo) return;
+    const comp = li.type === 'virtualset' || li.layers.some((a) => a.on && a.inputId);
+    let s = null, sw = E.W, sh = E.H;
+    if (!comp) { s = getSource(li); if (!s || !s.w || !s.h) return; sw = s.w; sh = s.h; }
+    const cl = l.cropL || 0, cr = l.cropR || 0, ct = l.cropT || 0, cb = l.cropB || 0;
+    const fw = Math.max(0.02, 1 - cl - cr), fh = Math.max(0.02, 1 - ct - cb), cw = sw * fw, chh = sh * fh;
+    const sc = l.fit === 'fit' ? Math.min(w / cw, h / chh) : Math.max(w / cw, h / chh);
+    let dw = cw * sc, dh = chh * sc;
+    if (l.fit === 'stretch') { dw = w; dh = h; }
+    const z = l.zoom || 1; dw *= z; dh *= z;
+    const cx = x + w / 2 + (l.px || 0) * w / 2, cy = y + h / 2 + (l.py || 0) * h / 2;
+    if (l.flip) { ctx.translate(cx, 0); ctx.scale(-1, 1); ctx.translate(-cx, 0); }
+    if (l.rot) { ctx.translate(cx, cy); ctx.rotate(l.rot * Math.PI / 180); ctx.translate(-cx, -cy); }
+    if (!comp) { try { ctx.drawImage(s.src, cl * sw, ct * sh, cw, chh, cx - dw / 2, cy - dh / 2, dw, dh); } catch (e) {} }
+    else {
+      const FW = dw / fw, FH = dh / fh;
+      ctx.beginPath(); ctx.rect(cx - dw / 2, cy - dh / 2, dw, dh); ctx.clip();
+      drawInputRect(ctx, li, cx - dw / 2 - cl * FW, cy - dh / 2 - ct * FH, FW, FH, depth + 1);
     }
   }
   E.drawInputRect = drawInputRect;
@@ -277,7 +320,6 @@
     if (!inp || depth > 4 || set.has(inp.id)) return;
     set.add(inp.id);
     inp.layers.forEach((l) => { if (l.on) collectLive(set, KM.getInput(l.inputId), depth + 1); });
-    if (inp.type === 'virtualset' && inp.opts.camId) collectLive(set, KM.getInput(inp.opts.camId), depth + 1);
   }
   function updateLive() {
     const set = new Set();

@@ -34,19 +34,58 @@ let writerSeq = 1;
 const browsers = new Map();
 
 
-// layar pembuka instan (tanpa menunggu server) — tampilannya sama dengan layar pembuka halaman aplikasi
-const SPLASH = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:#0a0c0f;color:#eceff4;font-family:"Segoe UI",system-ui,sans-serif;overflow:hidden}'
-  + 'body{background:radial-gradient(ellipse at center,#161a21 0,#0a0c0f 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}'
-  + 'svg{width:64px;height:64px;filter:drop-shadow(0 8px 24px rgba(255,90,50,.35));animation:sp 1.4s cubic-bezier(.2,.7,.3,1) infinite alternate}.wm{font-size:26px;font-weight:800;letter-spacing:-.4px}.wm span{color:#a7afbd;font-weight:600}'
-  + '.sub{color:#6f7888;font-size:12px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase}.bar{width:180px;height:3px;border-radius:3px;background:#252a33;overflow:hidden;margin-top:6px}'
-  + '.bar i{display:block;width:40%;height:100%;background:linear-gradient(90deg,#ff4b3e,#ffb11f);border-radius:3px;animation:ld 1s ease-in-out infinite}@keyframes sp{to{transform:scale(1.06)}}@keyframes ld{from{transform:translateX(-100%)}to{transform:translateX(260%)}}</style></head>'
-  + '<body><svg viewBox="0 0 24 24"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4b3e"/><stop offset="1" stop-color="#ffb11f"/></linearGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#g)"/><path d="M7.6 6.5h2.9v4.6l4.2-4.6h3.5l-4.95 5.25L18.4 17.5h-3.6l-4.3-4.75v4.75H7.6Z" fill="#fff"/></svg>'
-  + '<div class="wm">KLM <span>Mix</span></div><div class="sub">Studio Produksi Live</div><div class="bar"><i></i></div></body></html>';
+// ---------------- layar pembuka (jendela kecil tanpa bingkai) ----------------
+// Jendela utama dimuat tersembunyi; layar pembuka menampilkan tahap penyiapan yang sebenarnya, lalu jendela utama
+// muncul sekaligus dalam keadaan siap (tidak ada jendela kosong / antarmuka setengah jadi).
+const BRAND_SVG = '<svg viewBox="0 0 24 24"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4b3e"/><stop offset="1" stop-color="#ffb11f"/></linearGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#g)"/><path d="M7.6 6.5h2.9v4.6l4.2-4.6h3.5l-4.95 5.25L18.4 17.5h-3.6l-4.3-4.75v4.75H7.6Z" fill="#fff"/></svg>';
+const splashHtml = (ver) => '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+  + 'html,body{margin:0;height:100%;overflow:hidden;background:#090b0f;color:#eceff4;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;cursor:default}'
+  + 'body{-webkit-app-region:drag;display:grid;grid-template-columns:200px 1fr;align-items:center;transition:opacity .32s ease, transform .32s ease}body.out{opacity:0;transform:scale(1.015)}'
+  + '.bg{position:fixed;inset:0;background:radial-gradient(520px 300px at 0% 0%,rgba(255,98,48,.22),transparent 70%),radial-gradient(460px 320px at 100% 100%,rgba(62,198,255,.13),transparent 70%),linear-gradient(135deg,#11141b,#090b0f 60%)}'
+  + '.bg:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(115deg,rgba(255,255,255,.028) 0 1px,transparent 1px 46px)}'
+  + '.mark{position:relative;width:132px;height:132px;margin-left:46px;display:grid;place-items:center}.mark svg.k{width:62px;height:62px;filter:drop-shadow(0 10px 26px rgba(255,90,50,.45));animation:pop .7s cubic-bezier(.2,.9,.3,1.2) both}'
+  + '.ring{position:absolute;inset:0;border-radius:50%;border:2px solid transparent;border-top-color:#ff7a1a;border-right-color:rgba(255,122,26,.25);animation:spin 1.5s linear infinite}'
+  + '.ring.b{inset:14px;border-top-color:transparent;border-right-color:transparent;border-bottom-color:#3ec6ff;border-left-color:rgba(62,198,255,.22);animation:spin 2.3s linear infinite reverse}'
+  + '.txt{position:relative;padding-right:40px}.wm{font-size:38px;font-weight:800;letter-spacing:-1px;line-height:1;animation:up .6s .08s cubic-bezier(.2,.8,.2,1) both}.wm span{font-weight:300;color:#c5ccd8}'
+  + '.sub{margin-top:8px;color:#8a93a5;font-size:11.5px;font-weight:600;letter-spacing:3.2px;text-transform:uppercase;animation:up .6s .16s cubic-bezier(.2,.8,.2,1) both}'
+  + '.st{margin-top:34px;font-size:12.5px;color:#aeb6c4;height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:up .6s .24s both}'
+  + '.bar{margin-top:9px;height:3px;border-radius:3px;background:rgba(255,255,255,.09);overflow:hidden}.bar i{display:block;height:100%;width:6%;border-radius:3px;background:linear-gradient(90deg,#ff4b3e,#ffb11f);transition:width .35s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 12px rgba(255,120,40,.7)}'
+  + '.ft{position:fixed;left:0;right:0;bottom:14px;padding:0 24px;display:flex;justify-content:space-between;font-size:10.5px;color:#5d6676;letter-spacing:.4px}.live{display:inline-flex;align-items:center;gap:6px}.live b{width:6px;height:6px;border-radius:50%;background:#ff4b3e;animation:bl 1.1s ease-in-out infinite}'
+  + '@keyframes spin{to{transform:rotate(360deg)}}@keyframes pop{from{transform:scale(.6);opacity:0}}@keyframes up{from{transform:translateY(10px);opacity:0}}@keyframes bl{50%{opacity:.25}}'
+  + '</style></head><body><div class="bg"></div><div class="mark"><i class="ring"></i><i class="ring b"></i>' + BRAND_SVG.replace('<svg ', '<svg class="k" ') + '</div>'
+  + '<div class="txt"><div class="wm">KLM <span>Mix</span></div><div class="sub">Studio Produksi Live</div><div class="st" id="st">Memulai…</div><div class="bar"><i id="pb"></i></div></div>'
+  + '<div class="ft"><span class="live"><b></b>MENYIAPKAN STUDIO</span><span>versi ' + ver + '</span></div>'
+  + '<script>window.S=function(p,t){if(t)document.getElementById("st").textContent=t;if(p!=null)document.getElementById("pb").style.width=Math.max(6,Math.min(100,p))+"%"}</script></body></html>';
+let splashWin = null, revealed = false, splashAt = 0;
+function createSplash() {
+  splashWin = new BrowserWindow({ width: 600, height: 300, frame: false, resizable: false, maximizable: false, minimizable: false, fullscreenable: false, center: true, show: false, skipTaskbar: false,
+    backgroundColor: '#090b0f', title: 'KLM Mix', icon: path.join(__dirname, '..', 'build', 'icon.png'), webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+  splashWin.once('ready-to-show', () => { if (splashWin && !revealed) { splashWin.show(); splashAt = Date.now(); T.splash = Date.now() - T0; } });
+  splashWin.on('closed', () => { splashWin = null; });
+  splashWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(splashHtml(app.getVersion()))).catch(() => {});
+}
+function splashStep(pct, text) {
+  if (splashWin && !splashWin.isDestroyed()) splashWin.webContents.executeJavaScript('window.S&&S(' + (pct == null ? 'null' : +pct) + ',' + JSON.stringify(String(text || '')) + ')', true).catch(() => {});
+}
+/** tampilkan jendela utama (sudah siap) dengan pudar halus, tutup layar pembuka */
+function reveal(why) {
+  if (revealed || !mainWin || mainWin.isDestroyed()) return;
+  revealed = true; T.shown = Date.now() - T0; T.revealBy = why;
+  const go = () => {
+    if (!mainWin || mainWin.isDestroyed()) return;
+    try { mainWin.setOpacity(0); } catch (e) {}
+    mainWin.show(); mainWin.focus();
+    let o = 0; const iv = setInterval(() => { o = Math.min(1, o + 0.125); try { mainWin && !mainWin.isDestroyed() && mainWin.setOpacity(o); } catch (e) {} if (o >= 1) clearInterval(iv); }, 16);
+    if (splashWin && !splashWin.isDestroyed()) { splashWin.webContents.executeJavaScript('document.body.classList.add("out")', true).catch(() => {}); const sw = splashWin; setTimeout(() => { try { sw.destroy(); } catch (e) {} }, 360); }
+  };
+  splashStep(100, 'Siap');
+  setTimeout(go, Math.max(120, 650 - (Date.now() - (splashAt || Date.now())))); // layar pembuka minimal sekejap agar tidak berkedip
+}
 
 function createMain() {
   mainWin = new BrowserWindow({
     width: 1600, height: 940, minWidth: 1180, minHeight: 700,
-    backgroundColor: '#0a0c0f', title: 'KLM Mix',
+    backgroundColor: '#0a0c0f', title: 'KLM Mix', show: false,
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -58,7 +97,9 @@ function createMain() {
   T.window = Date.now() - T0;
   mainWin.webContents.on('did-finish-load', () => { if (!T.load && /^http/.test(mainWin.webContents.getURL())) T.load = Date.now() - T0; });
   Menu.setApplicationMenu(null);
-  mainWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(SPLASH)).catch(() => {});
+  mainWin.webContents.on('did-fail-load', (e, code, desc, url, isMain) => { if (isMain && code !== -3) { splashStep(null, 'Gagal memuat antarmuka (' + desc + ') — mencoba lagi…'); setTimeout(() => { if (mainWin && !mainWin.isDestroyed() && netInfo) mainWin.loadURL(`http://127.0.0.1:${netInfo.ports.http}/`).catch(() => {}); }, 800); } });
+  mainWin.webContents.on('render-process-gone', () => reveal('renderer-gone'));
+  setTimeout(() => reveal('timeout'), 25000); // pengaman: jangan pernah tertahan di layar pembuka
   mainWin.webContents.setWindowOpenHandler(({ url }) => {
     const u = new URL(url);
     if (u.pathname.startsWith('/output')) {
@@ -100,7 +141,7 @@ function createMain() {
     shell.openExternal(url);
     return { action: 'deny' };
   });
-  // Tutup seperti vMix: Simpan / Jangan simpan / Batal. "Simpan" menulis ke preset (proyek) yang sedang dimuat,
+  // Tutup: dialog Simpan / Jangan simpan / Batal. "Simpan" menulis ke preset (proyek) yang sedang dimuat,
   // atau membuat preset baru bila belum ada.
   let asking = false;
   mainWin.on('close', (e) => {
@@ -117,28 +158,21 @@ function createMain() {
 const later = (ms, v) => new Promise((r) => setTimeout(() => r(v), ms));
 async function askClose() {
   if (!mainWin || mainWin.isDestroyed()) return hardQuit('tutup');
+  if (!revealed) return hardQuit('tutup saat memuat');
   const wc = mainWin.webContents;
-  const info = await Promise.race([wc.executeJavaScript('window.KM && KM.ui && KM.ui.closeInfo ? KM.ui.closeInfo() : null', true).catch(() => null), later(2500, null)]);
-  if (!info) { // halaman tidak menjawab: konfirmasi sederhana
+  const alive = await Promise.race([wc.executeJavaScript('!!(window.KM && KM.ui && KM.ui.requestClose)', true).catch(() => false), later(2500, false)]);
+  if (!alive) { // halaman tidak menjawab: konfirmasi sederhana
     const c = dialog.showMessageBoxSync(mainWin, { type: 'question', buttons: ['Keluar', 'Batal'], defaultId: 1, cancelId: 1, noLink: true, title: 'KLM Mix', message: 'Tutup KLM Mix?', detail: 'Rekaman dan streaming yang berjalan akan dihentikan.' });
     if (c === 0) hardQuit('tutup jendela');
     return;
   }
-  const lines = [];
-  if (info.path) lines.push('Preset: ' + info.path);
-  lines.push(info.dirty ? (info.path ? 'Ada perubahan yang belum disimpan.' : info.inputs + ' input belum pernah disimpan sebagai preset.') : 'Tidak ada perubahan sejak terakhir disimpan.');
-  if (info.busy && info.busy.length) lines.push(info.busy.join(' & ') + ' sedang berjalan dan akan dihentikan.');
-  const r = await dialog.showMessageBox(mainWin, {
-    type: 'question', noLink: true, title: 'KLM Mix',
-    buttons: ['Simpan', 'Jangan simpan', 'Batal'], defaultId: info.dirty ? 0 : 1, cancelId: 2,
-    message: info.path ? 'Simpan preset "' + info.name + '" sebelum keluar?' : 'Simpan pengaturan saat ini sebagai preset baru sebelum keluar?',
-    detail: lines.join('\n')
-  });
-  if (r.response === 2) return;
-  if (r.response === 0) {
-    const ok = await wc.executeJavaScript('KM.ui.saveForClose()', true).catch((er) => { dialog.showErrorBox('KLM Mix', 'Gagal menyimpan preset: ' + er.message); return false; });
-    if (!ok) return; // batal memilih file / gagal → tetap terbuka
-  }
+  if (mainWin.isMinimized()) mainWin.restore();
+  mainWin.focus();
+  // dialog & urutan penutupan dikerjakan halaman: simpan preset → akhiri rekaman/live dengan benar → lepas perangkat
+  const r = await wc.executeJavaScript('KM.ui.requestClose()', true).catch((er) => { console.warn('requestClose', er.message); return 'error'; });
+  if (r === 'cancel') return;
+  await new Promise((res) => { let o = 1; const iv = setInterval(() => { o -= 0.14; try { mainWin && !mainWin.isDestroyed() && mainWin.setOpacity(Math.max(0, o)); } catch (e) {} if (o <= 0) { clearInterval(iv); res(); } }, 16); });
+  try { mainWin.hide(); } catch (e) {}
   hardQuit('tutup jendela');
 }
 
@@ -147,6 +181,8 @@ function toRenderer(ch, data) { if (mainWin && !mainWin.isDestroyed()) mainWin.w
 // ---------------- IPC ----------------
 const vstMgr = require('./vst').setup({ win: () => mainWin });
 require('./live').setup({ configDir: () => server.configDir() });
+ipcMain.handle('app:boot', (e, pct, text) => { splashStep(22 + (+pct || 0) * 0.78, text); return true; });
+ipcMain.handle('app:ready', () => { reveal('ready'); return true; });
 ipcMain.handle('app:info', () => ({
   version: app.getVersion(), ports: netInfo.ports, ips: server.localIPs(),
   videos: app.getPath('videos'), pictures: app.getPath('pictures'), documents: app.getPath('documents'),
@@ -297,8 +333,11 @@ app.whenReady().then(async () => {
     desktopCapturer.getSources({ types: ['screen'] }).then((s) => cb({ video: s[0], audio: 'loopback' })).catch(() => cb({}));
   });
   T.ready = Date.now() - T0;
-  createMain(); // jendela tampil dulu (latar gelap), server menyusul → terasa lebih cepat terbuka
+  createSplash(); // layar pembuka tampil seketika; jendela utama dimuat tersembunyi dan muncul saat benar-benar siap
+  createMain();
+  splashStep(10, 'Menyalakan server lokal…');
   netInfo = await server.start();
+  splashStep(22, 'Memuat antarmuka…');
   T.server = Date.now() - T0;
   utcOsr = setupUtcOsr({ port: () => netInfo.ports.http, scorePort: () => { const sc = server.score(); return sc ? sc.port() : 0; } });
   if (mainWin && !mainWin.isDestroyed()) mainWin.loadURL(`http://127.0.0.1:${netInfo.ports.http}/`).catch((e) => console.warn('loadURL', e.message));
@@ -483,7 +522,7 @@ function smokeTest() {
           } catch (e) { log('daftar proses gagal: ' + e.message); }
         } catch (e) { fail++; log('GAGAL host VST: ' + e.message); }
       } else log('host VST: dilewati (KLM_VSTTEST tidak diset)');
-      // --- dialog tutup ala vMix: info + simpan ke preset ---
+      // --- dialog tutup: info + simpan ke preset ---
       {
         const c0 = JSON.parse(await js('JSON.stringify(KM.ui.closeInfo())'));
         const pp = path.join(out, 'preset-uji.klmmix');
@@ -554,6 +593,28 @@ function smokeTest() {
         if (enc && !/^e:/.test(enc)) log('catatan: token tidak terenkripsi (safeStorage tidak tersedia)');
       } catch (e) { fail++; log('GAGAL live banyak akun: ' + e.message); }
     } catch (e) { fail++; log('ERROR ' + (e && e.stack || e)); }
+    // --- Virtual Set dari template + penyusun tata letak ---
+    try {
+      const vs = JSON.parse(await js(`(async () => { const t = KM.vset.builtin.find((x) => x.id === 'trio-utama'); const v = KM.vset.create(t, { fill: false });
+        const src = KM.state.inputs.filter((i) => i !== v && !KM.inputTypes[i.type].noVideo).slice(0, 3); v.layers.forEach((l, i) => { l.inputId = src[i % src.length].id; });
+        Object.assign(v.layers[0], { zoom: 1.6, px: 0.2, cropL: 0.1, label: 'Kamera utama' }); KM.engine.cut(v.id); await new Promise((r) => setTimeout(r, 700));
+        KM.dialogs.inputSettings(v, 'layer'); await new Promise((r) => setTimeout(r, 500));
+        const ed = !!document.querySelector('.layouted .lstage'), items = document.querySelectorAll('.layouted .litem').length;
+        const saved = KM.vset.saveFrom(v, 'Uji CI'); document.querySelector('.modal .mh .x').click();
+        return JSON.stringify({ type: v.type, kotak: v.layers.length, editor: ed, items, templat: KM.vset.custom().length, bawaan: KM.vset.builtin.length, live: KM.state.inputs.filter((i) => i.rt.live).length }); })()`));
+      log('virtual set: ' + JSON.stringify(vs));
+      fs.writeFileSync(path.join(out, 'virtualset.png'), (await mainWin.webContents.capturePage()).toPNG());
+      if (vs.kotak !== 3 || !vs.editor || vs.items !== 4 || !vs.templat) { fail++; log('GAGAL: virtual set / penyusun tata letak'); }
+    } catch (e) { fail++; log('GAGAL virtual set: ' + e.message); }
+    // --- urutan penutupan: rekaman yang sedang jalan harus selesai tertulis sebelum keluar ---
+    try {
+      await js('KM.rec.startRecording()'); await wait(3000);
+      const cr = await js(`KM.ui.requestClose({ auto: 'discard' }).then((r) => JSON.stringify({ r, log: KM.ui.shutdownLog, file: KM.rec.lastRecording || '', rec: KM.state.recording }))`);
+      const c = JSON.parse(cr), size = c.file && fs.existsSync(c.file) ? fs.statSync(c.file).size : 0;
+      log('penutupan: ' + cr + ' → file rekaman ' + size + ' byte; pembuka: ' + JSON.stringify(T));
+      if (c.r !== 'quit' || c.rec || size < 20000) { fail++; log('GAGAL: urutan penutupan / rekaman tidak tuntas'); }
+      if (T.revealBy !== 'ready') { fail++; log('GAGAL: jendela utama tidak muncul lewat sinyal siap (' + T.revealBy + ')'); }
+    } catch (e) { fail++; log('GAGAL penutupan: ' + e.message); }
     log(fail ? 'HASIL: GAGAL (' + fail + ')' : 'HASIL: OK');
     app.on('will-quit', () => log('will-quit')); app.on('quit', () => log('quit'));
     process.on('exit', (c) => log('process exit ' + c));

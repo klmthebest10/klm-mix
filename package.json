@@ -1,8 +1,8 @@
 {
   "name": "klm-mix",
   "productName": "KLM Mix",
-  "version": "1.9.0",
-  "description": "KLM Mix - Studio produksi live (klon vMix) dengan KLMCAM & UTC KLM Acara terintegrasi",
+  "version": "1.10.0",
+  "description": "KLM Mix - Studio produksi live dengan KLMCAM & UTC KLM Acara terintegrasi",
   "author": "KLM",
   "license": "UNLICENSED",
   "main": "electron/main.js",

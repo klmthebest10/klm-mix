@@ -307,14 +307,27 @@
   };
 
   T.virtualset = {
-    label: 'Virtual Set', icon: '🏛️',
+    label: 'Virtual Set (multi kamera)', icon: '🏛️',
     create(inp) {
-      inp.opts = Object.assign({ bg: 'studio-biru', camId: '', camX: 0.5, camY: 0.58, camScale: 0.8, caption: 'KLM STUDIO' }, inp.opts);
+      const o = inp.opts = Object.assign({ bgKind: 'style', bg: 'aurora', colour: '#101820', bgUrl: '', bgPath: '', bgLoop: true, bgDim: 0, fgUrl: '', caption: '' }, inp.opts);
+      if (o.camId) { // virtual set versi lama (1 kamera) → jadi kotak biasa
+        const sc = o.camScale || 0.8;
+        inp.layers.push({ on: true, inputId: o.camId, x: (o.camX || 0.5) - sc / 2, y: (o.camY || 0.58) - sc / 2, w: sc, h: sc, fit: 'fit', zoom: 1, px: 0, py: 0 });
+        delete o.camId; delete o.camX; delete o.camY; delete o.camScale;
+      }
+      inp.pos.fit = 'fill';
       inp.rt.canvas = document.createElement('canvas');
       inp.rt.canvas.width = 1920; inp.rt.canvas.height = 1080;
-      KM.virtualSets.paint(inp); inp.rt.ready = true;
+      KM.virtualSets.apply(inp); inp.rt.ready = true;
     },
-    source: (inp) => ({ src: inp.rt.canvas, w: 1920, h: 1080 })
+    destroy(inp) { KM.virtualSets.release(inp); },
+    source(inp) {
+      const rt = inp.rt, o = inp.opts;
+      if (o.bgKind === 'none') return null;
+      if (o.bgKind === 'video' && rt.bgVid && rt.bgVid.readyState >= 2 && rt.bgVid.videoWidth) { if (rt.bgVid.paused) rt.bgVid.play().catch(() => {}); return { src: rt.bgVid, w: rt.bgVid.videoWidth, h: rt.bgVid.videoHeight }; }
+      if (o.bgKind === 'image' && rt.bgImg && rt.bgImg.complete && rt.bgImg.naturalWidth) return { src: rt.bgImg, w: rt.bgImg.naturalWidth, h: rt.bgImg.naturalHeight };
+      return { src: rt.canvas, w: 1920, h: 1080 };
+    }
   };
 
   T.urlvideo = {
@@ -411,39 +424,72 @@
     hasAudio: () => true
   };
 
-  // ---------- Virtual set latar (digambar prosedural, offline) ----------
+  // ---------- Virtual set: latar (gaya prosedural offline / warna / gambar / video loop) ----------
+  const VS_PAL = {
+    aurora: ['#070b16', '#14224a', '#ff7a1a', '#3ec6ff'], malam: ['#05070c', '#131a26', '#5b8cff', '#9aa7bd'], emas: ['#120c04', '#3a2608', '#f5c451', '#fff3d1'],
+    zamrud: ['#03130e', '#0c3b2b', '#34d399', '#d4af37'], magenta: ['#12041a', '#3b0f55', '#f472b6', '#7dd3fc'], merah: ['#140506', '#4a0d12', '#ff4b3e', '#ffb11f'],
+    'studio-biru': ['#061a3a', '#0b3d91', '#38bdf8', '#e2e8f0'], 'studio-hijau': ['#04241a', '#0f5132', '#d4af37', '#ecfdf5'], panggung: ['#14041f', '#4c1d95', '#f472b6', '#fdf4ff'], talkshow: ['#1f1208', '#7c2d12', '#fbbf24', '#fff7ed']
+  };
   KM.virtualSets = {
-    presets: { 'studio-biru': 'Studio Berita Biru', 'studio-hijau': 'Studio Islami Hijau', 'panggung': 'Panggung Acara', 'talkshow': 'Talkshow Hangat' },
-    paint(inp) {
-      const c = inp.rt.canvas.getContext('2d'), W = 1920, H = 1080, o = inp.opts;
-      const pal = {
-        'studio-biru': ['#061a3a', '#0b3d91', '#38bdf8', '#e2e8f0'],
-        'studio-hijau': ['#04241a', '#0f5132', '#d4af37', '#ecfdf5'],
-        'panggung': ['#14041f', '#4c1d95', '#f472b6', '#fdf4ff'],
-        'talkshow': ['#1f1208', '#7c2d12', '#fbbf24', '#fff7ed']
-      }[o.bg] || ['#061a3a', '#0b3d91', '#38bdf8', '#fff'];
-      let g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, pal[1]); g.addColorStop(1, pal[0]);
-      c.fillStyle = g; c.fillRect(0, 0, W, H);
-      // panel-panel dinding
+    presets: { aurora: 'Aurora (biru–jingga)', malam: 'Malam (gelap netral)', emas: 'Emas elegan', zamrud: 'Zamrud islami', magenta: 'Magenta panggung', merah: 'Merah berita',
+      'studio-biru': 'Studio berita biru (meja)', 'studio-hijau': 'Studio islami hijau (meja)', panggung: 'Panggung acara (meja)', talkshow: 'Talkshow hangat (meja)' },
+    /** gambar latar gaya ke canvas mana pun (dipakai juga untuk miniatur template) */
+    paintTo(cv, o) {
+      const c = cv.getContext('2d'), W = cv.width, H = cv.height, k = W / 1920;
+      c.save(); c.setTransform(k, 0, 0, H / 1080, 0, 0);
+      if (o.bgKind === 'colour') { c.fillStyle = o.colour || '#101820'; c.fillRect(0, 0, 1920, 1080); c.restore(); return; }
+      const pal = VS_PAL[o.bg] || VS_PAL.aurora, studio = /^studio|panggung|talkshow/.test(o.bg || '');
+      let g = c.createLinearGradient(0, 0, 0, 1080); g.addColorStop(0, pal[1]); g.addColorStop(1, pal[0]);
+      c.fillStyle = g; c.fillRect(0, 0, 1920, 1080);
+      if (!studio) {
+        // cahaya lembut + garis diagonal halus + lantai kilap: netral di belakang kotak kamera
+        const blob = (x, y, r, col, a) => { const q = c.createRadialGradient(x, y, 0, x, y, r); q.addColorStop(0, col); q.addColorStop(1, 'rgba(0,0,0,0)'); c.globalAlpha = a; c.fillStyle = q; c.fillRect(x - r, y - r, r * 2, r * 2); c.globalAlpha = 1; };
+        blob(260, 120, 900, pal[2], 0.30); blob(1700, 980, 1000, pal[3], 0.22); blob(1500, 60, 520, pal[3], 0.14);
+        c.globalAlpha = 0.06; c.strokeStyle = '#fff'; c.lineWidth = 2;
+        for (let i = -12; i < 34; i++) { c.beginPath(); c.moveTo(i * 90, 0); c.lineTo(i * 90 + 620, 1080); c.stroke(); }
+        c.globalAlpha = 1;
+        g = c.createLinearGradient(0, 860, 0, 1080); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)'); c.fillStyle = g; c.fillRect(0, 860, 1920, 220);
+        g = c.createLinearGradient(0, 0, 1920, 0); g.addColorStop(0, pal[2]); g.addColorStop(1, pal[3]); c.fillStyle = g; c.globalAlpha = 0.9; c.fillRect(0, 1066, 1920, 14); c.globalAlpha = 1;
+        if (o.caption) { c.fillStyle = 'rgba(255,255,255,.92)'; c.font = '800 44px "Plus Jakarta Sans", "Segoe UI", Arial'; c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.fillText(o.caption, 70, 1036); }
+        c.restore(); return;
+      }
       c.globalAlpha = 0.18; c.fillStyle = pal[2];
       for (let i = 0; i < 8; i++) c.fillRect(80 + i * 230, 120, 180, 520);
       c.globalAlpha = 1;
-      // layar besar
       c.fillStyle = '#000'; c.fillRect(1240, 160, 560, 320);
       g = c.createLinearGradient(1240, 160, 1800, 480); g.addColorStop(0, pal[2]); g.addColorStop(1, pal[1]);
       c.fillStyle = g; c.globalAlpha = 0.85; c.fillRect(1250, 170, 540, 300); c.globalAlpha = 1;
       c.fillStyle = pal[3]; c.font = 'bold 54px Segoe UI, Arial'; c.textAlign = 'center';
       c.fillText(o.caption || 'KLM STUDIO', 1520, 340);
-      // lantai
-      g = c.createLinearGradient(0, 760, 0, H); g.addColorStop(0, pal[1]); g.addColorStop(1, '#000');
-      c.fillStyle = g; c.fillRect(0, 760, W, H - 760);
+      g = c.createLinearGradient(0, 760, 0, 1080); g.addColorStop(0, pal[1]); g.addColorStop(1, '#000');
+      c.fillStyle = g; c.fillRect(0, 760, 1920, 320);
       c.strokeStyle = pal[2]; c.globalAlpha = 0.35; c.lineWidth = 3;
-      for (let i = -10; i < 20; i++) { c.beginPath(); c.moveTo(960 + i * 40, 760); c.lineTo(960 + i * 200, H); c.stroke(); }
+      for (let i = -10; i < 20; i++) { c.beginPath(); c.moveTo(960 + i * 40, 760); c.lineTo(960 + i * 200, 1080); c.stroke(); }
       c.globalAlpha = 1;
-      // meja
       c.fillStyle = pal[0]; c.beginPath(); c.moveTo(420, 820); c.lineTo(1500, 820); c.lineTo(1400, 1080); c.lineTo(520, 1080); c.closePath(); c.fill();
       c.fillStyle = pal[2]; c.fillRect(420, 812, 1080, 14);
-      inp.rt.bgReady = true;
+      c.restore();
+    },
+    paint(inp) { this.paintTo(inp.rt.canvas, inp.opts); },
+    release(inp) {
+      const rt = inp.rt;
+      if (rt.bgVid) { try { rt.bgVid.pause(); rt.bgVid.removeAttribute('src'); rt.bgVid.load(); rt.bgVid.remove(); } catch (e) {} rt.bgVid = null; }
+      rt.bgImg = null; rt.fg = null;
+    },
+    /** pasang latar sesuai opsi (dipanggil saat dibuat & tiap kali latar diganti) */
+    apply(inp) {
+      const rt = inp.rt, o = inp.opts;
+      this.release(inp); rt.err = '';
+      this.paint(inp);
+      if (o.bgKind === 'image' && o.bgUrl) { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => KM.changed('input'); i.onerror = () => { rt.err = 'Gambar latar gagal dimuat'; KM.changed('input'); }; i.src = o.bgUrl; rt.bgImg = i; }
+      if (o.bgKind === 'video' && o.bgUrl) {
+        const v = videoEl(); v.muted = true; v.loop = o.bgLoop !== false; v.src = o.bgUrl;
+        v.addEventListener('loadeddata', () => { v.play().catch(() => {}); KM.changed('input'); });
+        v.addEventListener('error', () => { rt.err = 'Video latar gagal dimuat'; KM.changed('input'); });
+        rt.bgVid = v;
+      }
+      if (o.fgUrl) { const f = new Image(); f.crossOrigin = 'anonymous'; f.onload = () => KM.changed('input'); f.src = o.fgUrl; rt.fg = f; }
+      KM.changed('input');
     }
   };
 
@@ -506,6 +552,7 @@
       const o = {};
       for (const k in inp) if (k !== 'rt') o[k] = KM.deepClone(inp[k]);
       if (o.opts && o.opts.url && o.opts.url.startsWith('blob:')) o.opts.url = '';
+      if (o.opts) for (const k of ['bgUrl', 'fgUrl']) if (typeof o.opts[k] === 'string' && o.opts[k].startsWith('blob:')) o.opts[k] = '';
       if (o.opts && o.opts.items) o.opts.items = o.opts.items.filter((i) => !i.url.startsWith('blob:'));
       return o;
     },

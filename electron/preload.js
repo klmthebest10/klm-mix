@@ -6,7 +6,7 @@ const INVOKE = ['app:info', 'desktop:sources', 'dialog:open', 'dialog:save', 'di
   'app:relaunch', 'browser:open', 'browser:navigate', 'browser:reload', 'browser:show', 'browser:close',
   'fx:list', 'fx:read', 'fx:save', 'fx:open-folder', 'fx:scan-pc',
   'vst:available', 'vst:create', 'vst:editor', 'vst:bypass', 'vst:get-state', 'vst:set-state', 'vst:params', 'vst:set-param', 'vst:destroy', 'vst:stats',
-  'live:auth-list', 'live:yt-connect', 'live:fb-connect', 'live:forget', 'live:prepare', 'live:end'];
+  'app:boot', 'app:ready', 'live:auth-list', 'live:yt-connect', 'live:fb-connect', 'live:forget', 'live:prepare', 'live:end'];
 const SEND = ['file:write-chunk', 'utc:start', 'utc:stop', 'utc:ack', 'utc:reload', 'utc:full', 'utc:pause', 'utc:resume'];
 const ON = ['utc:frame', 'utc:tk', 'vst:event'];
 

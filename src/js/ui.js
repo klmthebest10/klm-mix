@@ -578,7 +578,7 @@
     KM.toast('Preset dimuat: ' + (p.inputs || []).length + ' input', 'ok');
     markSaved(true);
   };
-  // ---- penanda "ada perubahan belum disimpan" (untuk dialog tutup ala vMix) ----
+  // ---- penanda "ada perubahan belum disimpan" (untuk dialog tutup) ----
   const sig = () => { try { const d = UI.projectData(); delete d.savedAt; return JSON.stringify(d); } catch (e) { return ''; } };
   let savedSig = null, sigT = 0;
   const setTitle = () => { const n = UI.closeInfo().name; document.title = (n ? n + ' — ' : '') + 'KLM Mix'; };
@@ -591,6 +591,70 @@
   };
   /** dipanggil proses utama saat menutup aplikasi → true bila tersimpan (atau batal memilih file → false) */
   UI.saveForClose = async function () { const ok = await UI.saveProject(false); return ok === true; };
+  // ---------------- tutup aplikasi: dialog bermerek + urutan penutupan yang ditunggu sampai tuntas ----------------
+  const LOGO = () => KI.el('logo');
+  const within = (p, ms) => Promise.race([Promise.resolve(p).catch(() => 'err'), new Promise((r) => setTimeout(() => r('timeout'), ms))]);
+  function closeDialog(info) {
+    return new Promise((res) => {
+      let done = false; const fin = (v) => { if (done) return; done = true; res(v); m.close(); };
+      const body = h('div.closedlg',
+        h('div.chead', LOGO(), h('div', h('b', 'Tutup KLM Mix?'), h('span', info.path ? 'Preset: ' + info.name : info.inputs ? 'Sesi ini belum disimpan sebagai preset' : 'Tidak ada input yang terbuka'))),
+        h('div.cinfo',
+          h('div' + (info.dirty ? '.dirty' : '.clean'), h('i.dot'), info.dirty ? (info.path ? 'Ada perubahan yang belum disimpan ke preset.' : info.inputs + ' input belum pernah disimpan.') : 'Semua perubahan sudah tersimpan.'),
+          ...info.busy.map((b) => h('div.busy', h('i.dot'), b + ' sedang berjalan — akan diakhiri dengan benar sebelum keluar.')),
+          info.path ? h('div', h('i.dot'), h('span.ell', { title: info.path }, info.path)) : null),
+        h('div.cbtn',
+          h('button.btn.pri' + (info.dirty ? '.wide' : ''), { onclick: () => fin('save') }, KI.el('save'), info.path ? 'Simpan preset & keluar' : 'Simpan sebagai preset baru & keluar'),
+          h('button.btn' + (info.dirty ? '' : '.pri'), { onclick: () => fin('discard') }, KI.el('power'), info.dirty ? 'Keluar tanpa menyimpan' : 'Keluar'),
+          h('button.btn', { onclick: () => fin('cancel') }, 'Batal')));
+      const m = UI.modal('', body, [], 'sm');
+      m.onclose = () => fin('cancel');
+      setTimeout(() => { const b = body.querySelector(info.dirty ? '.cbtn .btn.pri' : '.cbtn .btn:nth-child(2)'); b && b.focus(); }, 50);
+    });
+  }
+  /** urutan penutupan: tiap langkah ditunggu (dengan batas waktu) dan ditampilkan */
+  UI.shutdown = async function () {
+    const R = KM.rec, steps = [];
+    if (S.recording) steps.push(['Menyelesaikan file rekaman', async () => { const d = R.recDone; R.stopRecording(); await d; }, 9000]);
+    if (S.streaming) steps.push(['Mengakhiri live streaming', async () => { await R.stopStreaming(true); await R.liveEnd; }, 9000]);
+    if (S.srt) steps.push(['Menutup output SRT', async () => { R.stopSrt(true); await new Promise((r) => setTimeout(r, 400)); }, 3000]);
+    if (KM.vst && KM.vst.insts && KM.vst.insts.size) steps.push(['Menyimpan pengaturan plugin audio', () => KM.vst.flush(), 4000]);
+    steps.push(['Menyimpan sesi', async () => { UI.autosave(); KM.saveSettings(); await new Promise((r) => setTimeout(r, 120)); }, 3000]);
+    steps.push(['Melepas kamera & perangkat', async () => {
+      S.inputs.forEach((i) => { try { i.rt && i.rt.stream && i.rt.stream.getTracks().forEach((t) => t.stop()); } catch (e) {} });
+      try { KM.audio.ctx && KM.audio.ctx.state === 'running' && (await KM.audio.ctx.suspend()); } catch (e) {}
+      await new Promise((r) => setTimeout(r, 150));
+    }, 3000]);
+    const rows = steps.map(([t]) => h('div', h('i'), t));
+    const st = h('div.st', 'Menutup studio…');
+    const ov = h('div#closing.stage', h('div.stg-mark', h('i.ring'), h('i.ring.b'), LOGO()), h('div.wm', 'KLM ', h('span', 'Mix')), h('div.sub', 'Sampai jumpa di siaran berikutnya'), st, h('div.steps', rows));
+    document.body.appendChild(ov); requestAnimationFrame(() => ov.classList.add('in'));
+    await new Promise((r) => setTimeout(r, 260));
+    const log = [];
+    for (let i = 0; i < steps.length; i++) {
+      rows[i].className = 'run'; st.textContent = steps[i][0] + '…';
+      const r = await within(Promise.resolve().then(steps[i][1]), steps[i][2]);
+      rows[i].className = r === 'timeout' || r === 'err' ? 'warn' : 'ok'; log.push(steps[i][0] + (r === 'timeout' ? ' (lewat batas waktu)' : r === 'err' ? ' (gagal)' : ''));
+      await new Promise((r2) => setTimeout(r2, 110));
+    }
+    st.textContent = 'Selesai';
+    await new Promise((r) => setTimeout(r, 320));
+    UI.shutdownLog = log;
+    return log;
+  };
+  let closing = false;
+  /** dipanggil proses utama saat jendela ditutup → 'quit' | 'cancel'. opt.auto: 'discard' | 'save' (tanpa dialog, untuk uji) */
+  UI.requestClose = async function (opt) {
+    if (closing) return 'cancel';
+    closing = true;
+    try {
+      const act = (opt && opt.auto) || await closeDialog(UI.closeInfo());
+      if (act === 'cancel') return 'cancel';
+      if (act === 'save') { const ok = await UI.saveProject(false).catch((e) => { KM.toast('Gagal menyimpan preset: ' + e.message, 'err', 7000); return false; }); if (ok !== true) return 'cancel'; }
+      await UI.shutdown();
+      return 'quit';
+    } finally { closing = false; }
+  };
   UI.saveProject = async function (asNew) {
     try { if (KM.vst && KM.vst.flush) await KM.vst.flush(); } catch (e) {}
     const json = JSON.stringify(UI.projectData(), null, 1);

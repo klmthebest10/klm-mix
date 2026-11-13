@@ -1,6 +1,6 @@
 # KLM Mix
 
-Studio produksi live all‑in‑one ala **vMix Pro** — switcher, transisi, overlay, title **UTC KLM Acara**, kamera HP **KLMCAM**, mixer audio, rekam, streaming multi‑platform, instant replay, playlist, multiview, dan API kompatibel vMix. Berjalan **100% offline** di jaringan lokal.
+Studio produksi live all‑in‑one — switcher, transisi, overlay, title **UTC KLM Acara**, kamera HP **KLMCAM**, mixer audio, rekam, streaming multi‑platform, instant replay, playlist, multiview, dan API kompatibel vMix. Berjalan **100% offline** di jaringan lokal.
 
 - **PC Windows (.exe)** — aplikasi utama (mixer). Tidak perlu Node.js.
 - **HP Android (.apk)** — KLMCAM (kamera wireless), Remote Switcher, Title & Audio.
@@ -41,6 +41,7 @@ klm-mix/
 │       ├── effects.js        # GPU: koreksi warna, chroma key, luma key
 │       ├── inputs.js         # semua jenis input
 │       ├── audiofx.js        # rak efek & plugin audio (18 efek, preset, plugin eksternal)
+│       ├── layout.js         # penyusun tata letak visual (layer/multiview) & Virtual Set multi kamera + template
 │       ├── live.js           # tab Live: akun YouTube/Facebook/TikTok/Instagram, live bersamaan
 │       ├── vst.js            # plugin VST3/VST2 asli di rak efek (AudioWorklet berlatensi tetap, editor, state)
 │       ├── utc.js            # UTC KLM Acara menyatu: lapisan UTC ON AIR (WebGL), input UTC, audio opening/closing
@@ -81,10 +82,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
    - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.9.0.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.9.0.exe` (tanpa instal)
+     - `KLM-Mix-Setup-1.10.0.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Mix-Portable-1.10.0.exe` (tanpa instal)
    - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
-3. Untuk rilis resmi: buat tag `v1.9.0` → file otomatis muncul di halaman **Releases**.
+3. Untuk rilis resmi: buat tag `v1.10.0` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
 
@@ -139,6 +140,11 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.10
+- **Buka & tutup yang rapi**: layar pembuka tersendiri (tanda K dengan dua cincin sinyal) menampilkan tahap penyiapan yang sebenarnya — audio, video, grafis UTC, ruang kendali, jaringan — lalu jendela utama muncul sekaligus dalam keadaan siap dengan pudar halus. Saat menutup: dialog bermerek (Simpan preset & keluar / Keluar tanpa menyimpan / Batal), kemudian urutan penutupan yang **ditunggu sampai tuntas** — file rekaman diselesaikan, live diakhiri, SRT ditutup, pengaturan plugin & sesi disimpan, kamera dilepas — baru aplikasi keluar
+- **Penyusun tata letak visual** (⚙ input → tab *Tata letak*): seret kotak, ubah ukuran dari sudut/sisi (Shift = jaga rasio), roda mouse = besar/kecil, magnet ke tepi/tengah/kotak lain, panah = geser halus. Mode **Isi** (klik ganda / Tab): geser, zoom in/out, pangkas, putar, cermin gambar di dalam kotak tanpa mengubah input aslinya. **Input dasar** (input yang sedang diatur) juga bisa digeser/zoom/pangkas langsung. Gaya per kotak: bingkai, sudut bulat, bayangan, transparansi, warna dasar, label nama. Hingga 32 kotak, susun rapi otomatis, gandakan, atur urutan
+- **Virtual Set multi kamera** (Tambah Input → Virtual Set): 21 template 1–16 kamera (sejajar, panel, utama + samping, grid, materi + presenter, HP berdiri), latar **gaya bawaan / warna / gambar / video loop** + bingkai PNG di depan, kotak kamera bisa ditambah sebanyak yang diinginkan dan diisi otomatis dengan kamera yang ada. Susunan buatan sendiri bisa **disimpan sebagai template**, diekspor & diimpor
+
 ### Baru di v1.9
 - **Panel samping UTC Acara: klik = tampil, klik lagi = sembunyi** — berlaku untuk item Lower Third, Title, Lokasi, Sosmed (item yang sedang tampil diberi tanda merah **TAMPIL**; klik item lain = langsung ganti) serta tombol Opening/Closing
 - **Tab Live — live ke banyak akun sekaligus**: simpan akun **YouTube, Facebook, TikTok, Instagram** dan RTMP/SRT lain (Twitch, Kick, server sendiri), **lebih dari satu akun per platform**; centang akun mana yang ikut live, lalu satu tombol *Mulai live* (satu encode dikirim ke semua tujuan; bila satu tujuan gagal, yang lain tetap jalan, status per akun LIVE/gagal)
@@ -153,7 +159,7 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
   - Setiap plugin berjalan di **proses terpisah** (`klm-vsthost.exe`): bila plugin crash, KLM Mix tetap jalan dan suara asli diteruskan; tombol *Muat ulang* menjalankannya kembali dengan pengaturan terakhir
   - Latensi ±21 ms (blok 256 × 4 @48 kHz), otomatis bertambah bila PC sedang sibuk agar suara tidak putus-putus; suara kering ikut ditunda sehingga slider **Mix** bersih (tanpa efek "comb")
   - Plugin 32-bit dan CLAP ditandai (belum didukung) — untuk itu tetap tersedia tombol padanan efek bawaan
-- **Tutup aplikasi seperti vMix**: muncul dialog **Simpan / Jangan simpan / Batal**. *Simpan* menulis ke **preset yang sedang dimuat**, atau membuat **preset baru** (pilih nama & lokasi) bila belum ada; batal memilih file = aplikasi tetap terbuka. Dialog juga memberi tahu bila ada perubahan yang belum disimpan dan rekaman/streaming yang sedang berjalan. Nama preset tampil di judul jendela; menu *Proyek* kini *Preset*
+- **Dialog simpan saat menutup aplikasi**: muncul dialog **Simpan / Jangan simpan / Batal**. *Simpan* menulis ke **preset yang sedang dimuat**, atau membuat **preset baru** (pilih nama & lokasi) bila belum ada; batal memilih file = aplikasi tetap terbuka. Dialog juga memberi tahu bila ada perubahan yang belum disimpan dan rekaman/streaming yang sedang berjalan. Nama preset tampil di judul jendela; menu *Proyek* kini *Preset*
 - **Buka aplikasi lebih cepat**: jendela & layar pembuka tampil seketika (tidak menunggu server), CSS di-inline dan ±25 skrip digabung menjadi satu bundle yang dijalankan setelah layar pembuka tergambar (±27 → 3 permintaan; pada PC lambat siap ±20% lebih cepat)
 
 ### Baru di v1.7
@@ -263,4 +269,4 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.9.0
+KLM Mix 1.10.0

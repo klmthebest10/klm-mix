@@ -51,7 +51,8 @@
     const w = await makeWriter(name, 'rec');
     const mr = new MediaRecorder(mixStream(), { mimeType: mime, videoBitsPerSecond: Math.round(KM.settings.recVideoKbps * 1000 * R.fpsScale()), audioBitsPerSecond: KM.settings.recAudioKbps * 1000 });
     mr.ondataavailable = (e) => { if (e.data && e.data.size) w.write(e.data); };
-    mr.onstop = async () => { const p = await w.close(); KM.toast('Rekaman tersimpan: ' + p, 'ok', 5000); R.lastRecording = p; KM.changed('rec'); };
+    let recRes; R.recDone = new Promise((r) => { recRes = r; }); // selesai = file sudah ditutup di disk
+    mr.onstop = async () => { let p = ''; try { p = await w.close(); KM.toast('Rekaman tersimpan: ' + p, 'ok', 5000); R.lastRecording = p; KM.changed('rec'); } finally { recRes(p); } };
     mr.onerror = (e) => KM.toast('Error rekam: ' + (e.error && e.error.message), 'err');
     mr.start(1000);
     R.recorder = mr; R.recT0 = Date.now(); S.recording = true;
@@ -156,7 +157,7 @@
     try { R.streamer.stop(); } catch (e) {}
     setTimeout(() => { try { R.streamWs && R.streamWs.close(); } catch (e) {} R.streamWs = null; }, 400);
     R.streamer = null; R.stats = null;
-    if (KM.live) KM.live.finish(); // akhiri siaran YouTube/Facebook yang dibuat lewat API
+    if (KM.live) R.liveEnd = KM.live.finish(); // akhiri siaran YouTube/Facebook yang dibuat lewat API
     if (silent !== true) KM.toast('Streaming dihentikan');
     KM.changed('stream');
     return true;

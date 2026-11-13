@@ -42,7 +42,7 @@
   D.qr = (text) => h('div.qr', { html: window.KMQR ? KMQR.svg(text, { border: 2 }) : '' });
 
   // =================== TAMBAH INPUT ===================
-  const ORDER = ['video', 'image', 'list', 'camera', 'klmcam', 'utc', 'score', 'stream', 'call', 'screen', 'title', 'audio', 'audiofile', 'colour', 'bars', 'browser', 'virtualset', 'replay', 'urlvideo'];
+  const ORDER = ['video', 'image', 'list', 'camera', 'klmcam', 'virtualset', 'utc', 'score', 'stream', 'call', 'screen', 'title', 'audio', 'audiofile', 'colour', 'bars', 'browser', 'replay', 'urlvideo'];
   D.addInput = function (preset) {
     const form = h('div', { style: { marginTop: '12px' } });
     let current = null, creator = null;
@@ -255,15 +255,7 @@
         h('p.muted', KM.isElectron ? 'Cocok untuk overlay HTML lama (UTC KLM Scoreboard/Acara versi web, widget chat, dll).' : '⚠ Input browser hanya tersedia di versi PC (.exe).'));
       return () => { KM.inputs.create('browser', { title: '🌐 ' + o.url.replace(/^https?:\/\//, '').slice(0, 30), opts: o }); };
     },
-    virtualset(form) {
-      const cams = S.inputs.filter((i) => ['camera', 'klmcam', 'video'].includes(i.type));
-      const o = { bg: 'studio-biru', camId: cams[0] ? cams[0].id : '', caption: 'KLM STUDIO' };
-      form.append(row('Latar', sel(Object.entries(KM.virtualSets.presets), o.bg, (v) => { o.bg = v; })),
-        row('Kamera (green screen)', sel([['', '— pilih —']].concat(cams.map((c) => [c.id, KM.inputNum(c) + '. ' + c.title])), o.camId, (v) => { o.camId = v; })),
-        row('Teks layar', h('input.grow', { value: o.caption, oninput: (e) => { o.caption = e.target.value; } })),
-        h('p.muted', 'Aktifkan Chroma Key pada input kamera (⚙ → Chroma Key) agar latar hijau terhapus.'));
-      return () => { KM.inputs.create('virtualset', { title: 'Virtual Set', opts: o }); };
-    },
+    virtualset(form) { return KM.vset.gallery(form); },
     replay(form) {
       form.append(h('p', 'Input ini menampilkan event Instant Replay. Aktifkan buffer di tab ⏪ Replay, lalu tandai event (tombol M).'));
       return () => { KM.inputs.create('replay', { title: 'Instant Replay' }); };
@@ -281,10 +273,10 @@
 
   // =================== PENGATURAN INPUT ===================
   D.inputSettings = function (inp, tab) {
-    const tabs = [['umum', 'Umum'], ['posisi', 'Posisi & Crop'], ['warna', 'Koreksi Warna'], ['key', 'Chroma Key'], ['layer', 'Layer / MultiView']];
+    const tabs = [['umum', 'Umum'], ['posisi', 'Posisi & Crop'], ['warna', 'Koreksi Warna'], ['key', 'Chroma Key'], ['layer', 'Tata letak (Layer / MultiView)']];
     if (KM.inputs.hasAudio(inp)) tabs.push(['audio', 'Audio']);
     tabs.push(['trigger', 'Trigger']);
-    const body = h('div');
+    const body = h('div.inpset');
     const tabBar = h('div.tabs', tabs.map(([k, l]) => h('button', { 'data-k': k, onclick: () => show(k) }, l)));
     const pv = h('canvas', { width: 640, height: 360, title: 'Klik untuk mengambil warna chroma key (di tab Chroma Key)' });
     const pvx = pv.getContext('2d');
@@ -294,6 +286,7 @@
     function show(k) {
       cur = k;
       KM.$$('button', tabBar).forEach((b) => b.classList.toggle('on', b.dataset.k === k));
+      body.classList.toggle('layermode', k === 'layer'); // editor tata letak memakai lebar penuh
       content.replaceChildren(TABS[k](inp));
     }
     let raf;
@@ -396,31 +389,7 @@
             ...slider('Ambang bawah', 0, 1, 0.005, () => k.lumaLo, (v) => { k.lumaLo = v; ch(); }, (v) => v.toFixed(2)),
             ...slider('Ambang atas', 0, 1, 0.005, () => k.lumaHi, (v) => { k.lumaHi = v; ch(); }, (v) => v.toFixed(2)))));
     },
-    layer(inp) {
-      const wrap = h('div');
-      const others = () => S.inputs.filter((i) => i !== inp);
-      const PRE = { full: [0, 0, 1, 1], tl: [0.03, 0.04, 0.3, 0.3], tr: [0.67, 0.04, 0.3, 0.3], bl: [0.03, 0.66, 0.3, 0.3], br: [0.67, 0.66, 0.3, 0.3], left: [0, 0, 0.5, 1], right: [0.5, 0, 0.5, 1], kiri2: [0.02, 0.2, 0.47, 0.47], kanan2: [0.51, 0.2, 0.47, 0.47] };
-      const build = () => {
-        const rows = inp.layers.map((l, idx) => {
-          const n = (k) => h('input', { type: 'number', step: 0.01, value: l[k], title: k, onchange: (e) => { l[k] = +e.target.value; KM.changed('input'); } });
-          return h('div.layer-row',
-            h('input', { type: 'checkbox', checked: l.on, title: 'Aktif', onchange: (e) => { l.on = e.target.checked; KM.changed('input'); } }),
-            sel([['', '— input —']].concat(others().map((o) => [o.id, KM.inputNum(o) + '. ' + o.title])), l.inputId, (v) => { l.inputId = v; KM.changed('input'); }),
-            n('x'), n('y'), n('w'), n('h'),
-            h('div.row', sel([['', 'Preset…'], ['full', 'Penuh'], ['tl', 'PiP ↖'], ['tr', 'PiP ↗'], ['bl', 'PiP ↙'], ['br', 'PiP ↘'], ['left', 'Kiri ½'], ['right', 'Kanan ½'], ['kiri2', 'Berdampingan kiri'], ['kanan2', 'Berdampingan kanan']], '', (v) => { if (PRE[v]) { [l.x, l.y, l.w, l.h] = PRE[v]; KM.changed('input'); build(); } }),
-              h('input', { type: 'color', value: l.bc || '#ffffff', title: 'Warna bingkai', oninput: (e) => { l.bc = e.target.value; KM.changed('input'); } }),
-              h('input', { type: 'number', value: l.bw || 0, min: 0, max: 30, style: { width: '46px' }, title: 'Tebal bingkai (px)', onchange: (e) => { l.bw = +e.target.value; KM.changed('input'); } }),
-              h('button.btn.sm', { onclick: () => { inp.layers.splice(idx, 1); KM.changed('input'); build(); } }, '✕')));
-        });
-        wrap.replaceChildren(h('div.sec', h('h4', 'Layer (MultiView) — hingga 10 layer di atas input ini'),
-          h('div.layer-row.muted', h('span'), h('span', 'Input'), h('span', 'X'), h('span', 'Y'), h('span', 'Lebar'), h('span', 'Tinggi'), h('span', 'Preset / bingkai')),
-          ...rows,
-          h('div.row', { style: { marginTop: '8px' } }, h('button.btn.pri', { disabled: inp.layers.length >= 10, onclick: () => { const o = others()[0]; inp.layers.push({ on: true, inputId: o ? o.id : '', x: 0.67, y: 0.04, w: 0.3, h: 0.3, bw: 0, bc: '#ffffff' }); KM.changed('input'); build(); } }, '＋ Tambah layer'),
-            h('span.muted', 'Nilai 0–1 relatif terhadap layar. Layer ikut tampil di Program & bisa dinyalakan via API MultiViewOverlay.'))));
-      };
-      build();
-      return wrap;
-    },
+    layer(inp) { return KM.layoutEd.build(inp); },
     trigger(inp) {
       const list = inp.triggers || (inp.triggers = []);
       const wrap = h('div');
@@ -534,15 +503,9 @@
           h('button.btn', { onclick: () => { inp.rt.shown = !inp.rt.shown; KM.isElectron && window.klm.invoke('browser:show', inp.rt.winId, inp.rt.shown); } }, '🖱 Tampilkan/sembunyikan jendela (untuk klik)')));
     },
     virtualset(inp) {
-      const o = inp.opts, ch = () => { KM.virtualSets.paint(inp); KM.changed('input'); };
-      const cams = S.inputs.filter((i) => i !== inp && !KM.inputTypes[i.type].noVideo);
       return h('div.sec', h('h4', 'Virtual Set'),
-        row('Latar', sel(Object.entries(KM.virtualSets.presets), o.bg, (v) => { o.bg = v; ch(); })),
-        row('Kamera', sel([['', '— pilih —']].concat(cams.map((c) => [c.id, KM.inputNum(c) + '. ' + c.title])), o.camId, (v) => { o.camId = v; ch(); })),
-        row('Teks layar', h('input.grow', { value: o.caption, oninput: (e) => { o.caption = e.target.value; ch(); } })),
-        h('div.kv', ...slider('Posisi X', 0, 1, 0.01, () => o.camX, (v) => { o.camX = v; }, (v) => v.toFixed(2)),
-          ...slider('Posisi Y', 0, 1, 0.01, () => o.camY, (v) => { o.camY = v; }, (v) => v.toFixed(2)),
-          ...slider('Skala', 0.2, 1.5, 0.01, () => o.camScale, (v) => { o.camScale = v; }, pct)));
+        h('p.muted', 'Susun kotak kamera, zoom/geser/pangkas isi, dan simpan template di tab "Tata letak".'),
+        KM.vset.bgControls(inp.opts, () => KM.virtualSets.apply(inp)));
     },
     replay() { return h('div.sec', h('p', 'Kontrol replay ada di tab ⏪ Replay pada panel kanan.')); }
   };
@@ -640,7 +603,7 @@
           row('Resolusi', sel([['1280x720', '1280×720 HD'], ['1920x1080', '1920×1080 Full HD'], ['2560x1440', '2560×1440 QHD'], ['3840x2160', '3840×2160 4K (berat)'], ['1080x1920', '1080×1920 Vertikal (TikTok/Reels)'], ['720x1280', '720×1280 Vertikal ringan'], ['1080x1080', '1080×1080 Persegi']], res, (v) => { const [w, hh] = v.split('x'); st.width = +w; st.height = +hh; save(); KM.engine.resize(); KM.toast('Output: ' + v); })),
           row('Frame rate', sel([[24, '24 fps (film)'], [25, '25 fps (PAL)'], [30, '30 fps'], [50, '50 fps (PAL halus)'], [60, '60 fps (halus)'], [90, '90 fps (monitor 90 Hz+)'], [120, '120 fps (monitor 120 Hz+)']], st.fps, (v) => { st.fps = +v; save(); KM.engine.resize(); if (st.fps > 60) KM.toast('Di atas 60 fps hanya tercapai bila monitor ' + st.fps + ' Hz atau lebih.', 'info', 5000); })),
           row('Skala preview', sel([[0.33, '33% (ringan)'], [0.5, '50%'], [0.75, '75%'], [1, '100%']], st.previewScale, (v) => { st.previewScale = +v; save(); KM.engine.resize(); })),
-          chk('Tukar Preview ↔ Program setelah transisi (seperti vMix)', st.swapPreview !== false, (v) => { st.swapPreview = v; save(); })),
+          chk('Tukar Preview ↔ Program setelah transisi', st.swapPreview !== false, (v) => { st.swapPreview = v; save(); })),
           h('p.muted', '50/60 fps membuat gerakan, running text & grafis jauh lebih halus di rekaman, stream, SRT & output. 1080p60 nyaman untuk PC menengah dengan GPU; 4K60 butuh GPU kuat. Bitrate rekaman otomatis dinaikkan untuk fps tinggi.'));
       },
       trans() {
