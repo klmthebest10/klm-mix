@@ -144,7 +144,7 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Preview memenuhi panel**: tanpa grid, monitor Preview (dan Program) kini membesar memenuhi panelnya dengan rasio output yang benar — sebelumnya tertahan di resolusi preview sehingga tampil kecil di layar besar; resolusi Preview ikut naik agar tetap tajam (mode Hemat tetap ringan)
 - **Grid Preview memakai seluruh lebar**: kanvas grid mengikuti bentuk panel, kotak-kotak dibagi rata memenuhi lebar & tinggi Preview, jumlah kolom dipilih otomatis (panel lebar → lebih banyak kolom); klik/dobel-klik kotak tetap tepat
 
-### Baru di v1.14.2
+### Baru di v1.14.1
 - **Daftar input mulus**: kartu input tidak lagi dibangun ulang setiap ada perubahan (tambah/hapus/ganti nama/urutan) — thumbnail live kamera/KLMCAM/video tetap berjalan tanpa kedip; thumbnail live muncul setelah frame pertama siap & frame terakhir dipertahankan saat berhenti (tanpa layar hitam); kartu gabungan (layer/virtual set) digambar dengan jadwal tetap dan memakai ulang hasil Preview/Program bila sedang tampil; efek blur di atas video dihapus, meter audio kartu ±25 fps
 
 ### Baru di v1.14
