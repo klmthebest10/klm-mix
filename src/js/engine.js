@@ -402,32 +402,53 @@
     return false;
   }
   E.animThumbs = 0; // jumlah kartu yang harus digambar terus (input gabungan berisi sumber bergerak)
+  /** Program bersih = hanya input itu (tanpa transisi, overlay, grafis UTC, FTB) → kartunya cukup menyalin kanvas Program */
+  function progClean() {
+    if (S.trans || S.ftb.v > 0) return false;
+    if ((S.overlays || []).some((o) => o && o.phase !== 'off')) return false;
+    if (KM.utc && KM.utc.onAir && KM.utc.onAir()) return false;
+    return true;
+  }
+  function drawThumb(inp, cv, now) {
+    inp.rt.thumbAt = now;
+    const c = cv.getContext('2d');
+    try {
+      if (KM.inputTypes[inp.type].noVideo) { const s = KM.inputs.source(inp); c.fillStyle = '#000'; c.fillRect(0, 0, cv.width, cv.height); if (s) c.drawImage(s.src, 0, 0, cv.width, cv.height); return; }
+      // input yang sedang di Preview / Program sudah digambar mesin frame ini → salin saja (1 drawImage, sama persis)
+      if (inp.id === S.previewId && !E.gridActive() && E.prevAt && now - E.prevAt < 120) { c.drawImage(E.prev, 0, 0, cv.width, cv.height); return; }
+      if (inp.id === S.programId && progClean() && E.progAt && now - E.progAt < 120) { c.drawImage(E.prog, 0, 0, cv.width, cv.height); return; }
+      c.fillStyle = '#000'; c.fillRect(0, 0, cv.width, cv.height);
+      drawInputRect(c, inp, 0, 0, cv.width, cv.height, 0);
+    } catch (e) {}
+  }
   let thumbCursor = 0;
   function updateThumbs(now) {
     const n = S.inputs.length; if (!n) return;
     const mode = KM.settings.perfLite ? 'hemat' : KM.settings.perf || 'seimbang';
-    // yang tersisa di sini hanya sumber kanvas (title, jam, slide, grafis UTC…) — ringan, jadi bisa lebih sering
-    const fast = 1000 / (mode === 'hemat' ? 10 : 30), slow = mode === 'hemat' ? 2000 : 900;
-    const budget = mode === 'hemat' ? 3 : 6, t0 = performance.now();
+    // kartu gabungan berisi sumber bergerak (kamera, video, KLMCAM…) digambar DULUAN dengan jadwal tetap (30 fps, hemat 16 fps)
+    // tanpa dipotong anggaran waktu → gerakannya rata, tidak patah-patah
+    const compIv = mode === 'hemat' ? 62 : 33;
     let anim = 0;
     for (let k = 0; k < n; k++) {
-      const inp = S.inputs[(thumbCursor + k) % n];
-      const cv = inp.rt.thumb; if (!cv || !cv.isConnected) continue;
-      if (E.liveThumb(inp)) continue;
+      const inp = S.inputs[k];
+      const cv = inp.rt.thumb; if (!cv || !cv.isConnected || E.liveThumb(inp)) continue;
       if (now - (inp.rt.compAt || 0) > 500) { inp.rt.compAt = now; inp.rt.comp = compMoving(inp); } // dicek 2×/detik, bukan tiap frame
-      if (inp.rt.comp && cv._vis !== false) anim++;
-      const moving = inp.rt.comp || KM.inputs.isPlaying(inp) || inp.type === 'list' || inp.type === 'browser' || inp.type === 'utc' || inp.type === 'score' || inp.type === 'clock' || inp.type === 'title' || (inp.rt.anim);
-      if (now - (inp.rt.thumbAt || 0) < (cv._vis === false ? 3000 : inp.rt.comp ? (mode === 'hemat' ? 62 : 30) : moving ? fast : slow)) continue; // kartu gabungan berisi kamera: 16–30 fps
-      inp.rt.thumbAt = now;
-      const c = cv.getContext('2d');
-      c.fillStyle = '#000'; c.fillRect(0, 0, cv.width, cv.height);
-      try {
-        if (KM.inputTypes[inp.type].noVideo) { const s = KM.inputs.source(inp); if (s) c.drawImage(s.src, 0, 0, cv.width, cv.height); }
-        else drawInputRect(c, inp, 0, 0, cv.width, cv.height, 0);
-      } catch (e) {}
-      if (performance.now() - t0 > budget) { thumbCursor = (thumbCursor + k + 1) % n; E.animThumbs = Math.max(anim, E.animThumbs); return; }
+      if (!inp.rt.comp || cv._vis === false) continue;
+      anim++;
+      if (now - (inp.rt.thumbAt || 0) >= compIv - 4) drawThumb(inp, cv, now);
     }
     E.animThumbs = anim;
+    // sisanya: sumber kanvas (title, slide, grafis UTC…) sering, gambar diam jarang — dibatasi anggaran waktu, bergiliran
+    const fast = 1000 / (mode === 'hemat' ? 10 : 30), slow = mode === 'hemat' ? 2000 : 900;
+    const budget = mode === 'hemat' ? 3 : 6, t0 = performance.now();
+    for (let k = 0; k < n; k++) {
+      const inp = S.inputs[(thumbCursor + k) % n];
+      const cv = inp.rt.thumb; if (!cv || !cv.isConnected || inp.rt.comp || E.liveThumb(inp)) continue;
+      const moving = KM.inputs.isPlaying(inp) || inp.type === 'list' || inp.type === 'browser' || inp.type === 'utc' || inp.type === 'score' || inp.type === 'title' || inp.type === 'mirror' || inp.rt.anim;
+      if (now - (inp.rt.thumbAt || 0) < (cv._vis === false ? 3000 : moving ? fast : slow)) continue;
+      drawThumb(inp, cv, now);
+      if (performance.now() - t0 > budget) { thumbCursor = (thumbCursor + k + 1) % n; return; }
+    }
     thumbCursor = (thumbCursor + 1) % n;
   }
 
@@ -457,6 +478,7 @@
     drawOverlays(c);
     if (KM.utc) KM.utc.drawDSK(c, E.W, E.H); // lapisan UTC ON AIR (grafis UTC KLM Acara asli)
     if (f.v > 0) { c.fillStyle = 'rgba(0,0,0,' + f.v + ')'; c.fillRect(0, 0, E.W, E.H); }
+    E.progAt = now;
 
     // PREVIEW (dilewati saat jendela diminimize / mode hemat)
     const idle = document.hidden && KM.settings.pauseHidden !== false;
@@ -467,6 +489,7 @@
       v.globalAlpha = 1; v.fillStyle = '#000'; v.fillRect(0, 0, pw, ph);
       if (E.gridActive()) drawPvGrid(v, pw, ph);
       else { const pv = KM.getInput(S.previewId); if (pv) drawInputRect(v, pv, 0, 0, pw, ph, 0); }
+      E.prevAt = now;
     }
 
     if (!idle) updateThumbs(now);
@@ -557,7 +580,7 @@
       E.quiet = !mv;
       const interval = mv ? 1000 / KM.settings.fps : 1000 / 6;
       // mesin sedang hemat (Program/Preview diam) tetapi ada kartu gabungan berisi kamera/video: gambar kartunya saja ±25 fps
-      if (!mv && E.animThumbs && !document.hidden && now - thAt >= 40) { thAt = now; E.frame++; try { updateThumbs(now); } catch (e) {} }
+      if (!mv && E.animThumbs && !document.hidden && now - thAt >= 30) { thAt = now; E.frame++; try { updateThumbs(now); } catch (e) {} }
       if (now >= nextAt - Math.min(vs * 0.5, interval * 0.5)) {
         try { E.render(); } catch (e) { console.error('render', e); }
         E.lastRender = now;

@@ -243,37 +243,62 @@
     return [h('div.cbrow', top), h('div.cbrow', els)];
   }
 
-  UI.renderCards = function () {
-    const box = $('#inputs'); box.innerHTML = '';
-    S.inputs.forEach((inp, idx) => {
-      if (!inp.rt.thumb) { inp.rt.thumb = h('canvas'); inp.rt.thumb.width = 256; inp.rt.thumb.height = 144; thumbIO && thumbIO.observe(inp.rt.thumb); }
-      const meter = h('i');
-      const card = h('div.card', { draggable: true, 'data-id': inp.id },
-        h('div.thumb', {
-          onclick: (e) => { if (e.ctrlKey) KM.engine.cut(inp.id); else KM.engine.setPreview(inp.id); },
-          ondblclick: () => (inp.type === 'utc' || inp.type === 'score' ? UI.utcPanel(true, inp.type === 'score' ? 'score' : 'acara') : KM.dialogs.inputSettings(inp)),
-          title: 'Klik: ke Preview • Ctrl+Klik: Cut • Dobel klik: pengaturan'
-        }, inp.rt.thumb, h('span.num', String(idx + 1)), h('span.tly'), h('span.typ', { title: KM.inputTypes[inp.type].label }, typeIcon(inp)), h('div.pbar'), KM.inputs.hasAudio(inp) ? h('div.ameter', meter) : null),
-        h('div.ctitle', h('span', { title: inp.title, ondblclick: async () => { const v = await UI.prompt('Ganti nama input', inp.title); if (v) { inp.title = v; KM.changed('inputs'); } } }, inp.title)),
-        h('div.cbtns', cardButtons(inp)));
-      card._meter = meter; card._inp = inp;
-      card.addEventListener('contextmenu', (e) => { e.preventDefault(); UI.inputMenu(inp, e.clientX, e.clientY); });
-      card.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/klm-input', inp.id); });
-      card.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/klm-input')) { e.preventDefault(); card.classList.add('drag-over'); } });
-      card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
-      card.addEventListener('drop', (e) => {
-        card.classList.remove('drag-over');
-        const id = e.dataTransfer.getData('text/klm-input'); if (!id) return;
-        e.preventDefault(); e.stopPropagation();
-        const src = KM.getInput(id); if (!src || src === inp) return;
-        const arr = S.inputs; arr.splice(arr.indexOf(src), 1); arr.splice(arr.indexOf(inp), 0, src); KM.changed('inputs');
-      });
-      box.appendChild(card);
+  // Kartu input dibuat SEKALI per input lalu dipakai ulang (disimpan di inp.rt.card). Menambah, menghapus, mengganti nama
+  // atau mengurutkan input hanya memindah/menambal kartu yang perlu — <video> thumbnail live tidak pernah dibuat ulang,
+  // jadi tidak ada kedip hitam di kartu lain.
+  function buildCard(inp) {
+    if (!inp.rt.thumb) { inp.rt.thumb = h('canvas'); inp.rt.thumb.width = 256; inp.rt.thumb.height = 144; thumbIO && thumbIO.observe(inp.rt.thumb); }
+    const num = h('span.num'), title = h('span', { ondblclick: async () => { const v = await UI.prompt('Ganti nama input', inp.title); if (v) { inp.title = v; KM.changed('inputs'); } } });
+    const th = h('div.thumb', {
+      onclick: (e) => { if (e.ctrlKey) KM.engine.cut(inp.id); else KM.engine.setPreview(inp.id); },
+      ondblclick: () => (inp.type === 'utc' || inp.type === 'score' ? UI.utcPanel(true, inp.type === 'score' ? 'score' : 'acara') : KM.dialogs.inputSettings(inp)),
+      title: 'Klik: ke Preview • Ctrl+Klik: Cut • Dobel klik: pengaturan'
+    }, inp.rt.thumb, num, h('span.tly'), h('span.typ', { title: KM.inputTypes[inp.type].label }, typeIcon(inp)), h('div.pbar'));
+    const card = h('div.card', { draggable: true, 'data-id': inp.id }, th, h('div.ctitle', title), h('div.cbtns'));
+    card._inp = inp; card._th = th; card._num = num; card._title = title; card._pbar = th.querySelector('.pbar');
+    card.addEventListener('contextmenu', (e) => { e.preventDefault(); UI.inputMenu(inp, e.clientX, e.clientY); });
+    card.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/klm-input', inp.id); });
+    card.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/klm-input')) { e.preventDefault(); card.classList.add('drag-over'); } });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', (e) => {
+      card.classList.remove('drag-over');
+      const id = e.dataTransfer.getData('text/klm-input'); if (!id) return;
+      e.preventDefault(); e.stopPropagation();
+      const src = KM.getInput(id); if (!src || src === inp) return;
+      const arr = S.inputs; arr.splice(arr.indexOf(src), 1); arr.splice(arr.indexOf(inp), 0, src); KM.changed('inputs');
     });
-    UI.syncLiveThumbs();
+    return card;
+  }
+  /** tambal bagian kartu yang bisa berubah (nomor, judul, meter audio) tanpa menyentuh thumbnail */
+  function patchCard(card, inp, idx) {
+    const n = String(idx + 1);
+    if (card._num.textContent !== n) card._num.textContent = n;
+    if (card._title.textContent !== inp.title) { card._title.textContent = inp.title; card._title.title = inp.title; }
+    const au = KM.inputs.hasAudio(inp);
+    if (au && !card._meter) { const m = h('i'); card._meterBox = h('div.ameter', m); card._th.appendChild(card._meterBox); card._meter = m; card._mv = -1; }
+    else if (!au && card._meter) { card._meterBox.remove(); card._meter = card._meterBox = null; }
+  }
+  function releaseCard(card) {
+    const v = card._th && card._th.querySelector('video.live');
+    if (v) { v.srcObject = null; v.remove(); }
+  }
+  UI.renderCards = function () {
+    const box = $('#inputs');
+    const want = [];
+    S.inputs.forEach((inp, idx) => {
+      let card = inp.rt.card;
+      if (!card || card._inp !== inp) card = inp.rt.card = buildCard(inp);
+      patchCard(card, inp, idx);
+      want.push(card);
+    });
+    const keep = new Set(want);
+    [...box.children].forEach((el) => { if (!keep.has(el)) { if (el._inp) releaseCard(el); el.remove(); } });
+    // urutkan dengan memindah seminimal mungkin (kartu yang sudah di tempatnya tidak disentuh)
+    want.forEach((card, i) => { const at = box.children[i]; if (at !== card) box.insertBefore(card, at || null); });
     if (!S.inputs.length) box.appendChild(emptyState());
-    else box.appendChild(h('div.card.add', { onclick: () => KM.dialogs.addInput(), title: 'Tambah input (Ctrl+I)' }, KI.el('plus'), 'Tambah Input'));
+    else box.appendChild(box._add || (box._add = h('div.card.add', { onclick: () => KM.dialogs.addInput(), title: 'Tambah input (Ctrl+I)' }, KI.el('plus'), 'Tambah Input')));
     const c = $('#inCount'); if (c) c.textContent = S.inputs.length;
+    UI.syncLiveThumbs();
     UI.updateCards();
   };
 
@@ -299,15 +324,26 @@
   // tampilan live mulus untuk kamera/KLMCAM/layar di kartu input (memakai stream yang sama, tanpa decode ulang)
   // thumbnail LIVE: kamera, KLMCAM, layar, dan video yang sedang diputar ditampilkan sebagai <video> kecil
   // yang digambar langsung oleh compositor GPU (frame rate asli, tidak ikut beban thread utama) → tidak patah-patah
+  function keepFrame(inp, v) { // salin frame terakhir video ke kanvas → saat video dilepas/diganti tidak ada lompatan/hitam
+    const cv = inp.rt.thumb;
+    if (!cv || !v || v.readyState < 2 || !v.videoWidth) return;
+    try { const c = cv.getContext('2d'); c.drawImage(v, 0, 0, cv.width, cv.height); inp.rt.thumbAt = KM.now(); } catch (e) {}
+  }
+  function showOnFrame(v) {
+    v.classList.remove('on');
+    const on = () => v.classList.add('on');
+    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(on); else v.addEventListener('playing', on, { once: true });
+  }
   function syncLiveThumb(card) {
     const inp = card._inp; if (!inp) return;
     const th = card._th || (card._th = card.querySelector('.thumb')); if (!th) return;
-    let v = th.querySelector('video.live');
+    let v = card._live;
     const st = KM.engine.liveStream(inp);
     const trk = st && st.getVideoTracks().find((t) => t.readyState === 'live');
-    if (!trk) { if (v) { v.srcObject = null; v.remove(); } return; }
-    if (!v) { v = document.createElement('video'); v.className = 'live'; v.muted = true; v.playsInline = true; v.autoplay = true; v.disablePictureInPicture = true; th.insertBefore(v, th.firstChild.nextSibling); }
-    if (v._trk !== trk) { v._trk = trk; v.srcObject = new MediaStream([trk]); v.play().catch(() => {}); }
+    if (!trk) { if (v) { keepFrame(inp, v); v.srcObject = null; v.remove(); card._live = null; } return; }
+    if (!v) { v = card._live = document.createElement('video'); v.className = 'live'; v.muted = true; v.playsInline = true; v.autoplay = true; v.disablePictureInPicture = true; th.insertBefore(v, th.firstChild.nextSibling); }
+    if (v._trk !== trk) { if (v._trk) keepFrame(inp, v); v._trk = trk; showOnFrame(v); v.srcObject = new MediaStream([trk]); v.play().catch(() => {}); }
+    else if (v.paused) v.play().catch(() => {});
     const tf = inp.opts && inp.opts.mirror ? 'scaleX(-1)' : '';
     if (v.style.transform !== tf) v.style.transform = tf;
   }
@@ -323,7 +359,7 @@
       // tombol hanya dibuat ulang bila statusnya berubah (bukan setiap ada perubahan apa pun)
       const sig = [KM.inputNum(inp), KM.inputs.isPlayable(inp) && KM.inputs.isPlaying(inp), inp.loop, KM.inputs.hasAudio(inp) && inp.audio.mute, S.overlays.map((o) => (o.inputId === inp.id && o.phase !== 'off' ? 1 : 0)).join('')].join('|');
       if (card._sig !== sig) { card._sig = sig; card.querySelector('.cbtns').replaceChildren(...cardButtons(inp)); }
-      const t = card.querySelector('.ctitle span'); if (t.textContent !== inp.title) { t.textContent = inp.title; t.title = inp.title; }
+      patchCard(card, inp, S.inputs.indexOf(inp)); // nomor, judul, meter audio (mis. video baru selesai dimuat → punya suara)
     });
     const pv = KM.getInput(S.previewId), pg = KM.getInput(S.programId);
     const nm = (el, inp) => { const k = inp ? KM.inputNum(inp) + '|' + inp.title : '-'; if (el._k === k) return; el._k = k; el.replaceChildren(...(inp ? [h('span.n', String(KM.inputNum(inp))), inp.title] : [h('span.muted', 'Belum ada input')])); };
@@ -334,7 +370,10 @@
   };
 
   function renderPvwTools(pv) {
-    const box = $('#pvwTools'); box.innerHTML = '';
+    const box = $('#pvwTools');
+    const sig = pv ? pv.id + '|' + (KM.inputs.isPlayable(pv) && KM.inputs.isPlaying(pv)) : '';
+    if (box._sig === sig) return; // tidak berubah → jangan bangun ulang tombol (sering dipanggil)
+    box._sig = sig; box.innerHTML = '';
     if (!pv) return;
     if (KM.inputs.isPlayable(pv)) {
       box.appendChild(h('button.ic', { title: 'Mulai ulang', onclick: () => KM.inputs.restart(pv) }, KI.el('skip-back')));
@@ -723,7 +762,7 @@
     $('#st-perf').addEventListener('click', () => KM.perf.cycle());
     KM.on('settings', () => { updateBars(); });
     setInterval(tickStatus, 250);
-    setInterval(() => { if (!document.hidden) tickCards(); }, 100);
+    setInterval(() => { if (!document.hidden) tickCards(); }, 40); // meter audio & progres video ±25 fps (transform saja, ringan)
     setInterval(UI.autosave, 10000);
     // tampilkan status play terbaru
     KM.on('change', (w) => { if (w === 'input') setTimeout(UI.syncLiveThumbs, 50); });

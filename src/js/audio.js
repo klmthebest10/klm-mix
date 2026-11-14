@@ -16,6 +16,8 @@
     return { L, R, bufL: new Float32Array(1024), bufR: new Float32Array(1024), peakL: 0, peakR: 0, holdL: 0, holdR: 0 };
   }
   function readMeter(m) {
+    // dibaca dari beberapa tempat (kartu input, mixer, ducking) → cukup sekali per ±15 ms
+    const t = performance.now(); if (t - (m._at || 0) < 15) return m; m._at = t;
     m.L.getFloatTimeDomainData(m.bufL); m.R.getFloatTimeDomainData(m.bufR);
     let pl = 0, pr = 0;
     for (let i = 0; i < 1024; i++) { const a = Math.abs(m.bufL[i]), b = Math.abs(m.bufR[i]); if (a > pl) pl = a; if (b > pr) pr = b; }

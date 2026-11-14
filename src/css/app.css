@@ -176,10 +176,10 @@ code { font: 12px var(--mono); color: #9cc3ff; }
 .card.program { border-color: var(--pgm); box-shadow: 0 0 0 1px var(--pgm), 0 0 18px rgba(242, 69, 61, .2); }
 .card.overlay:not(.program):not(.preview) { border-color: var(--ovl); box-shadow: 0 0 0 1px var(--ovl); }
 .card.drag-over { outline: 2px dashed var(--acc); outline-offset: 2px; }
-.card .thumb { position: relative; aspect-ratio: 16/9; background: #000; cursor: pointer; overflow: hidden; }
+.card .thumb { position: relative; aspect-ratio: 16/9; background: #000; cursor: pointer; overflow: hidden; contain: layout paint style; transform: translateZ(0); }
 .card .thumb canvas { width: 100%; height: 100%; display: block; }
 .card .thumb::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0, 0, 0, .45), transparent 30%); pointer-events: none; }
-.card .num { position: absolute; left: 6px; top: 6px; z-index: 1; min-width: 22px; height: 20px; display: flex; align-items: center; justify-content: center; background: rgba(10, 12, 15, .82); backdrop-filter: blur(4px); padding: 0 6px; border-radius: 5px; font-weight: 800; font-size: 11.5px; border: 1px solid rgba(255, 255, 255, .08); }
+.card .num { position: absolute; left: 6px; top: 6px; z-index: 1; min-width: 22px; height: 20px; display: flex; align-items: center; justify-content: center; background: rgba(10, 12, 15, .86); padding: 0 6px; border-radius: 5px; font-weight: 800; font-size: 11.5px; border: 1px solid rgba(255, 255, 255, .08); }
 .card.program .num { background: var(--pgm); border-color: transparent; } .card.preview .num { background: var(--pvw); border-color: transparent; }
 .card .typ { position: absolute; right: 6px; top: 6px; z-index: 1; width: 22px; height: 20px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: rgba(10, 12, 15, .7); color: var(--tx2); font-size: 12px; }
 .card .typ .ki { width: 13px; height: 13px; margin: 0; vertical-align: 0; }
@@ -188,7 +188,7 @@ code { font: 12px var(--mono); color: #9cc3ff; }
 .card.preview .tly { display: flex; background: var(--pvw); } .card.preview .tly::after { content: 'PVW'; }
 .card .pbar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--acc2); width: 100%; transform: scaleX(0); transform-origin: left; z-index: 2; will-change: transform; }
 .card .ameter { position: absolute; right: 6px; bottom: 6px; top: 32px; width: 5px; background: rgba(0, 0, 0, .55); border-radius: 3px; overflow: hidden; display: flex; flex-direction: column-reverse; z-index: 1; }
-.card .ameter i { display: block; background: linear-gradient(to top, #22c55e 0, #22c55e 70%, #facc15 85%, #ef4444 100%); width: 100%; height: 100%; transform: scaleY(0); transform-origin: bottom; will-change: transform; }
+.card .ameter i { display: block; background: linear-gradient(to top, #22c55e 0, #22c55e 70%, #facc15 85%, #ef4444 100%); width: 100%; height: 100%; transform: scaleY(0); transform-origin: bottom; will-change: transform; transition: transform 60ms linear; }
 .card .ctitle { display: flex; align-items: center; gap: 4px; padding: 7px 9px 3px; font-size: 12.5px; font-weight: 700; }
 .card .ctitle span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card .cbtns { display: flex; flex-direction: column; gap: 4px; padding: 4px 6px 7px; }
@@ -427,7 +427,8 @@ p { line-height: 1.5; }
 .utcq .live b { color: var(--tx); }
 .utcq .air { width: 100%; height: 42px; font-weight: 800; font-size: 13.5px; letter-spacing: .3px; }
 .utcq .air.on { background: linear-gradient(180deg, #e07a17, #b85f0d); border-color: #f59e3a; color: #fff; box-shadow: 0 2px 14px rgba(240, 138, 36, .3); }
-.card .thumb video.live { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; display: block; pointer-events: none; }
+.card .thumb video.live { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: transparent; display: block; pointer-events: none; opacity: 0; }
+.card .thumb video.live.on { opacity: 1; } /* tampil setelah frame pertama siap → tanpa kedip hitam */
 .card .thumb { contain: layout paint; }
 #inputs { contain: layout style; }
 

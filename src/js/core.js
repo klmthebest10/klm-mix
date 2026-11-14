@@ -7,7 +7,7 @@ window.KM = window.KM || {};
     const orig = Element.prototype[fn];
     Element.prototype[fn] = function (...kids) { return orig.apply(this, kids.filter((x) => x != null && x !== false)); };
   }
-  KM.version = '1.14.0';
+  KM.version = '1.14.1';
   KM.isElectron = !!(window.klm && window.klm.isElectron);
 
   // ---------- event bus ----------
