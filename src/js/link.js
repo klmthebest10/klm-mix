@@ -273,7 +273,7 @@
   KM.on('tally', () => pushState(false));
 
   const tc = document.createElement('canvas'); tc.width = 384; tc.height = 216; const tx = tc.getContext('2d');
-  function shot(src, w, h, q) { tc.width = w; tc.height = h; tx.drawImage(src, 0, 0, w, h); return tc.toDataURL('image/jpeg', q || 0.6); }
+  function shot(src, w, h, q) { tc.width = w; tc.height = h; KM.engine.drawContain(tx, src, 0, 0, w, h); return tc.toDataURL('image/jpeg', q || 0.6); }
   // hanya kirim gambar ke HP yang sedang menampilkannya (hemat data, baterai & CPU)
   const wants = (k) => [...L.peers.values()].filter((p) => p.role === 'remote' && (!p.sub || p.sub[k]));
   let monT = 0;

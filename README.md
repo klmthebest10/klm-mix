@@ -82,10 +82,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
    - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.14.1.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.14.1.exe` (tanpa instal)
+     - `KLM-Mix-Setup-1.14.2.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Mix-Portable-1.14.2.exe` (tanpa instal)
    - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
-3. Untuk rilis resmi: buat tag `v1.14.1` → file otomatis muncul di halaman **Releases**.
+3. Untuk rilis resmi: buat tag `v1.14.2` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
 
@@ -140,7 +140,11 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
-### Baru di v1.14.1
+### Baru di v1.14.2
+- **Preview memenuhi panel**: tanpa grid, monitor Preview (dan Program) kini membesar memenuhi panelnya dengan rasio output yang benar — sebelumnya tertahan di resolusi preview sehingga tampil kecil di layar besar; resolusi Preview ikut naik agar tetap tajam (mode Hemat tetap ringan)
+- **Grid Preview memakai seluruh lebar**: kanvas grid mengikuti bentuk panel, kotak-kotak dibagi rata memenuhi lebar & tinggi Preview, jumlah kolom dipilih otomatis (panel lebar → lebih banyak kolom); klik/dobel-klik kotak tetap tepat
+
+### Baru di v1.14.2
 - **Daftar input mulus**: kartu input tidak lagi dibangun ulang setiap ada perubahan (tambah/hapus/ganti nama/urutan) — thumbnail live kamera/KLMCAM/video tetap berjalan tanpa kedip; thumbnail live muncul setelah frame pertama siap & frame terakhir dipertahankan saat berhenti (tanpa layar hitam); kartu gabungan (layer/virtual set) digambar dengan jadwal tetap dan memakai ulang hasil Preview/Program bila sedang tampil; efek blur di atas video dihapus, meter audio kartu ±25 fps
 
 ### Baru di v1.14
@@ -296,4 +300,4 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.14.1
+KLM Mix 1.14.2

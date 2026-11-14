@@ -31,6 +31,21 @@
     KM.emit('resized');
   };
 
+  /** atur resolusi kanvas Preview (dipanggil UI). w/h kosong = kembali ke rasio output × skala preview */
+  E.setPreviewSize = function (w, h) {
+    if (!E.prev || !E.W) return; // mesin belum menyala
+    const ps = KM.settings.previewScale || 0.5;
+    w = Math.round(w || E.W * ps); h = Math.round(h || E.H * ps);
+    if (E.prev.width !== w || E.prev.height !== h) { E.prev.width = w; E.prev.height = h; E.prevAt = 0; }
+  };
+  /** gambar src ke kotak dengan rasio terjaga (Preview mode grid bisa tidak 16:9) */
+  E.drawContain = function (c, src, x, y, w, hh) {
+    const sw = src.width || src.videoWidth, sh = src.height || src.videoHeight; if (!sw || !sh) return;
+    const sc = Math.min(w / sw, hh / sh), dw = sw * sc, dh = sh * sc;
+    if (Math.abs(dw - w) > 1 || Math.abs(dh - hh) > 1) { c.fillStyle = '#000'; c.fillRect(x, y, w, hh); }
+    c.drawImage(src, x + (w - dw) / 2, y + (hh - dh) / 2, dw, dh);
+  };
+
   E.programStream = function () {
     if (!E.stream || E.stream.getVideoTracks()[0].readyState === 'ended') E.stream = E.prog.captureStream(KM.settings.fps);
     return E.stream;
@@ -347,7 +362,7 @@
     const c = E.mvctx, W = 1920, H = 1080;
     c.fillStyle = '#0b0c10'; c.fillRect(0, 0, W, H);
     const box = (x, y, w, hgt, label, color, src) => {
-      if (src) { try { c.drawImage(src, x, y, w, hgt); } catch (e) {} }
+      if (src) { try { E.drawContain(c, src, x, y, w, hgt); } catch (e) {} }
       c.strokeStyle = color; c.lineWidth = color === '#333' ? 2 : 6; c.strokeRect(x + 2, y + 2, w - 4, hgt - 4);
       c.fillStyle = 'rgba(0,0,0,.65)'; c.fillRect(x + 6, y + hgt - 40, Math.min(w - 12, 20 + label.length * 15), 34);
       c.fillStyle = '#fff'; c.font = '600 22px Segoe UI, Arial'; c.textAlign = 'left'; c.fillText(label, x + 14, y + hgt - 15);
@@ -506,13 +521,31 @@
   E.pvZoom = null;
   E.gridIds = () => { const g = KM.settings.pvGrid; return g && g.ids ? g.ids.filter((id) => KM.getInput(id)) : []; };
   E.gridActive = () => !!(KM.settings.pvGrid && KM.settings.pvGrid.on && !E.pvZoom);
+  /** tata letak grid Preview: panel dibagi rata kolom × baris memenuhi SELURUH lebar & tinggi Preview.
+   *  Jumlah kolom dipilih agar gambar (rasio output) di tiap kotak sebesar mungkin; bila hampir sama (±10%),
+   *  dipilih yang lebih banyak kolom (memanfaatkan lebar). Baris terakhir yang tidak penuh diletakkan di tengah. */
   E.gridLayout = (n, pw, ph) => {
-    const cols = Math.max(1, Math.ceil(Math.sqrt(n))), rows = Math.max(1, Math.ceil(n / cols));
-    const gap = Math.round(pw * 0.006), cw = (pw - gap * (cols + 1)) / cols, ch = (ph - gap * (rows + 1)) / rows;
-    let w = cw, hh = cw * 9 / 16; if (hh > ch) { hh = ch; w = ch * 16 / 9; }
-    const ox = (pw - (w * cols + gap * (cols - 1))) / 2, oy = (ph - (hh * rows + gap * (rows - 1))) / 2;
+    const ar = (KM.settings.width || 16) / (KM.settings.height || 9);
+    const gap = Math.max(2, Math.round(Math.min(pw, ph * ar) * 0.006));
+    const opts = [];
+    for (let cols = 1; cols <= Math.max(1, n); cols++) {
+      const rows = Math.ceil(n / cols);
+      if (cols > 1 && (cols - 1) * rows >= n) continue; // kolom kosong percuma
+      const cw = (pw - gap * (cols + 1)) / cols, ch = (ph - gap * (rows + 1)) / rows;
+      if (cw <= 0 || ch <= 0) continue;
+      const w = Math.min(cw, ch * ar);
+      opts.push({ cols, rows, cw, ch, area: w * (w / ar) });
+    }
+    if (!opts.length) opts.push({ cols: 1, rows: n, cw: pw, ch: ph / n, area: 1 });
+    const max = Math.max(...opts.map((o) => o.area));
+    const best = opts.filter((o) => o.area >= max * 0.9).sort((a, b) => b.cols - a.cols)[0];
+    const { cols, rows, cw, ch } = best;
     const cells = [];
-    for (let i = 0; i < n; i++) { const c = i % cols, r = Math.floor(i / cols); cells.push({ x: ox + c * (w + gap), y: oy + r * (hh + gap), w, h: hh }); }
+    for (let i = 0; i < n; i++) {
+      const c = i % cols, r = Math.floor(i / cols);
+      const inRow = r === rows - 1 ? n - r * cols : cols, ox = (cols - inRow) * (cw + gap) / 2;
+      cells.push({ x: gap + ox + c * (cw + gap), y: gap + r * (ch + gap), w: cw, h: ch });
+    }
     return cells;
   };
   function drawPvGrid(v, pw, ph) {
@@ -522,7 +555,8 @@
       v.fillText('Grid Preview kosong — klik "+ Input" di atas untuk menambah input', pw / 2, ph / 2); v.textAlign = 'left'; v.textBaseline = 'alphabetic';
       return;
     }
-    const cells = E.gridLayout(ids.length, pw, ph), fs = Math.max(10, Math.round(cells[0].h * 0.09));
+    v.fillStyle = '#15181e'; v.fillRect(0, 0, pw, ph); // garis antar kotak terlihat
+    const cells = E.gridLayout(ids.length, pw, ph), arG = (KM.settings.width || 16) / (KM.settings.height || 9), fs = Math.max(10, Math.round(Math.min(cells[0].h, cells[0].w / arG) * 0.09));
     ids.forEach((id, i) => {
       const inp = KM.getInput(id), c = cells[i];
       v.save(); v.beginPath(); v.rect(c.x, c.y, c.w, c.h); v.clip();
@@ -536,7 +570,7 @@
       v.fillStyle = '#fff'; v.fillText(lbl, c.x + fs * 0.5, c.y + c.h - fs * 0.5, c.w - fs);
       v.restore();
       const tl = id === S.previewId ? '#22c55e' : E.live.has(id) ? '#ef4444' : null;
-      if (tl) { const lw = Math.max(2, Math.round(c.h * 0.025)); v.strokeStyle = tl; v.lineWidth = lw; v.strokeRect(c.x + lw / 2, c.y + lw / 2, c.w - lw, c.h - lw); }
+      if (tl) { const lw = Math.max(2, Math.round(Math.min(c.h, c.w / arG) * 0.025)); v.strokeStyle = tl; v.lineWidth = lw; v.strokeRect(c.x + lw / 2, c.y + lw / 2, c.w - lw, c.h - lw); }
     });
   }
   E.gridHit = (fx, fy) => { // fx,fy = posisi relatif 0..1 di kanvas Preview

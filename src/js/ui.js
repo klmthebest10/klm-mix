@@ -408,8 +408,51 @@
       on ? h('button.ic.txt', { title: 'Pilih input yang tampil di grid', onclick: (e) => gridPicker(e.currentTarget) }, KI.el('plus'), 'Input' + (n ? ' (' + n + ')' : '')) : null);
     $('#pvzBack').hidden = !(on && KM.engine.pvZoom);
     $('#pvwBox').classList.toggle('gridmode', on && !KM.engine.pvZoom);
+    UI.fitStage();
   }
   UI.renderGridBar = renderGridBar;
+
+  // ---------- ukuran monitor Preview / Program ----------
+  // Tanpa grid: kanvas memenuhi panel (rasio output terjaga, ikut membesar — tidak tertahan di resolusi preview).
+  // Dengan grid: kanvas Preview mengikuti BENTUK panel (selebar & setinggi panel) sehingga kotak-kotak grid memakai
+  // seluruh lebar; jumlah kolom dipilih otomatis (engine.gridLayout).
+  let fitRaf = 0;
+  function fitNow() {
+    fitRaf = 0;
+    const ar = (KM.settings.width || 16) / (KM.settings.height || 9);
+    [['#pgm', false], ['#pvw', true]].forEach(([sel, isPv]) => {
+      const cv = $(sel); if (!cv || !cv.parentElement) return;
+      const wrap = cv.parentElement, W = wrap.clientWidth, H = wrap.clientHeight;
+      if (W < 20 || H < 20) return;
+      const grid = isPv && KM.engine.gridActive && KM.engine.gridActive();
+      let w, h;
+      if (grid) {
+        w = W; h = H;
+        const k = Math.min(window.devicePixelRatio || 1, 1.25), cap = Math.min(1, 1600 / Math.max(W * k, H * k));
+        KM.engine.setPreviewSize && KM.engine.setPreviewSize(W * k * cap, H * k * cap);
+      } else {
+        w = Math.min(W, H * ar); h = w / ar;
+        // resolusi Preview mengikuti ukuran tampilnya (tajam saat panel besar), minimal skala preview, maksimal resolusi output;
+        // mode Hemat tetap memakai skala preview (beban render rendah)
+        if (isPv && KM.engine.setPreviewSize) {
+          const ps = KM.settings.previewScale || 0.5, OW = KM.settings.width || 1280;
+          if (KM.settings.perfLite) KM.engine.setPreviewSize();
+          else { const pw = Math.max(OW * ps, Math.min(OW, w * Math.min(window.devicePixelRatio || 1, 1.25))); KM.engine.setPreviewSize(pw, pw / ar); }
+        }
+      }
+      w = Math.floor(w); h = Math.floor(h);
+      if (cv._fw !== w || cv._fh !== h) { cv._fw = w; cv._fh = h; Object.assign(cv.style, { width: w + 'px', height: h + 'px', maxWidth: 'none', maxHeight: 'none', aspectRatio: 'auto' }); }
+    });
+  }
+  UI.fitStage = () => { if (!fitRaf) fitRaf = requestAnimationFrame(fitNow); };
+  if (window.ResizeObserver) {
+    const ro = new ResizeObserver(() => UI.fitStage());
+    const watch = () => { ['#pgm', '#pvw'].forEach((s) => { const c = $(s); if (c && c.parentElement) ro.observe(c.parentElement); }); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watch); else watch();
+  }
+  window.addEventListener('resize', () => UI.fitStage());
+  KM.on('resized', () => UI.fitStage());
+  KM.on('change', (w) => { if (w === 'preview') UI.fitStage(); });
   function pvPos(e) { const cv = $('#pvw'), r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height]; }
   function initPvGrid() {
     const cv = $('#pvw');
