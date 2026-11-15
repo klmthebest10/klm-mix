@@ -406,7 +406,8 @@ p { line-height: 1.5; }
 .bb.utc { color: #f6c48f; }
 .bb.utc.on { background: linear-gradient(180deg, #4a2608, #351b06); border-color: var(--utc); color: #fff; }
 .bb.utc.on .dot { background: var(--utc); box-shadow: 0 0 8px var(--utc); }
-#app.utc-mode { grid-template-rows: 46px auto minmax(0, 1fr) 54px; --mon-h: 38vh; }
+/* panel UTC penuh TIDAK mengecilkan monitor Preview/Program: tinggi stage tetap */
+#app.utc-mode { grid-template-rows: 46px auto minmax(0, 1fr) 54px; }
 #app.utc-mode #lower { display: none; }
 #utcWs { grid-row: 3; display: flex; flex-direction: column; min-height: 0; margin: 0 10px 8px; background: var(--bg); border: 1px solid rgba(240, 138, 36, .35); border-radius: var(--r); overflow: hidden; box-shadow: 0 0 0 1px rgba(240, 138, 36, .08); }
 #utcWs[hidden] { display: none; }
