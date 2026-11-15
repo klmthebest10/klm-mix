@@ -750,7 +750,15 @@ p { line-height: 1.5; }
   #bottombar { position: sticky; bottom: 0; z-index: 50; }
   .modal { width: 96vw !important; max-height: 94vh; } .split { grid-template-columns: minmax(0, 1fr) !important; }
 }
-@media (max-width: 620px) { #stage { grid-template-columns: minmax(0, 1fr); grid-template-areas: "pgm" "pvw" "tr"; } .screen { width: 100%; } #inputs { --cardw: 132px; } #topbar .brand b + span, #st-res, #st-perf { display: none; } }
+@media (max-width: 620px) { #stage { grid-template-columns: minmax(0, 1fr); grid-template-areas: "pgm" "pvw" "tr"; } .screen { width: 100%; }
+  /* HP / APK: tulisan PREVIEW / PROGRAM dipindah ke luar bingkai monitor (di atas gambar), bingkai hanya berisi gambar */
+  .screen { border: 0; background: none; box-shadow: none; overflow: visible; }
+  .screen-head { height: auto; min-height: 34px; padding: 0 2px 6px; border-bottom: 0; background: none !important; }
+  .screen .cwrap { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+  .screen.pvw .cwrap { border-color: rgba(30, 194, 107, .35); } .screen.pgm .cwrap { border-color: rgba(242, 69, 61, .45); }
+  .screen .tag { font-size: 10.5px; }
+  .screen .sname { display: inline; }
+#inputs { --cardw: 132px; } #topbar .brand b + span, #st-res, #st-perf { display: none; } }
 /* mode ringan (Hemat / performa otomatis): tanpa blur, bayangan besar & animasi dekoratif → GPU laptop lawas tidak terbebani */
 body.lite *, body.lite *::before, body.lite *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 body.lite .card, body.lite .screen, body.lite #dock, body.lite .modal { box-shadow: none !important; }
