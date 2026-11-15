@@ -428,7 +428,7 @@
       let w, h;
       if (grid) {
         w = W; h = H;
-        const k = Math.min(window.devicePixelRatio || 1, 1.25), cap = Math.min(1, 1600 / Math.max(W * k, H * k));
+        const k = KM.settings.perfLite ? 0.75 : 1, cap = Math.min(1, 1600 / Math.max(W * k, H * k));
         KM.engine.setPreviewSize && KM.engine.setPreviewSize(W * k * cap, H * k * cap);
       } else {
         w = Math.min(W, H * ar); h = w / ar;
@@ -437,7 +437,7 @@
         if (isPv && KM.engine.setPreviewSize) {
           const ps = KM.settings.previewScale || 0.5, OW = KM.settings.width || 1280;
           if (KM.settings.perfLite) KM.engine.setPreviewSize();
-          else { const pw = Math.max(OW * ps, Math.min(OW, w * Math.min(window.devicePixelRatio || 1, 1.25))); KM.engine.setPreviewSize(pw, pw / ar); }
+          else { const pw = Math.max(OW * ps, Math.min(OW, w)); KM.engine.setPreviewSize(pw, pw / ar); } // = ukuran tampil (piksel CSS), tidak lebih
         }
       }
       w = Math.floor(w); h = Math.floor(h);

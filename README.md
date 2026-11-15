@@ -140,6 +140,9 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.14.3
+- **Preview tidak patah-patah lagi**: monitor Preview kini digambar setiap frame di semua mode (sebelumnya mode Hemat hanya ±15 fps, dan performa otomatis bisa menurunkannya ke ±10 fps lalu tersimpan permanen). Beban diturunkan dengan cara lain: Preview = Program cukup menyalin Program, resolusi Preview = ukuran tampilnya, performa otomatis menurunkan thumbnail/resolusi — bukan kelancaran. Nilai lama yang terlanjur tersimpan dibersihkan otomatis
+
 ### Baru di v1.14.2
 - **Preview memenuhi panel**: tanpa grid, monitor Preview (dan Program) kini membesar memenuhi panelnya dengan rasio output yang benar — sebelumnya tertahan di resolusi preview sehingga tampil kecil di layar besar; resolusi Preview ikut naik agar tetap tajam (mode Hemat tetap ringan)
 - **Grid Preview memakai seluruh lebar**: kanvas grid mengikuti bentuk panel, kotak-kotak dibagi rata memenuhi lebar & tinggi Preview, jumlah kolom dipilih otomatis (panel lebar → lebih banyak kolom); klik/dobel-klik kotak tetap tepat

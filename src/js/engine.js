@@ -497,13 +497,15 @@
 
     // PREVIEW (dilewati saat jendela diminimize / mode hemat)
     const idle = document.hidden && KM.settings.pauseHidden !== false;
-    // monitor Preview cukup ±30 fps saat output 50/60 fps (kecuali mode Kualitas) → beban render turun ±1/3
-    const pvEvery = Math.max(KM.settings.previewEvery || 1, KM.settings.fps > 30 && KM.settings.perf !== 'kualitas' ? Math.round(KM.settings.fps / 30) : 1);
+    // Monitor Preview digambar SETIAP frame (output 50/60 fps → ±30 fps, kecuali mode Kualitas) agar gerakan mulus.
+    // Beban diturunkan dengan cara lain: Preview = Program → cukup salin kanvas Program; resolusi Preview mengikuti ukuran tampil.
+    const pvEvery = KM.settings.fps > 30 && KM.settings.perf !== 'kualitas' ? Math.round(KM.settings.fps / 30) : 1;
     if (!idle && E.frame % pvEvery === 0) {
       const v = E.vctx, pw = E.prev.width, ph = E.prev.height;
-      v.globalAlpha = 1; v.fillStyle = '#000'; v.fillRect(0, 0, pw, ph);
-      if (E.gridActive()) drawPvGrid(v, pw, ph);
-      else { const pv = KM.getInput(S.previewId); if (pv) drawInputRect(v, pv, 0, 0, pw, ph, 0); }
+      v.globalAlpha = 1;
+      if (E.gridActive()) { v.fillStyle = '#000'; v.fillRect(0, 0, pw, ph); drawPvGrid(v, pw, ph); }
+      else if (S.previewId && S.previewId === S.programId && progClean()) v.drawImage(E.prog, 0, 0, pw, ph);
+      else { v.fillStyle = '#000'; v.fillRect(0, 0, pw, ph); const pv = KM.getInput(S.previewId); if (pv) drawInputRect(v, pv, 0, 0, pw, ph, 0); }
       E.prevAt = now;
     }
 

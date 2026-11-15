@@ -2,7 +2,7 @@
 'use strict';
 (function (KM) {
   const PRESET = {
-    hemat: { previewScale: 0.33, previewEvery: 2, thumbEvery: 8, thumbsPer: 1, h: 720, fps: 30, replay: [640, 360, 10], label: '🍃 Hemat' },
+    hemat: { previewScale: 0.33, previewEvery: 1, thumbEvery: 8, thumbsPer: 1, h: 720, fps: 30, replay: [640, 360, 10], label: '🍃 Hemat' },
     seimbang: { previewScale: 0.5, previewEvery: 1, thumbEvery: 4, thumbsPer: 2, h: 1080, fps: null, replay: [640, 360, 15], label: '⚖ Seimbang' },
     kualitas: { previewScale: 1, previewEvery: 1, thumbEvery: 2, thumbsPer: 3, h: null, fps: null, replay: [960, 540, 15], label: '💎 Kualitas' }
   };
@@ -39,6 +39,8 @@
     st.replay = Object.assign({}, st.replay, { width: 640, height: 360, seconds: 10 });
     KM.perf.autoPicked = true;
   }
+  // v1.14.3: Preview tidak lagi dijarangkan — hapus nilai lama (Hemat = 2, otomatis = 3) yang terlanjur tersimpan
+  if ((KM.settings.previewEvery || 1) > 1) { KM.settings.previewEvery = 1; try { KM.saveSettings(); } catch (e) {} }
   document.addEventListener('DOMContentLoaded', syncLite); setTimeout(syncLite, 0);
   // ---------- performa otomatis: bila frame rate nyata tertinggal, beban diturunkan bertahap (tidak pernah naik sendiri) ----------
   let low = 0;
@@ -50,8 +52,9 @@
     low = 0;
     const busy = KM.state.recording || KM.state.streaming || KM.state.srt || KM.state.multicorder;
     const lv = ++KM.perf.level;
-    if (lv === 1) { st.perfLite = true; st.previewEvery = Math.max(2, st.previewEvery || 1); syncLite(); KM.toast('Performa otomatis: tampilan diringankan agar tetap mulus', 'info', 4500); }
-    else if (lv === 2) { if ((st.previewScale || 0.5) > 0.34 && !busy) { st.previewScale = 0.33; E.resize(); } st.previewEvery = 3; KM.toast('Performa otomatis: monitor Preview diperkecil', 'info', 4500); }
+    // Preview TIDAK pernah dijarangkan (itu yang membuatnya patah-patah); yang diturunkan: thumbnail, lalu resolusi Preview
+    if (lv === 1) { st.perfLite = true; syncLite(); KM.ui && KM.ui.fitStage && KM.ui.fitStage(); KM.toast('Performa otomatis: thumbnail & efek tampilan diringankan agar tetap mulus', 'info', 4500); }
+    else if (lv === 2) { if ((st.previewScale || 0.5) > 0.34 && !busy) { st.previewScale = 0.33; E.resize(); } KM.toast('Performa otomatis: resolusi monitor Preview diturunkan (tetap mulus)', 'info', 4500); }
     else if (lv === 3) { if (st.fps > 30 && !busy) { st.fps = 30; E.resize(); KM.toast('Performa otomatis: output diturunkan ke 30 fps', 'warn', 6000); } else KM.perf.level = busy ? 2 : 3, low = busy ? 0 : 5; }
     else if (lv === 4) {
       if (st.height > 720 && st.width > 1280 && !busy) { const ar = st.width / st.height; st.height = 720; st.width = Math.round(720 * ar / 2) * 2; E.resize(); KM.toast('Performa otomatis: output diturunkan ke ' + st.width + '×' + st.height + ' karena perangkat tidak kuat 1080p (ubah di Pengaturan → Video)', 'warn', 9000); }
