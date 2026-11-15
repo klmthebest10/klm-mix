@@ -42,10 +42,7 @@
     const recovering = location.hash === '#pulih';
     if (recovering) { history.replaceState(null, '', location.pathname); setTimeout(async () => { await KM.ui.restoreAutosave('silent'); KM.toast('KLM Mix dipulihkan otomatis setelah gangguan — sesi terakhir dimuat kembali', 'warn', 8000); }, 400); }
     if (KM.bootErrors.length) setTimeout(() => KM.toast && KM.toast('Sebagian modul gagal dimuat: ' + KM.bootErrors.join(' • ') + ' — fitur lain tetap berjalan.', 'warn', 9000), 800);
-    try {
-      const p = JSON.parse(localStorage.getItem('klmmix.autosave') || 'null');
-      if (p && p.inputs && p.inputs.length && !recovering) setTimeout(() => KM.ui.restoreAutosave(), 600);
-    } catch (e) {}
+    // popup 'pulihkan sesi terakhir' saat boot dihapus; pemulihan manual tetap lewat menu Preset → Pulihkan sesi terakhir
     window.addEventListener('beforeunload', () => { try { KM.ui.autosave(); } catch (e) {} });
     KM.readyAt = performance.timeOrigin + performance.now();
     console.log('%cKLM Mix ' + KM.version + ' siap', 'color:#22c55e;font-weight:bold');
