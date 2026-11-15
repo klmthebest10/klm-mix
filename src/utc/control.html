@@ -305,6 +305,7 @@ img,video,iframe{max-width:100%}
   <select class="evsel" id="evsel" title="Jenis acara"></select>
   <div class="hsp"></div>
   <div class="conn" id="conn"><b></b><span>Menghubungkan…</span></div>
+  <button class="hdr klmAirBtn" data-act="klmAir" hidden title="Tayangkan / hentikan grafis UTC di Program KLM Mix">○ UTC ON AIR</button>
   <button class="btn-red hdr" data-act="hideAll" title="Sembunyikan semua grafis (Esc)">⏻ <span class="lbl">Sembunyikan Semua</span></button>
 </header>
 
@@ -447,6 +448,9 @@ function renderAll(){
 }
 function renderAir(){
   const ev = cfg();
+  // tombol UTC ON AIR di header (jendela sendiri / HP): tampil bila KLM Mix terhubung
+  const KHa = klmHost(), ab = document.querySelector('.klmAirBtn');
+  if (ab){ const has = !!(KHa && KHa.utc); ab.hidden = !has; if (has){ const on = !!KHa.utc.onAir(); ab.textContent = on ? '● UTC ON AIR' : '○ UTC ON AIR'; ab.style.background = on ? 'linear-gradient(180deg,#e07a17,#b85f0d)' : ''; ab.style.color = on ? '#fff' : ''; } }
   const B = (k,label,on,sub) => `<button class="${on?'on':''}" data-act="toggle" data-l="${k}"><b>${label}</b>${on?'● TAYANG':(sub||'OFF')}</button>`;
   const ltA = ev.lt.items.find(x=>x.id===ev.lt.activeId);
   $('#air').innerHTML = B('lt','LOWER THIRD', ev.lt.visible && (ev.lt.multi ? ev.lt.items.some(x=>x.on) : ltA)) + B('tt','TITLE', ev.tt.visible && ev.tt.items.some(x=>x.id===ev.tt.activeId)) + B('tk','RUNNING', ev.tk.visible) + B('bug','LOGO', ev.bug.visible && (ev.bug.items||[]).some(x=>x.on!==false)) + B('loc','LOKASI', ev.loc.visible && ev.loc.items.some(x=>x.id===ev.loc.activeId)) + B('soc','SOSMED', ev.soc.visible && (ev.soc.mode!=='single' ? ev.soc.items.some(x=>x.on!==false) : ev.soc.items.some(x=>x.id===ev.soc.activeId)));
@@ -1416,8 +1420,8 @@ function srcOpts(ch){
 }
 function renderMonHead(){
   document.querySelectorAll('[data-mon-src]').forEach(el=>{ el.innerHTML = srcOpts(el.dataset.monSrc); });
-  $('#pvwName').textContent = SWS.connected ? inLabel(inById(SWS.preview)) : '';
-  $('#pgmName').textContent = SWS.connected ? inLabel(inById(SWS.program)) : '';
+  // label nama input di atas monitor Preview/Program dihapus (permintaan): monitor hanya menampilkan gambarnya
+  $('#pvwName').textContent = ''; $('#pgmName').textContent = '';
 }
 function stopMedia(ch){ if (media[ch]){ media[ch].getTracks().forEach(t=>t.stop()); media[ch] = null; } }
 async function startMedia(ch, mode){
@@ -1524,7 +1528,7 @@ function renderSw(force){
         <button class="bigtake" data-act="swTake" title="Pintasan: Spasi">TAKE ▶</button>`;
     }
   }
-  strip.innerHTML = SWS.connected ? SWS.inputs.map(i=>`<button class="${i.id===SWS.program?'is-pgm':i.id===SWS.preview?'is-pvw':''}" data-in="${esc(i.id)}" title="Klik = Preview • Klik 2x = langsung Program"><span class="n">${SWS.type==='obs'?'SCENE '+i.num:'INPUT '+i.num}</span>${esc(i.name)}</button>`).join('') : '';
+  strip.innerHTML = SWS.connected ? SWS.inputs.map(i=>`<button class="${i.id===SWS.program?'is-pgm':i.id===SWS.preview?'is-pvw':''}" data-in="${esc(i.id)}" title="${esc(i.name)} — Klik = Preview • Klik 2x = langsung Program"><span class="n">${i.num}</span></button>`).join('') : '';
   if (ui.tab==='sw' && !isTyping()) {
     const pnl = $('#panel'); if (pnl) { pnl.innerHTML = pSW(); refreshThumbs(); }
   }

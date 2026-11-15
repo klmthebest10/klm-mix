@@ -12,6 +12,10 @@
   const BASE = CFG.port && String(CFG.port) !== location.port ? (location.protocol === 'https:' ? 'https:' : 'http:') + '//' + location.hostname + ':' + (location.protocol === 'https:' && CFG.httpsPort ? CFG.httpsPort : CFG.port) : '';
   let embedded = false;
   try { embedded = window.parent !== window; } catch (e) { embedded = true; }
+  // sudah dibuka dari KLM Mix (iframe atau jendela sendiri): kontrolnya sudah ada di panel → pill tidak perlu
+  let hostedInKM = false;
+  try { hostedInKM = !!((embedded && window.parent.KM) || (window.opener && window.opener.KM)); } catch (e) {}
+  if (hostedInKM) return;
   const NAME = APP === 'score' ? 'UTC Score' : 'UTC Acara';
   const KEY = 'klmbridge.open.' + APP;
   let open = false; try { open = localStorage.getItem(KEY) === '1'; } catch (e) {}
