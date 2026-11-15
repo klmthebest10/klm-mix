@@ -140,6 +140,10 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.14.10
+- **Nama input di daftar input UTC Acara kembali tampil** (nomor + nama). Keterangan nama hanya dihilangkan dari dalam layout monitor Preview & Program UTC Acara.
+- **HP / APK: tulisan PREVIEW & PROGRAM di panel UTC Acara juga dipindah ke luar bingkai monitor**, sama seperti monitor utama KLM Mix (v1.14.9).
+
 ### Baru di v1.14.9
 - **HP / APK Android: label PREVIEW & PROGRAM dipindah ke luar bingkai monitor** (di atas gambar), sehingga bingkai hanya berisi gambar.
 

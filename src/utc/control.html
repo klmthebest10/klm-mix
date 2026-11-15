@@ -238,6 +238,12 @@ img,video,iframe{max-width:100%}
   .mons{display:flex}
   .mswitch{display:flex}.mswitch button{flex:1}
   .mon .scr.hid{display:none}
+  /* HP / APK: tulisan PREVIEW / PROGRAM di luar bingkai monitor, bingkai hanya berisi gambar */
+  .scr{background:none;border:0;border-radius:0;overflow:visible}
+  .scr-h.pvw,.scr-h.pgm,html.klmui .scr-h.pvw,html.klmui .scr-h.pgm{background:none!important}
+  html.klmui .scr{background:none!important;border:0!important;box-shadow:none!important}
+  .scr .frame{border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  #scrPvw .frame{border-color:rgba(30,194,107,.4)} #scrPgm .frame{border-color:rgba(242,69,61,.5)}
   .scr-h{padding:6px 10px;letter-spacing:1px}
   .scr-h select.srcsel{max-width:150px}
   .swbar{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:8px}
@@ -1528,7 +1534,7 @@ function renderSw(force){
         <button class="bigtake" data-act="swTake" title="Pintasan: Spasi">TAKE ▶</button>`;
     }
   }
-  strip.innerHTML = SWS.connected ? SWS.inputs.map(i=>`<button class="${i.id===SWS.program?'is-pgm':i.id===SWS.preview?'is-pvw':''}" data-in="${esc(i.id)}" title="${esc(i.name)} — Klik = Preview • Klik 2x = langsung Program"><span class="n">${i.num}</span></button>`).join('') : '';
+  strip.innerHTML = SWS.connected ? SWS.inputs.map(i=>`<button class="${i.id===SWS.program?'is-pgm':i.id===SWS.preview?'is-pvw':''}" data-in="${esc(i.id)}" title="${esc(i.name)} — Klik = Preview • Klik 2x = langsung Program"><span class="n">${i.num}</span>${esc(i.name)}</button>`).join('') : '';
   if (ui.tab==='sw' && !isTyping()) {
     const pnl = $('#panel'); if (pnl) { pnl.innerHTML = pSW(); refreshThumbs(); }
   }
