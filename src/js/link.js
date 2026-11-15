@@ -99,6 +99,11 @@
       }
       case 'signal': await onSignal(m); break;
       case 'cam-info': { const p = L.peers.get(m.from); if (p) { p.info = m.info; KM.changed('peers'); } break; }
+      case 'cam-zoom': { // zoom digital dari HP (kamera tanpa zoom hardware, mis. aplikasi Android) → dipotong di PC
+        const inp = S.inputs.find((i) => i.rt.camId === m.from);
+        if (inp) { inp.rt.dzoom = Math.max(1, Math.min(8, +m.z || 1)); inp.rt.zoom = inp.rt.dzoom; KM.changed('input'); }
+        break;
+      }
       case 'fn': {
         let ok = false, msg = '';
         try { const r = await KM.api.exec(m.fn, m.params || {}); ok = r !== false; if (typeof r === 'string') msg = r; }

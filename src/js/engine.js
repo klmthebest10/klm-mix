@@ -395,6 +395,7 @@
     if (KM.inputTypes[inp.type].noVideo) return null;
     const rt = inp.rt;
     if (KM.seg && KM.seg.on(inp)) return null; // kartu menampilkan hasil olahan, bukan video mentah
+    if (rt.dzoom > 1.001) return null; // zoom digital KLMCAM: kartu menampilkan gambar yang sudah di-zoom
     if (rt.stream && rt.stream.getVideoTracks().some((t) => t.readyState === 'live')) return rt.stream;
     const md = KM.inputs.media(inp);
     if (!md || md.tagName !== 'VIDEO' || md.paused || md.readyState < 2 || !md.captureStream || rt.capFail) return null;

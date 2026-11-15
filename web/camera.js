@@ -26,7 +26,7 @@
     const [t, c] = map[s] || [s, ''];
     el.textContent = t; el.className = 'pill ' + c;
   }
-  function labels() { $('slotLbl').textContent = 'CAM ' + cfg.slot; $('nameLbl').textContent = cfg.name; video.classList.toggle('mirror', cfg.facing === 'user' && cfg.mirror); }
+  function labels() { $('slotLbl').textContent = 'CAM ' + cfg.slot; $('nameLbl').textContent = cfg.name; video.classList.toggle('mirror', cfg.facing === 'user' && cfg.mirror); previewTransform(); }
   function setTally(t) {
     if (t === tally) return;
     tally = t; document.body.classList.remove('t-program', 't-preview');
@@ -37,9 +37,13 @@
   // ---------- media ----------
   async function openVideo() {
     const s = settings;
-    const st = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: cfg.facing }, width: { ideal: s.width }, height: { ideal: s.height }, frameRate: { ideal: s.fps, max: s.fps } }, audio: false
-    });
+    const vc = { facingMode: { ideal: cfg.facing }, width: { ideal: s.width }, height: { ideal: s.height }, frameRate: { ideal: s.fps, max: s.fps } };
+    // minta izin zoom optik/hardware (Chrome); di aplikasi Android (WebView) biasanya tidak tersedia → zoom digital di bawah
+    let sup = {}; try { sup = navigator.mediaDevices.getSupportedConstraints() || {}; } catch (e) {}
+    if (sup.zoom) vc.zoom = true;
+    let st;
+    try { st = await navigator.mediaDevices.getUserMedia({ video: vc, audio: false }); }
+    catch (e) { if (!vc.zoom) throw e; delete vc.zoom; st = await navigator.mediaDevices.getUserMedia({ video: vc, audio: false }); }
     const t = st.getVideoTracks()[0];
     try { t.contentHint = 'motion'; } catch (e) {}
     return t;
@@ -59,15 +63,51 @@
     video.play().catch(() => {});
     updateCaps(); labels();
   }
+  // ---------- zoom: hardware bila kamera/peramban mendukung, selain itu ZOOM DIGITAL ----------
+  // Zoom digital: pratinjau di HP diperbesar, nilai dikirim ke PC dan PC memotong (crop) gambar KLMCAM — tanpa beban di HP.
+  let zoomHW = false, dz = 1, dzSent = 0, dzT = 0;
+  const DZ_MAX = 5;
+  function zoomCaps() { try { const c = vTrack && vTrack.getCapabilities ? vTrack.getCapabilities() : {}; return c.zoom && c.zoom.max > c.zoom.min ? c.zoom : null; } catch (e) { return null; } }
   function updateCaps() {
     let caps = {}; try { caps = vTrack.getCapabilities ? vTrack.getCapabilities() : {}; } catch (e) {}
-    const z = $('zoom');
-    if (caps.zoom) { z.min = caps.zoom.min; z.max = caps.zoom.max; z.step = caps.zoom.step || 0.1; z.disabled = false; } else { z.disabled = true; }
+    const z = $('zoom'), zc = zoomCaps();
+    zoomHW = !!zc;
+    if (zc) { z.min = zc.min; z.max = zc.max; z.step = zc.step || 0.1; let cur = zc.min; try { cur = vTrack.getSettings().zoom || zc.min; } catch (e) {} z.value = cur; $('zoomV').textContent = (+cur).toFixed(1) + '×'; if (dz !== 1) setDigital(1); }
+    else { z.min = 1; z.max = DZ_MAX; z.step = 0.1; z.value = dz; $('zoomV').textContent = dz.toFixed(1) + '×'; }
+    z.disabled = false;
     $('torch').style.opacity = caps.torch ? 1 : 0.4;
+    previewTransform();
+  }
+  function previewTransform() {
+    const m = cfg.facing === 'user' && cfg.mirror;
+    video.style.transform = (m ? 'scaleX(-1) ' : '') + (dz > 1.001 ? 'scale(' + dz + ')' : '');
+  }
+  function sendZoom(force) {
+    if (!conn || !conn.open) return;
+    if (!force && dz === dzSent) return;
+    dzSent = dz; conn.send({ t: 'cam-zoom', z: +dz.toFixed(3) });
+  }
+  function setDigital(v) {
+    dz = Math.max(1, Math.min(DZ_MAX, +v || 1));
+    $('zoom').value = dz; $('zoomV').textContent = dz.toFixed(1) + '×';
+    previewTransform();
+    clearTimeout(dzT); dzT = setTimeout(() => sendZoom(), 30); // digabung bila slider/cubit digeser cepat
   }
   async function applyZoom(v) {
-    try { const caps = vTrack.getCapabilities(); if (!caps.zoom) return; v = Math.max(caps.zoom.min, Math.min(caps.zoom.max, v)); await vTrack.applyConstraints({ advanced: [{ zoom: v }] }); $('zoom').value = v; $('zoomV').textContent = (+v).toFixed(1) + '×'; } catch (e) {}
+    const zc = zoomCaps();
+    if (!zc) return setDigital(v);
+    try { v = Math.max(zc.min, Math.min(zc.max, v)); await vTrack.applyConstraints({ advanced: [{ zoom: v }] }); $('zoom').value = v; $('zoomV').textContent = (+v).toFixed(1) + '×'; }
+    catch (e) { setDigital(v); }
   }
+  function currentZoom() { const zc = zoomCaps(); if (zc) { try { return vTrack.getSettings().zoom || zc.min; } catch (e) { return zc.min; } } return dz; }
+  // cubit dua jari di layar untuk zoom
+  (function pinch() {
+    let d0 = 0, z0 = 1;
+    const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    document.addEventListener('touchstart', (e) => { if (e.touches.length === 2 && !$('panel').classList.contains('show')) { d0 = dist(e.touches); z0 = currentZoom(); } }, { passive: true });
+    document.addEventListener('touchmove', (e) => { if (e.touches.length === 2 && d0) { const k = dist(e.touches) / d0; applyZoom(z0 * k); } }, { passive: true });
+    document.addEventListener('touchend', (e) => { if (e.touches.length < 2) d0 = 0; }, { passive: true });
+  })();
   async function setTorch(on) { torchOn = on; try { await vTrack.applyConstraints({ advanced: [{ torch: on }] }); } catch (e) { KMP.toast('Senter tidak didukung'); } $('torch').classList.toggle('on', on); }
   async function focusAuto() { try { await vTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); KMP.toast('Fokus otomatis'); } catch (e) {} }
   async function flip() {
@@ -130,6 +170,7 @@
     offer.sdp = offer.sdp.replace(/(a=fmtp:\d+ .*profile-level-id=[0-9a-fA-F]+.*)/g, '$1;x-google-start-bitrate=' + Math.round((settings.bitrate || 6000) * 0.7) + ';x-google-min-bitrate=1000');
     await pc.setLocalDescription(offer);
     conn.send({ t: 'signal', data: { sdp: pc.localDescription } });
+    if (!zoomHW) setTimeout(() => sendZoom(true), 500);
   }
 
   async function onMsg(m) {

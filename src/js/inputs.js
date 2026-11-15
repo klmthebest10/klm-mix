@@ -265,6 +265,17 @@
     hasAudio: (inp) => !!(inp.rt.pcmNode || inp.opts.pcAudio || (inp.rt.stream && inp.rt.stream.getAudioTracks().length))
   };
 
+  /** zoom digital (dari HP tanpa zoom hardware): potong bagian tengah sumber ke kanvas seukuran potongan.
+   *  Dipakai semua jalur (Program, Preview, thumbnail, latar AI, chroma) karena dilakukan di tingkat sumber. */
+  function digitalZoom(inp, s, z) {
+    const rt = inp.rt, sw = Math.max(2, Math.round(s.w / z)), sh = Math.max(2, Math.round(s.h / z));
+    let c = rt.dzCanvas;
+    if (!c) { c = rt.dzCanvas = document.createElement('canvas'); rt.dzCtx = c.getContext('2d'); }
+    if (c.width !== sw || c.height !== sh) { c.width = sw; c.height = sh; }
+    try { rt.dzCtx.drawImage(s.src, (s.w - sw) / 2, (s.h - sh) / 2, sw, sh, 0, 0, sw, sh); } catch (e) { return s; }
+    return { src: c, w: sw, h: sh };
+  }
+
   T.klmcam = {
     label: 'KLMCAM (Kamera HP)', icon: '📱',
     create(inp) {
@@ -274,13 +285,16 @@
     },
     setStream(inp, stream) {
       if (inp.rt.el) { try { inp.rt.el.srcObject = null; inp.rt.el.remove(); } catch (e) {} }
+      if (!stream) inp.rt.dzoom = 1; // HP berikutnya mengirim nilai zoom-nya sendiri
       inp.rt.stream = stream;
       inp.rt.el = stream ? streamVideo(stream) : null;
       if (stream && stream.getAudioTracks().length) KM.audio && KM.audio.attach(inp, true);
       KM.changed('input');
     },
     source(inp) {
-      return vSrc(inp) || placeholder(inp, '📱 KLMCAM #' + inp.opts.slot, inp.rt.camId ? 'Menyambung…' : 'Menunggu HP dengan slot ' + inp.opts.slot);
+      const v = vSrc(inp);
+      if (v && inp.rt.dzoom > 1.001) return digitalZoom(inp, v, inp.rt.dzoom);
+      return v || placeholder(inp, '📱 KLMCAM #' + inp.opts.slot, inp.rt.camId ? 'Menyambung…' : 'Menunggu HP dengan slot ' + inp.opts.slot);
     },
     hasAudio: (inp) => !!(inp.rt.stream && inp.rt.stream.getAudioTracks().length)
   };
