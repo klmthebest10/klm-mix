@@ -140,6 +140,12 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.14.5
+- **Monitor mengikuti resolusi output tanpa ruang kosong hitam**: bingkai Preview & Program kini memakai rasio output (16:9, 4:3, 9:16, dll.) dan kanvasnya mengisi bingkai tepat. Lebar bingkai menyesuaikan panel dan tinggi stage. Header monitor menyusut otomatis bila bingkai sempit (output vertikal / layar kecil), sehingga tombolnya tidak terpotong.
+- **Input tidak dipotong**: thumbnail kartu tetap 16:9 agar daftar input rapi, gambar di dalamnya dibuat muat (letterbox). Salinan Preview/Program ke thumbnail tidak lagi ditarik paksa.
+- **Ringan untuk laptop lemah**: Program (kanvas 1080p) hanya digambar ulang saat isinya berubah atau output/rekam aktif, sehingga Program diam (mis. warna) tidak dicat ulang 30×/detik hanya karena Preview bergerak. Kanvas Preview memakai ukuran tampilnya, bukan 960 px tetap. Performa otomatis menurunkan output ke 720p lebih cepat (±4 detik tertinggal), lalu 30 fps, lalu 540p bila masih berat.
+- Hasil uji (Chrome tanpa GPU, CPU diperlambat 4× untuk meniru laptop lemah, 1366×768): saat sumber diam, *long task* turun dari ±34 menjadi ±5 dalam 6 detik. Sumber kamera di Preview masih dibatasi konversi video di CPU, jadi perlu uji di laptop sungguhan.
+
 ### Baru di v1.14.4
 - **KLMCAM bisa zoom di APK Android**: aplikasi Android (WebView) tidak memberi akses zoom kamera, sehingga slider zoom sebelumnya mati. Kini bila zoom hardware tidak tersedia, KLMCAM memakai **zoom digital** 1–5×: pratinjau di HP ikut membesar, PC memotong gambar KLMCAM (Program, Preview, thumbnail, Latar AI, chroma ikut) tanpa beban tambahan di HP. Bisa digeser dengan slider, **cubit dua jari** di layar HP, atau dari slider zoom di pengaturan input di PC. Di HP/peramban yang mendukung zoom hardware, zoom optik tetap dipakai
 

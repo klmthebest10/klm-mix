@@ -232,7 +232,7 @@
 
   /** Mulai transisi ke input (default: preview) */
   E.transition = function (type, dur, toKey, opts) {
-    opts = opts || {};
+    opts = opts || {}; E.dirtyAt = KM.now();
     if (S.trans && !S.trans.manual) finishTransition();
     const to = toKey != null ? KM.getInput(toKey) : KM.getInput(S.previewId);
     if (!to) return false;
@@ -275,12 +275,12 @@
 
   E.setPreview = function (key) {
     const i = KM.getInput(key); if (!i) return false;
-    S.previewId = i.id; KM.changed('preview'); return true;
+    S.previewId = i.id; E.dirtyAt = KM.now(); KM.changed('preview'); return true;
   };
 
   // ---------- overlay 1-4 ----------
   E.overlay = function (n, key, mode) {
-    const ch = S.overlays[n]; if (!ch) return false;
+    const ch = S.overlays[n]; if (!ch) return false; E.dirtyAt = KM.now();
     const inp = key != null && key !== '' ? KM.getInput(key) : KM.getInput(ch.inputId);
     mode = mode || 'toggle';
     const isOn = ch.phase === 'in' || ch.phase === 'on';
@@ -329,7 +329,7 @@
 
   // ---------- Fade To Black ----------
   E.ftb = function (on) {
-    S.ftb.on = on == null ? !S.ftb.on : !!on;
+    S.ftb.on = on == null ? !S.ftb.on : !!on; E.dirtyAt = KM.now();
     S.ftb.t0 = KM.now(); S.ftb.from = S.ftb.v;
     KM.changed('ftb');
   };
@@ -431,8 +431,8 @@
     try {
       if (KM.inputTypes[inp.type].noVideo) { const s = KM.inputs.source(inp); c.fillStyle = '#000'; c.fillRect(0, 0, cv.width, cv.height); if (s) c.drawImage(s.src, 0, 0, cv.width, cv.height); return; }
       // input yang sedang di Preview / Program sudah digambar mesin frame ini → salin saja (1 drawImage, sama persis)
-      if (inp.id === S.previewId && !E.gridActive() && E.prevAt && now - E.prevAt < 120) { c.drawImage(E.prev, 0, 0, cv.width, cv.height); return; }
-      if (inp.id === S.programId && progClean() && E.progAt && now - E.progAt < 120) { c.drawImage(E.prog, 0, 0, cv.width, cv.height); return; }
+      if (inp.id === S.previewId && !E.gridActive() && E.prevAt && now - E.prevAt < 120) { E.drawContain(c, E.prev, 0, 0, cv.width, cv.height); return; }
+      if (inp.id === S.programId && progClean() && E.progAt && now - E.progAt < 120) { E.drawContain(c, E.prog, 0, 0, cv.width, cv.height); return; }
       c.fillStyle = '#000'; c.fillRect(0, 0, cv.width, cv.height);
       drawInputRect(c, inp, 0, 0, cv.width, cv.height, 0);
     } catch (e) {}
@@ -470,6 +470,24 @@
 
   // ---------- loop render ----------
   let fpsCount = 0, fpsT = KM.now(), mvTick = 0;
+  const DIRTY_MS = 1500; // setelah ada perubahan, Program & Preview digambar ulang selama jangka ini
+  /** sumber bergerak (kamera, video diputar, layer/gambar bergerak, dll.) → harus digambar tiap frame */
+  function feedMoving(inp) {
+    if (!inp) return false;
+    return movingInput(inp) || !!E.liveStream(inp) || !!KM.inputs.isPlaying(inp) || !!(inp.rt && inp.rt.anim) || compMoving(inp, 0);
+  }
+  /** output/rekam/monitor eksternal aktif → Program harus selalu digambar (frame keluar terus) */
+  E.outputBusy = () => !!(S.recording || S.streaming || S.ndiOut || S.multicorder || S.srt || S.externalOn || E.mvOn || (KM.replay && KM.replay.enabled));
+  function previewMoving() {
+    if (E.gridActive()) return E.gridIds().some((id) => feedMoving(KM.getInput(id)));
+    return feedMoving(KM.getInput(S.previewId));
+  }
+  function programMoving() {
+    const f = S.ftb;
+    if (S.trans || f.v !== (f.on ? 1 : 0) || (S.overlays || []).some((o) => o && o.phase !== 'off')) return true;
+    if (KM.utc && KM.utc.onAir && KM.utc.onAir()) return true;
+    return feedMoving(KM.getInput(S.programId));
+  }
   E.render = function () {
     const now = KM.now();
     E.frame++;
@@ -486,29 +504,33 @@
     for (const inp of S.inputs) if (inp.type === 'list') KM.inputTypes.list.tick(inp);
     updateLive();
 
-    // PROGRAM
-    const c = E.pctx;
-    c.globalAlpha = 1; c.fillStyle = '#000'; c.fillRect(0, 0, E.W, E.H);
-    if (S.trans) drawTransition(c, S.trans);
-    else full(c, KM.getInput(S.programId), 1);
-    drawOverlays(c);
-    if (KM.utc) KM.utc.drawDSK(c, E.W, E.H); // lapisan UTC ON AIR (grafis UTC KLM Acara asli)
-    if (f.v > 0) { c.fillStyle = 'rgba(0,0,0,' + f.v + ')'; c.fillRect(0, 0, E.W, E.H); }
-    E.progAt = now;
+    // PROGRAM — hanya digambar ulang bila isinya berubah atau output aktif. Kanvas 1080p yang dicat ulang tiap frame
+    // adalah beban terbesar di laptop lemah; saat Program diam (mis. warna) kanvasnya dibiarkan apa adanya.
+    const outOn = E.outputBusy();
+    if (outOn || !E.progAt || now - E.dirtyAt < DIRTY_MS || now - (E.progDrawAt || 0) > 1000 || programMoving()) { // pengaman: paling lambat digambar ulang tiap 1 detik
+      const c = E.pctx;
+      c.globalAlpha = 1; c.fillStyle = '#000'; c.fillRect(0, 0, E.W, E.H);
+      if (S.trans) drawTransition(c, S.trans);
+      else full(c, KM.getInput(S.programId), 1);
+      drawOverlays(c);
+      if (KM.utc) KM.utc.drawDSK(c, E.W, E.H); // lapisan UTC ON AIR (grafis UTC KLM Acara asli)
+      if (f.v > 0) { c.fillStyle = 'rgba(0,0,0,' + f.v + ')'; c.fillRect(0, 0, E.W, E.H); }
+      E.progAt = E.progDrawAt = now;
+    } else E.progAt = now; // isi kanvas Program masih sama dengan keadaan sekarang
 
     // PREVIEW (dilewati saat jendela diminimize / mode hemat)
     const idle = document.hidden && KM.settings.pauseHidden !== false;
     // Monitor Preview digambar SETIAP frame (output 50/60 fps → ±30 fps, kecuali mode Kualitas) agar gerakan mulus.
     // Beban diturunkan dengan cara lain: Preview = Program → cukup salin kanvas Program; resolusi Preview mengikuti ukuran tampil.
     const pvEvery = KM.settings.fps > 30 && KM.settings.perf !== 'kualitas' ? Math.round(KM.settings.fps / 30) : 1;
-    if (!idle && E.frame % pvEvery === 0) {
+    if (!idle && E.frame % pvEvery === 0 && (outOn || !E.prevAt || now - E.dirtyAt < DIRTY_MS || now - (E.prevDrawAt || 0) > 1000 || previewMoving())) {
       const v = E.vctx, pw = E.prev.width, ph = E.prev.height;
       v.globalAlpha = 1;
       if (E.gridActive()) { v.fillStyle = '#000'; v.fillRect(0, 0, pw, ph); drawPvGrid(v, pw, ph); }
       else if (S.previewId && S.previewId === S.programId && progClean()) v.drawImage(E.prog, 0, 0, pw, ph);
       else { v.fillStyle = '#000'; v.fillRect(0, 0, pw, ph); const pv = KM.getInput(S.previewId); if (pv) drawInputRect(v, pv, 0, 0, pw, ph, 0); }
-      E.prevAt = now;
-    }
+      E.prevAt = E.prevDrawAt = now;
+    } else if (!idle) E.prevAt = now; // isi Preview masih sama (diam): salinan thumbnail tetap bisa dipakai
 
     if (!idle) updateThumbs(now);
     if (E.mvOn && (++mvTick % 2 === 0)) drawMultiview();

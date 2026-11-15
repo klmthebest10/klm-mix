@@ -48,16 +48,20 @@
     const st = KM.settings, E = KM.engine;
     if (st.autoPerf === false || document.hidden || !E || E.quiet || KM.perf.level >= 4) { low = 0; return; }
     if (fps >= st.fps * 0.8) { low = Math.max(0, low - 1); return; }
-    if (++low < 6) return; // ±6 detik berturut-turut tertinggal
+    if (++low < 4) return; // ±4 detik berturut-turut tertinggal
     low = 0;
     const busy = KM.state.recording || KM.state.streaming || KM.state.srt || KM.state.multicorder;
     const lv = ++KM.perf.level;
-    // Preview TIDAK pernah dijarangkan (itu yang membuatnya patah-patah); yang diturunkan: thumbnail, lalu resolusi Preview
+    // Preview TIDAK pernah dijarangkan (itu yang membuatnya patah-patah). Urutan: thumbnail → resolusi output (paling
+    // besar dampaknya: piksel 1080p dibanding 720p ≈ 2,25×) → fps → output 540p bila masih berat.
     if (lv === 1) { st.perfLite = true; syncLite(); KM.ui && KM.ui.fitStage && KM.ui.fitStage(); KM.toast('Performa otomatis: thumbnail & efek tampilan diringankan agar tetap mulus', 'info', 4500); }
-    else if (lv === 2) { if ((st.previewScale || 0.5) > 0.34 && !busy) { st.previewScale = 0.33; E.resize(); } KM.toast('Performa otomatis: resolusi monitor Preview diturunkan (tetap mulus)', 'info', 4500); }
+    else if (lv === 2) {
+      if (st.height > 720 && !busy) { const ar = st.width / st.height; st.height = 720; st.width = Math.round(720 * ar / 2) * 2; E.resize(); KM.toast('Performa otomatis: output diturunkan ke ' + st.width + '×' + st.height + ' agar tetap lancar (ubah di Pengaturan → Video)', 'warn', 9000); }
+      else if (busy) KM.perf.level = 1;
+    }
     else if (lv === 3) { if (st.fps > 30 && !busy) { st.fps = 30; E.resize(); KM.toast('Performa otomatis: output diturunkan ke 30 fps', 'warn', 6000); } else KM.perf.level = busy ? 2 : 3, low = busy ? 0 : 5; }
     else if (lv === 4) {
-      if (st.height > 720 && st.width > 1280 && !busy) { const ar = st.width / st.height; st.height = 720; st.width = Math.round(720 * ar / 2) * 2; E.resize(); KM.toast('Performa otomatis: output diturunkan ke ' + st.width + '×' + st.height + ' karena perangkat tidak kuat 1080p (ubah di Pengaturan → Video)', 'warn', 9000); }
+      if (st.height > 540 && !busy) { const ar = st.width / st.height; st.height = 540; st.width = Math.round(540 * ar / 2) * 2; E.resize(); KM.toast('Performa otomatis: output diturunkan ke ' + st.width + '×' + st.height + ' karena perangkat masih berat (ubah di Pengaturan → Video)', 'warn', 9000); }
       else if (busy) { KM.perf.level = 3; }
     }
     KM.saveSettings(); KM.changed('perf');

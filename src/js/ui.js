@@ -246,8 +246,10 @@
   // Kartu input dibuat SEKALI per input lalu dipakai ulang (disimpan di inp.rt.card). Menambah, menghapus, mengganti nama
   // atau mengurutkan input hanya memindah/menambal kartu yang perlu — <video> thumbnail live tidak pernah dibuat ulang,
   // jadi tidak ada kedip hitam di kartu lain.
+  /** kartu input tetap 16:9 agar daftar input rapi; gambar di dalamnya dibuat muat (tidak dipotong) */
+  const thumbH = () => 144;
   function buildCard(inp) {
-    if (!inp.rt.thumb) { inp.rt.thumb = h('canvas'); inp.rt.thumb.width = 256; inp.rt.thumb.height = 144; thumbIO && thumbIO.observe(inp.rt.thumb); }
+    if (!inp.rt.thumb) { inp.rt.thumb = h('canvas'); inp.rt.thumb.width = 256; inp.rt.thumb.height = thumbH(); thumbIO && thumbIO.observe(inp.rt.thumb); }
     const num = h('span.num'), title = h('span', { ondblclick: async () => { const v = await UI.prompt('Ganti nama input', inp.title); if (v) { inp.title = v; KM.changed('inputs'); } } });
     const th = h('div.thumb', {
       onclick: (e) => { if (e.ctrlKey) KM.engine.cut(inp.id); else KM.engine.setPreview(inp.id); },
@@ -402,6 +404,7 @@
   }
   function renderGridBar() {
     const box = $('#pvwGrid'); if (!box) return;
+    if (KM.engine) KM.engine.dirtyAt = KM.now(); // isi grid berubah → Preview digambar ulang
     const g = grid(), on = !!g.on, n = KM.engine.gridIds().length;
     box.replaceChildren(
       h('button.ic' + (on ? '.on' : ''), { title: on ? 'Matikan grid (kembali ke 1 input)' : 'Grid: tampilkan banyak input di Preview', onclick: () => UI.setGrid() }, KI.el('grid')),
@@ -413,36 +416,22 @@
   UI.renderGridBar = renderGridBar;
 
   // ---------- ukuran monitor Preview / Program ----------
-  // Tanpa grid: kanvas memenuhi panel (rasio output terjaga, ikut membesar — tidak tertahan di resolusi preview).
-  // Dengan grid: kanvas Preview mengikuti BENTUK panel (selebar & setinggi panel) sehingga kotak-kotak grid memakai
-  // seluruh lebar; jumlah kolom dipilih otomatis (engine.gridLayout).
+  // Bingkai monitor mengikuti RASIO output (variabel --ar di CSS): lebarnya menyesuaikan panel dan tinggi stage (--mon-h),
+  // kanvasnya mengisi bingkai tepat → tidak ada ruang kosong hitam. Kanvas Program tetap resolusi output (tidak diubah).
+  // Preview memakai resolusi = ukuran tampilnya (tidak lebih) → beban render mengecil di layar kecil / laptop lemah.
   let fitRaf = 0;
   function fitNow() {
     fitRaf = 0;
-    const ar = (KM.settings.width || 16) / (KM.settings.height || 9);
-    [['#pgm', false], ['#pvw', true]].forEach(([sel, isPv]) => {
-      const cv = $(sel); if (!cv || !cv.parentElement) return;
-      const wrap = cv.parentElement, W = wrap.clientWidth, H = wrap.clientHeight;
-      if (W < 20 || H < 20) return;
-      const grid = isPv && KM.engine.gridActive && KM.engine.gridActive();
-      let w, h;
-      if (grid) {
-        w = W; h = H;
-        const k = KM.settings.perfLite ? 0.75 : 1, cap = Math.min(1, 1600 / Math.max(W * k, H * k));
-        KM.engine.setPreviewSize && KM.engine.setPreviewSize(W * k * cap, H * k * cap);
-      } else {
-        w = Math.min(W, H * ar); h = w / ar;
-        // resolusi Preview mengikuti ukuran tampilnya (tajam saat panel besar), minimal skala preview, maksimal resolusi output;
-        // mode Hemat tetap memakai skala preview (beban render rendah)
-        if (isPv && KM.engine.setPreviewSize) {
-          const ps = KM.settings.previewScale || 0.5, OW = KM.settings.width || 1280;
-          if (KM.settings.perfLite) KM.engine.setPreviewSize();
-          else { const pw = Math.max(OW * ps, Math.min(OW, w)); KM.engine.setPreviewSize(pw, pw / ar); } // = ukuran tampil (piksel CSS), tidak lebih
-        }
-      }
-      w = Math.floor(w); h = Math.floor(h);
-      if (cv._fw !== w || cv._fh !== h) { cv._fw = w; cv._fh = h; Object.assign(cv.style, { width: w + 'px', height: h + 'px', maxWidth: 'none', maxHeight: 'none', aspectRatio: 'auto' }); }
-    });
+    const ow = KM.settings.width || 1920, oh = KM.settings.height || 1080, ar = ow / oh;
+    document.documentElement.style.setProperty('--ar', ar.toFixed(5));
+    const pv = $('#pvw'); if (!pv || !KM.engine.setPreviewSize) return;
+    const W = pv.clientWidth; if (W < 20) return;
+    const st = KM.settings, grid = !!(KM.engine.gridActive && KM.engine.gridActive());
+    let pw;
+    if (grid) pw = Math.min(W, 1600); // grid: kotak-kotak memakai seluruh bingkai
+    else pw = Math.min(W, Math.max(ow * (st.previewScale || 0.5), st.perfLite ? 360 : 480), ow);
+    if (st.perfLite && grid) pw = Math.round(pw * 0.75);
+    KM.engine.setPreviewSize(Math.round(pw), Math.round(pw / ar));
   }
   UI.fitStage = () => { if (!fitRaf) fitRaf = requestAnimationFrame(fitNow); };
   if (window.ResizeObserver) {
