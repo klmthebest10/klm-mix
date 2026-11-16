@@ -140,11 +140,6 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
-### Baru di v1.14.12
-- **Grafis UTC Acara jauh lebih ringan saat banyak grafis menyala bersamaan, terutama dengan efek cahaya.** Overlay kini punya *mode efek ringan* yang menyala otomatis di KLM Mix bila ≥2 grafis tampil, perangkat lemah (≤4 inti / ≤4 GB), atau mode Hemat/performa otomatis aktif. Efek yang menggambar ulang area besar tiap frame dibekukan (kilau tepi berputar, berkas cahaya, denyut glow, teks berkilau, sinar opening, kilau logo); kilau menyapu tetap hidup. Animasi masuk/keluar memakai versi tanpa filter blur/brightness.
-- Lapisan grafis dirender maks. 30 fps di mode ringan (running text tetap penuh).
-- Uji beban (5 grafis + efek cahaya, CPU dibatasi 8×): 47 → 60 fps, jeda frame terpanjang 50 ms → 17 ms. Pengaturan `utcFx` (`auto` / `lite` / `full`) bisa memaksa mode.
-
 ### Baru di v1.14.11
 - **KLM Remote (halaman remote di HP/APK): tulisan PREVIEW & PROGRAM dipindah ke luar bingkai monitor**, di atas gambar. Bingkai hanya berisi gambar.
 

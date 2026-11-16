@@ -211,10 +211,7 @@
     const L = LY[id];
     if (!L.gl && !initGL(L)) return;
     L.started = true; L.paused = false; L.usedAt = KM.now(); L.native = L.nextNative = null; L.has = false; L.bbox = null;
-    const lite = !!(KM.settings.perfLite || KM.settings.perf === 'hemat');
-    // lapisan grafis dirender maks. 30 fps di mode ringan (running text tetap penuh); efek cahaya ringan diatur 'fx'
-    const fps = id === 'tk' || !lite ? fpsOsr() : Math.min(30, fpsOsr());
-    window.klm.send('utc:start', { L: id, w: KM.settings.width, h: KM.settings.height, fps, fx: lite ? 'lite' : (KM.settings.utcFx || 'auto') });
+    window.klm.send('utc:start', { L: id, w: KM.settings.width, h: KM.settings.height, fps: fpsOsr() });
   }
   function pauseLayer(id) { const L = LY[id]; if (L.started && !L.paused) { L.paused = true; L.native = L.nextNative = null; window.klm.send('utc:pause', { L: id }); } }
   function resumeLayer(id) { const L = LY[id]; L.usedAt = KM.now(); if (!L.started) startLayer(id); else if (L.paused) { L.paused = false; window.klm.send('utc:resume', { L: id }); } }

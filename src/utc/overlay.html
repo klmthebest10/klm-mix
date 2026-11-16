@@ -79,23 +79,6 @@ body.pv{background:#0b0d12 repeating-conic-gradient(#151922 0 25%,#0f1218 0 50%)
 .lx-shimmer .card .nm,.lx-shimmer .tt-main,.lx-shimmer .gp,.lx-shimmer .sitem .sh,.ocl-shimmer .oc-ti,.ocl-combo .oc-ti{will-change:transform}
 .L-orbit .lgb::before,.S-badge .si::before{will-change:transform}
 @keyframes kShim{0%{background-position:150% 0}100%{background-position:-100% 0}}
-/* ===== mode efek ringan (fxlite) =====
-   Dipakai otomatis saat render offscreen di KLM Mix bila ≥2 grafis tampil bersamaan / perangkat lemah / mode Hemat.
-   Efek cahaya yang menggambar ulang area besar tiap frame (kilau tepi berputar, berkas cahaya, denyut, teks berkilau)
-   dibekukan; kilau menyapu (hanya transform) tetap hidup. Animasi masuk/keluar tanpa filter blur/brightness. */
-html.fxlite .edge{animation:none;--ang:300deg}
-html.fxlite .edge2 rect{animation:none}
-html.fxlite .flare,html.fxlite .sp{display:none}
-html.fxlite .beam{animation:none;opacity:.6}
-html.fxlite .glw,html.fxlite .bug .bglow{animation:none;opacity:.55;will-change:auto}
-html.fxlite .bug .bglow{filter:none}
-html.fxlite .lx-shimmer .card:not(.L-ribbon) .nm,html.fxlite .lx-shimmer .tt-main,html.fxlite .lx-shimmer .gp,html.fxlite .lx-shimmer .sitem .sh,html.fxlite .ocl-shimmer .oc-ti,html.fxlite .ocl-combo .oc-ti{animation:none;will-change:auto}
-html.fxlite .oc-rays,html.fxlite .oc-glow{animation:none}
-html.fxlite .bug-fx .sw{animation:none;display:none}
-html.fxlite .bx-spin3d .bug{animation:none}
-html.fxlite .G-pin3d .gi{animation:none;filter:none}
-html.fxlite .G-pin3d .gi::after,html.fxlite .G-beacon .gi::before,html.fxlite .G-beacon .gi::after{animation:none}
-
 
 /* ===== LOWER THIRD ===== */
 .card{position:relative;display:flex;align-items:center;font-family:var(--fn);color:var(--t);gap:28px;transform-style:flat}
@@ -697,34 +680,6 @@ if ((MODE === 'pvw' || Q.get('bg')) && !Q.get('t')) document.body.classList.add(
 addEventListener('message', e => { if (e.data && 'klmBg' in e.data) document.body.classList.toggle('pv', !!e.data.klmBg); });
 document.getElementById('gf').href = K.FONT_URL;
 const stage = document.getElementById('stage');
-// ===== mode efek ringan: otomatis saat banyak grafis tampil bersamaan =====
-const FXQ = Q.get('fx') || (Q.get('klm') ? 'auto' : 'full');   // lite | full | auto
-const WEAK = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4;
-let fxKf = null, fxOff = 0;
-function fxLiteKeyframes(){
-  if (fxKf) { fxKf.disabled = false; return; }
-  let out = '';
-  try { for (const sh of document.styleSheets) for (const r of sh.cssRules) {
-    if (r.type === CSSRule.KEYFRAMES_RULE && /filter/.test(r.cssText)) out += r.cssText.replace(/filter\s*:[^;}]*;?/g, '') + '\n';
-  } } catch (e) {}
-  fxKf = document.createElement('style'); fxKf.textContent = out; document.head.appendChild(fxKf);
-}
-function fxSet(on){
-  const h = document.documentElement;
-  if (on === h.classList.contains('fxlite')) return;
-  h.classList.toggle('fxlite', on);
-  if (on) fxLiteKeyframes(); else if (fxKf) fxKf.disabled = true;
-}
-function fxUpdate(){
-  if (FXQ === 'lite') return fxSet(true);
-  if (FXQ !== 'auto') return;
-  const n = stage.querySelectorAll('.anim:not(.out)').length;
-  clearTimeout(fxOff);
-  if (WEAK || n >= 2) fxSet(true);
-  else fxOff = setTimeout(() => fxSet(false), 3000);   // tahan sebentar agar tidak berkedip
-}
-new MutationObserver(fxUpdate).observe(stage,{childList:true}); fxUpdate();
-
 
 let SCALE = 1;
 function fit(){ const s = Math.min(innerWidth/1920, innerHeight/1080) || 1; SCALE = s; stage.style.transform = `scale(${s})`;
