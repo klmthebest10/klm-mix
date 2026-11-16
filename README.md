@@ -140,6 +140,12 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.14.12
+- **Grafis UTC Acara ringan walau banyak grafis + efek cahaya + animasi menyala bersamaan — tanpa mengurangi efeknya.**
+  - Tiap grafis (lower third, title, lokasi, sosmed, opening/closing, running text, logo) kini dirender di **lapisan offscreen sendiri**. Sebelumnya lower third/title/lokasi/sosmed berbagi satu lapisan sehingga area yang berubah digabung jadi kotak besar tiap frame (salinan, IPC, upload tekstur, dan gambar ke Program ikut besar). Sekarang tiap lapisan hanya mengirim area kecilnya sendiri, dan lapisan yang tidak tampil tidak dirender.
+  - Efek cahaya diubah cara menggambarnya, bukan dihapus: pendar, sinar dari belakang, bintang berkelip, cahaya tepi, teks berkilau, dan goyang pin kini bergerak dalam langkah halus (±12–30 pembaruan/dtk, perubahan per langkah di bawah 1 px / 5% opasitas) sehingga tidak memaksa komposisi ulang 60×/dtk. Sinar dari belakang di-"bake" sekali ke gambar (tanpa gradien kerucut + masker tiap frame). Kilau menyapu dan animasi masuk/keluar tetap penuh.
+  - Uji (tanpa GPU, satu grafis dengan efek cahaya): beban komposisi turun sekitar 3–5× per efek (pendar 1979→423 ms, sinar 1912→380 ms, bintang 836→246 ms, tepi 1358→668 ms per 3 dtk); lima grafis bersamaan dalam lapisan terpisah ±3,3× lebih ringan dari satu lapisan gabungan.
+
 ### Baru di v1.14.11
 - **KLM Remote (halaman remote di HP/APK): tulisan PREVIEW & PROGRAM dipindah ke luar bingkai monitor**, di atas gambar. Bingkai hanya berisi gambar.
 

@@ -31,9 +31,11 @@
   };
 
   // ---------- lapisan ----------
-  const ACARA = ['main', 'tk', 'logo'];
-  const ORDER = ['score', 'main', 'tk', 'logo'];
-  const KEYS = { main: ['lt', 'tt', 'loc', 'soc'], tk: ['tk'], logo: ['bug'] };
+  // v1.14.12: tiap grafis dirender di lapisan offscreen SENDIRI. Area yang berubah (dirty rect) tiap lapisan kecil &
+  // tidak saling digabung jadi satu kotak besar → salinan/IPC/upload tekstur jauh lebih sedikit saat banyak grafis menyala.
+  const ACARA = ['tt', 'loc', 'soc', 'lt', 'oc', 'tk', 'logo'];
+  const ORDER = ['score', 'tt', 'loc', 'soc', 'lt', 'oc', 'tk', 'logo'];
+  const KEYS = { lt: ['lt'], tt: ['tt'], loc: ['loc'], soc: ['soc'], oc: [], tk: ['tk'], logo: ['bug'] };
   const LY = {};
   ORDER.forEach((id) => { LY[id] = { id, cv: null, gl: null, texW: 0, texH: 0, has: false, bbox: null, idleUntil: 0, started: false, paused: false, usedAt: 0, frames: 0, native: null, nextNative: null }; });
   U.layers = LY;
@@ -153,7 +155,7 @@
   function anyKey(id) {
     const st = U.status;
     if (!st) return true;
-    if (id === 'main' && st.oc) return true;
+    if (id === 'oc' && st.oc) return true;
     return (KEYS[id] || []).some((k) => st.visible && st.visible[k]);
   }
   function layerVisible(L) {
@@ -293,7 +295,7 @@
     const now = KM.now();
     for (const id of ACARA) {
       const L = LY[id];
-      const on = anyKey(id), wasOn = was ? (id === 'main' && was.oc) || (KEYS[id] || []).some((k) => was.visible && was.visible[k]) : false;
+      const on = anyKey(id), wasOn = was ? (id === 'oc' && was.oc) || (KEYS[id] || []).some((k) => was.visible && was.visible[k]) : false;
       if (wasOn && !on) L.idleUntil = Math.max(L.idleUntil, now + 2500); // beri waktu animasi keluar
     }
     if (was && st && was.eventType !== st.eventType) ACARA.forEach((id) => { LY[id].idleUntil = now + 2000; });

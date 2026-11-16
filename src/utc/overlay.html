@@ -51,7 +51,7 @@ body.pv{background:#0b0d12 repeating-conic-gradient(#151922 0 25%,#0f1218 0 50%)
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:kAng 3s linear infinite;will-change:transform;contain:strict}
 @keyframes kAng{to{--ang:360deg}}
 .edge2{position:absolute;top:-3px;left:-3px;width:calc(100% + 6px);height:calc(100% + 6px);overflow:visible;pointer-events:none;z-index:4;will-change:transform}
-.edge2 rect{fill:none;stroke-dasharray:24 76;stroke-linecap:round;animation:kEdge 3s linear infinite}
+.edge2 rect{fill:none;stroke-dasharray:24 76;stroke-linecap:round;animation:kEdge 3s steps(90) infinite}
 .edge2 .eg{stroke:rgba(var(--a-rgb),.45);stroke-width:9}
 .edge2 .ec{stroke:#fff;stroke-width:3;filter:none}
 @keyframes kEdge{from{stroke-dashoffset:100}to{stroke-dashoffset:0}}
@@ -59,20 +59,19 @@ body.pv{background:#0b0d12 repeating-conic-gradient(#151922 0 25%,#0f1218 0 50%)
 .flare::after{content:'';position:absolute;left:calc(50% - 330px);width:660px;top:50%;height:2px;margin-top:-1px;background:linear-gradient(90deg,transparent,rgba(var(--a-rgb),.9),#fff,rgba(var(--a-rgb),.9),transparent)}
 @keyframes kFlare{0%{transform:translate3d(0,0,0);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translate3d(100%,0,0);opacity:0}}
 .beam{position:absolute;left:-18%;right:-18%;top:-110%;bottom:-30%;z-index:-1;pointer-events:none;
-  background:repeating-conic-gradient(from 0deg at 50% 100%,rgba(var(--a-rgb),.32) 0deg 3deg,transparent 3deg 12deg);
-  -webkit-mask:radial-gradient(ellipse 60% 75% at 50% 100%,#000 15%,transparent 72%);mask:radial-gradient(ellipse 60% 75% at 50% 100%,#000 15%,transparent 72%);animation:kBeam 4s ease-in-out infinite}
+  background:no-repeat center/100% 100%;animation:kBeam 4s steps(20) infinite}
 @keyframes kBeam{0%,100%{opacity:.45}50%{opacity:1}}
-.sp{position:absolute;width:28px;height:28px;margin:-14px 0 0 -14px;pointer-events:none;z-index:6;animation:kTw 2.2s ease-in-out infinite}
+.sp{position:absolute;width:28px;height:28px;margin:-14px 0 0 -14px;pointer-events:none;z-index:6;animation:kTw 2.2s steps(16) infinite}
 .sp::before,.sp::after{content:'';position:absolute;left:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:linear-gradient(transparent,#fff,transparent);box-shadow:0 0 8px var(--a),0 0 2px #fff}
 .sp::after{transform:rotate(90deg)}
 @keyframes kTw{0%,100%{transform:scale(0) rotate(0);opacity:0}50%{transform:scale(1) rotate(45deg);opacity:1}}
 @keyframes kGlowF{0%,100%{filter:drop-shadow(0 0 3px rgba(var(--a-rgb),.35))}50%{filter:drop-shadow(0 0 24px rgba(var(--a-rgb),.95))}}
 .glw{position:absolute;top:0;left:0;right:0;bottom:0;z-index:-1;border-radius:18px;pointer-events:none;will-change:opacity;
-  box-shadow:0 0 26px 6px rgba(var(--a-rgb),.85),0 0 70px 16px rgba(var(--a-rgb),.38);opacity:.18;animation:kGlowO 2.4s ease-in-out infinite}
+  box-shadow:0 0 26px 6px rgba(var(--a-rgb),.85),0 0 70px 16px rgba(var(--a-rgb),.38);opacity:.18;animation:kGlowO 2.4s steps(15) infinite}
 @keyframes kGlowO{0%,100%{opacity:.18}50%{opacity:1}}
-.bug .bglow{position:absolute;top:0;left:0;width:100%;height:auto;pointer-events:none;will-change:opacity;filter:drop-shadow(0 0 10px var(--a)) drop-shadow(0 0 22px rgba(var(--a-rgb),.8));opacity:.15;animation:kGlowO 2.4s ease-in-out infinite}
+.bug .bglow{position:absolute;top:0;left:0;width:100%;height:auto;pointer-events:none;will-change:opacity;filter:drop-shadow(0 0 10px var(--a)) drop-shadow(0 0 22px rgba(var(--a-rgb),.8));opacity:.15;animation:kGlowO 2.4s steps(15) infinite}
 .bug>img:not(.bglow){position:relative}
-.lx-shimmer .card:not(.L-ribbon) .nm,.lx-shimmer .tt-main{background:linear-gradient(100deg,var(--t) 0%,var(--t) 40%,#fff 47%,var(--a) 50%,#fff 53%,var(--t) 60%,var(--t) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent!important;text-shadow:none!important;animation:kShim 3.2s linear infinite}
+.lx-shimmer .card:not(.L-ribbon) .nm,.lx-shimmer .tt-main{background:linear-gradient(100deg,var(--t) 0%,var(--t) 40%,#fff 47%,var(--a) 50%,#fff 53%,var(--t) 60%,var(--t) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent!important;text-shadow:none!important;animation:kShim 3.2s steps(96) infinite}
 
 .lx-shimmer .card.L-float .nm{background-image:linear-gradient(100deg,var(--t) 0%,var(--t) 40%,var(--p) 47%,var(--a) 50%,var(--p) 53%,var(--t) 60%,var(--t) 100%)}
 
@@ -409,7 +408,7 @@ body.pv{background:#0b0d12 repeating-conic-gradient(#151922 0 25%,#0f1218 0 50%)
 .loc .gi svg{width:100%;height:100%;display:block;overflow:visible}
 .loc .gi img{max-width:100%;max-height:100%;object-fit:contain;display:block}
 .up .gp{text-transform:uppercase}
-.lx-shimmer .gp{background:linear-gradient(100deg,var(--t) 0%,var(--t) 40%,#fff 47%,var(--a) 50%,#fff 53%,var(--t) 60%,var(--t) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent!important;animation:kShim 3.2s linear infinite}
+.lx-shimmer .gp{background:linear-gradient(100deg,var(--t) 0%,var(--t) 40%,#fff 47%,var(--a) 50%,#fff 53%,var(--t) 60%,var(--t) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent!important;animation:kShim 3.2s steps(96) infinite}
 @keyframes kPinBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
 @keyframes kPinSh{0%,100%{transform:scaleX(1);opacity:.9}50%{transform:scaleX(.65);opacity:.45}}
 @keyframes kRing{0%{transform:scale(1);opacity:.95}100%{transform:scale(1.95);opacity:0}}
@@ -418,8 +417,8 @@ body.pv{background:#0b0d12 repeating-conic-gradient(#151922 0 25%,#0f1218 0 50%)
 
 .G-pin3d{padding:18px 48px 22px 26px;border-radius:18px;background:linear-gradient(135deg,rgba(var(--p-rgb),.94),rgba(var(--s-rgb),.96));border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 30px 50px -10px rgba(0,0,0,.6);transform:perspective(1200px) rotateY(var(--tilt)) rotateX(6deg)}
 .G-pin3d::after{content:'';position:absolute;left:0;right:0;top:0;height:48%;border-radius:18px 18px 0 0;background:linear-gradient(180deg,rgba(255,255,255,.18),transparent);pointer-events:none}
-.G-pin3d .gi{width:80px;height:96px;color:var(--a);animation:kPinBob 2.4s ease-in-out infinite;filter:drop-shadow(0 10px 6px rgba(0,0,0,.45)) drop-shadow(0 0 14px rgba(var(--a-rgb),.55))}
-.G-pin3d .gi::after{content:'';position:absolute;left:50%;bottom:-14px;width:50px;height:10px;margin-left:-25px;border-radius:50%;background:radial-gradient(rgba(0,0,0,.6),transparent 70%);animation:kPinSh 2.4s ease-in-out infinite}
+.G-pin3d .gi{width:80px;height:96px;color:var(--a);animation:kPinBob 2.4s steps(30) infinite;filter:drop-shadow(0 10px 6px rgba(0,0,0,.45)) drop-shadow(0 0 14px rgba(var(--a-rgb),.55))}
+.G-pin3d .gi::after{content:'';position:absolute;left:50%;bottom:-14px;width:50px;height:10px;margin-left:-25px;border-radius:50%;background:radial-gradient(rgba(0,0,0,.6),transparent 70%);animation:kPinSh 2.4s steps(30) infinite}
 
 .G-mapcard{gap:0;align-items:stretch;border-radius:16px;overflow:hidden;box-shadow:0 30px 50px -10px rgba(0,0,0,.6);transform:perspective(1200px) rotateY(var(--tilt))}
 .G-mapcard .gi{width:150px;padding:18px;color:var(--a);
@@ -573,7 +572,7 @@ body.pv{background:#0b0d12 repeating-conic-gradient(#151922 0 25%,#0f1218 0 50%)
 .sitem .sx{font-family:var(--fr);font-size:21px;color:var(--st);white-space:nowrap;margin-top:3px}
 .soc.ic-right .sitem{flex-direction:row-reverse}.soc.ic-right .st{align-items:flex-end}
 .up .sitem .sh{text-transform:uppercase}
-.lx-shimmer .sitem .sh{background:linear-gradient(100deg,var(--t) 0%,var(--t) 40%,#fff 47%,var(--a) 50%,#fff 53%,var(--t) 60%,var(--t) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent!important;text-shadow:none!important;animation:kShim 3.2s linear infinite}
+.lx-shimmer .sitem .sh{background:linear-gradient(100deg,var(--t) 0%,var(--t) 40%,#fff 47%,var(--a) 50%,#fff 53%,var(--t) 60%,var(--t) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent!important;text-shadow:none!important;animation:kShim 3.2s steps(96) infinite}
 
 .S-glass .sitem{padding:10px 46px 10px 10px;border-radius:999px;background:linear-gradient(135deg,rgba(var(--p-rgb),.94),rgba(var(--s-rgb),.95));border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 24px 40px -10px rgba(0,0,0,.6);transform:perspective(1200px) rotateY(var(--tilt))}
 .S-glass .sitem::after{content:'';position:absolute;left:24px;right:24px;top:3px;height:44%;border-radius:999px;background:linear-gradient(180deg,rgba(255,255,255,.2),transparent);pointer-events:none}
@@ -698,6 +697,25 @@ addEventListener('resize', fit); fit();
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
 })();
 
+
+// sinar dari belakang di-"bake" sekali ke gambar (gradien kerucut + masker radial) → saat tayang hanya opacity yang bergerak
+const BEAMS = {};
+function beamImg(){
+  const rgb = (getComputedStyle(stage).getPropertyValue('--a-rgb') || '255,255,255').trim();
+  if (BEAMS[rgb]) return BEAMS[rgb];
+  const W = 640, H = 420, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d'), cx = W/2, cy = H, R = Math.hypot(W, H);
+  x.fillStyle = 'rgba('+rgb+',.32)';
+  for (let a = 0; a < 360; a += 12){
+    const a0 = (a - 90) * Math.PI/180, a1 = (a + 3 - 90) * Math.PI/180;
+    x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + R*Math.cos(a0), cy + R*Math.sin(a0)); x.lineTo(cx + R*Math.cos(a1), cy + R*Math.sin(a1)); x.closePath(); x.fill();
+  }
+  x.globalCompositeOperation = 'destination-in';
+  x.save(); x.translate(cx, cy); x.scale(W*.6, H*.75);
+  const g = x.createRadialGradient(0,0,0,0,0,1); g.addColorStop(.15,'#000'); g.addColorStop(.72,'rgba(0,0,0,0)');
+  x.fillStyle = g; x.fillRect(-2,-2,4,4); x.restore();
+  return BEAMS[rgb] = c.toDataURL('image/png');
+}
 const SPARK_POS = [[4,-12],[28,92],[52,-18],[78,88],[97,8],[64,40],[16,58]];
 function fxParts(light, solid){
   const L = light === 'combo' ? ['sweep','edge','sparkle'] : [light];
@@ -706,7 +724,7 @@ function fxParts(light, solid){
   if (L.includes('edge')) inside += '<svg class="edge2" aria-hidden="true"><rect class="eg" pathLength="100" width="100%" height="100%"/><rect class="ec" pathLength="100" width="100%" height="100%"/></svg>';
   if (L.includes('flare')) inside += '<i class="flare"></i>';
   if (L.includes('sparkle')) outside += SPARK_POS.map((p,i)=>`<i class="sp" style="left:${p[0]}%;top:${p[1]}%;animation-delay:${(i*0.37).toFixed(2)}s"></i>`).join('');
-  if (L.includes('beam')) outside += '<i class="beam"></i>';
+  if (L.includes('beam')) outside += '<i class="beam" style="background-image:url('+beamImg()+')"></i>';
   if (L.includes('glow')) outside += '<i class="glw"></i>';
   return { inside, outside };
 }

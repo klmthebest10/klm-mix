@@ -20,7 +20,9 @@ module.exports = function setupUtcOsr(o) {
 
   function urlFor(id, t) {
     const base = 'http://127.0.0.1:' + o.port() + '/utc/overlay?klm=1';
-    if (id === 'main') return base + '&only=lt,title,loc,soc,oc';
+    if (id === 'main') return base + '&only=lt,title,loc,soc,oc';   // (lama, gabungan)
+    if (id === 'lt' || id === 'loc' || id === 'soc' || id === 'oc') return base + '&only=' + id;
+    if (id === 'tt') return base + '&only=title';
     if (id === 'logo') return base + '&only=logo';
     if (id === 'tk') return base + '&only=ticker&tkn=1&fps=' + (t.fps || 30);
     if (id === 'score') { const p = o.scorePort && o.scorePort(); return p ? 'http://127.0.0.1:' + p + '/overlay?klm=1' : ''; }
@@ -125,7 +127,7 @@ module.exports = function setupUtcOsr(o) {
   ipcMain.on('utc:start', (e, t) => {
     target = e.sender;
     const w = Math.max(320, Math.min(3840, t.w | 0 || 1920)), h = Math.max(180, Math.min(2160, t.h | 0 || 1080));
-    const ids = t.L ? [t.L] : (t.layers || ['main', 'tk', 'logo']);
+    const ids = t.L ? [t.L] : (t.layers || ['lt', 'tt', 'loc', 'soc', 'oc', 'tk', 'logo']);
     for (const id of ids) start(id, { w, h, fps: t.fps });
     if (!e.sender.__klmOsrHook) { e.sender.__klmOsrHook = true; e.sender.once('destroyed', () => { if (target === e.sender) { stop(); target = null; } }); }
   });
