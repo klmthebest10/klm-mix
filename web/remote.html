@@ -13,11 +13,13 @@
   .top .brand { font-size: 17px; } .top .brand::before { width: 26px; height: 26px; }
   .ib { flex: none !important; width: 42px; padding: 0; }
   .mon { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .mon div { position: relative; aspect-ratio: 16/9; background: #000; border-radius: 10px; overflow: hidden; border: 2px solid var(--pvw); }
-  .mon div.pg { border-color: var(--pgm); }
+  .mon > div { min-width: 0; }
+  /* tulisan PREVIEW / PROGRAM di luar bingkai monitor (di atas gambar) */
+  .mon .lb { display: inline-block; font-size: 9.5px; font-weight: 800; letter-spacing: .8px; padding: 2px 7px; border-radius: 5px; background: var(--pvw); color: #fff; margin: 0 0 5px 2px; }
+  .mon .pg .lb { background: var(--pgm); }
+  .mon .fr { position: relative; aspect-ratio: 16/9; background: #000; border-radius: 10px; overflow: hidden; border: 2px solid var(--pvw); }
+  .mon .pg .fr { border-color: var(--pgm); }
   .mon img { width: 100%; height: 100%; object-fit: contain; display: block; }
-  .mon span { position: absolute; left: 5px; top: 5px; font-size: 9.5px; font-weight: 800; letter-spacing: .8px; padding: 2px 7px; border-radius: 5px; background: var(--pvw); color: #fff; }
-  .mon .pg span { background: var(--pgm); color: #fff; }
   .tr { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 6px; margin-top: 6px; }
   .tr button { padding: 10px 4px; font-weight: 800; font-size: 13px; min-height: 46px; }
   .tr .cut { background: linear-gradient(180deg,#4a1719,#331012); border-color: #8a2b2b; color: #ffd6d3; letter-spacing: 3px; }
@@ -51,7 +53,7 @@
 <body>
 <div class="top">
   <div class="row" style="margin-bottom:10px"><button id="home" class="ib" title="Menu">⬅</button><div class="brand"><b>KLM</b> Remote</div><span class="pill st" id="status" style="flex:none">…</span><button id="saver" class="ib" title="Hemat data/baterai">🍃</button></div>
-  <div class="mon"><div><img id="pvwImg" alt=""><span>PREVIEW</span></div><div class="pg"><img id="pgmImg" alt=""><span>PROGRAM</span></div></div>
+  <div class="mon"><div><span class="lb">PREVIEW</span><div class="fr"><img id="pvwImg" alt=""></div></div><div class="pg"><span class="lb">PROGRAM</span><div class="fr"><img id="pgmImg" alt=""></div></div></div>
   <div class="tr">
     <button class="cut" data-fn="Cut">CUT</button>
     <button data-fn="Transition1" id="t1">Fade</button>
