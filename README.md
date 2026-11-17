@@ -140,6 +140,11 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.14.13
+- **Panel lengkap UTC Acara tampil normal lagi.** Sejak v1.14.6 panel terjepit di bawah monitor (di PC sebagian isi terpotong, di HP/APK hanya ±50 px sehingga panel seolah hilang). Kini panel selalu mendapat tinggi cukup dan monitor Preview/Program tetap ukuran penuh; bila layar kurang tinggi halaman cukup digulir.
+- **Jendela sendiri UTC Acara dikembalikan seperti semula**: tombol mengambang KLM Mix kembali ada, tombol tambahan "UTC ON AIR" di header dihapus, daftar input kembali "INPUT n + nama".
+- Perubahan yang tidak diminta dibatalkan: tampilan monitor di HP (v1.14.9), tampilan monitor panel UTC di HP (v1.14.10), dan pembungkusan teks placeholder (v1.14.8). Yang tetap: label nama di atas monitor Preview/Program panel UTC dihapus, label PREVIEW/PROGRAM KLM Remote di luar bingkai, dan grafis UTC ringan (v1.14.12).
+
 ### Baru di v1.14.12
 - **Grafis UTC Acara ringan walau banyak grafis + efek cahaya + animasi menyala bersamaan — tanpa mengurangi efeknya.**
   - Tiap grafis (lower third, title, lokasi, sosmed, opening/closing, running text, logo) kini dirender di **lapisan offscreen sendiri**. Sebelumnya lower third/title/lokasi/sosmed berbagi satu lapisan sehingga area yang berubah digabung jadi kotak besar tiap frame (salinan, IPC, upload tekstur, dan gambar ke Program ikut besar). Sekarang tiap lapisan hanya mengirim area kecilnya sendiri, dan lapisan yang tidak tampil tidak dirender.

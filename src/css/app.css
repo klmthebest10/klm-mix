@@ -407,7 +407,10 @@ p { line-height: 1.5; }
 .bb.utc.on { background: linear-gradient(180deg, #4a2608, #351b06); border-color: var(--utc); color: #fff; }
 .bb.utc.on .dot { background: var(--utc); box-shadow: 0 0 8px var(--utc); }
 /* panel UTC penuh TIDAK mengecilkan monitor Preview/Program: tinggi stage tetap */
-#app.utc-mode { grid-template-rows: 46px auto minmax(0, 1fr) 54px; }
+#app.utc-mode { grid-template-rows: 46px max-content minmax(min(520px, 86vh), 1fr) 54px; overflow-y: auto; }
+/* panel lengkap selalu mendapat tinggi yang cukup (tidak terjepit / hilang); bila layar kurang tinggi, halaman digulir */
+#app.utc-mode #topbar { position: sticky; top: 0; }
+#app.utc-mode #bottombar { position: sticky; bottom: 0; z-index: 50; }
 #app.utc-mode #lower { display: none; }
 #utcWs { grid-row: 3; display: flex; flex-direction: column; min-height: 0; margin: 0 10px 8px; background: var(--bg); border: 1px solid rgba(240, 138, 36, .35); border-radius: var(--r); overflow: hidden; box-shadow: 0 0 0 1px rgba(240, 138, 36, .08); }
 #utcWs[hidden] { display: none; }
@@ -739,6 +742,7 @@ p { line-height: 1.5; }
 @media (max-width: 900px) {
   html, body { overflow: auto; }
   #app { height: auto; min-height: 100vh; grid-template-rows: 44px auto auto 50px; }
+  #app.utc-mode { grid-template-rows: 44px auto minmax(min(620px, 88vh), auto) 50px; overflow: visible; }
   #stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "pvw pgm" "tr tr"; gap: 8px; }
   #pvwBox { grid-area: pvw; } #pgmBox { grid-area: pgm; } #trans { grid-area: tr; flex-direction: row; flex-wrap: wrap; align-items: stretch; overflow: visible; gap: 6px; }
   #trans > * { flex: 1 1 110px; min-width: 0; } #trans .tlbl, #trans .tbar-wrap { display: none; } #trans #tslots { flex: 3 1 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
@@ -750,15 +754,7 @@ p { line-height: 1.5; }
   #bottombar { position: sticky; bottom: 0; z-index: 50; }
   .modal { width: 96vw !important; max-height: 94vh; } .split { grid-template-columns: minmax(0, 1fr) !important; }
 }
-@media (max-width: 620px) { #stage { grid-template-columns: minmax(0, 1fr); grid-template-areas: "pgm" "pvw" "tr"; } .screen { width: 100%; }
-  /* HP / APK: tulisan PREVIEW / PROGRAM dipindah ke luar bingkai monitor (di atas gambar), bingkai hanya berisi gambar */
-  .screen { border: 0; background: none; box-shadow: none; overflow: visible; }
-  .screen-head { height: auto; min-height: 34px; padding: 0 2px 6px; border-bottom: 0; background: none !important; }
-  .screen .cwrap { border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
-  .screen.pvw .cwrap { border-color: rgba(30, 194, 107, .35); } .screen.pgm .cwrap { border-color: rgba(242, 69, 61, .45); }
-  .screen .tag { font-size: 10.5px; }
-  .screen .sname { display: inline; }
-#inputs { --cardw: 132px; } #topbar .brand b + span, #st-res, #st-perf { display: none; } }
+@media (max-width: 620px) { #stage { grid-template-columns: minmax(0, 1fr); grid-template-areas: "pgm" "pvw" "tr"; } .screen { width: 100%; } #inputs { --cardw: 132px; } #topbar .brand b + span, #st-res, #st-perf { display: none; } }
 /* mode ringan (Hemat / performa otomatis): tanpa blur, bayangan besar & animasi dekoratif → GPU laptop lawas tidak terbebani */
 body.lite *, body.lite *::before, body.lite *::after { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 body.lite .card, body.lite .screen, body.lite #dock, body.lite .modal { box-shadow: none !important; }

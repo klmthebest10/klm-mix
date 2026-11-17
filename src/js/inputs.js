@@ -24,12 +24,7 @@
       }
       c.textAlign = 'center';
       c.fillStyle = '#eceff4'; c.font = '700 28px "Plus Jakarta Sans", "Segoe UI", Arial'; c.fillText(t1, 320, ty);
-      c.fillStyle = '#8b94a5'; c.font = '500 19px "Plus Jakarta Sans", "Segoe UI", Arial';
-      // teks panjang dibungkus per baris agar tidak keluar dari bingkai placeholder
-      const words = String(line2 || '').split(' '), lines = []; let cur = '';
-      for (const w of words) { const t = cur ? cur + ' ' + w : w; if (c.measureText(t).width > 560 && cur) { lines.push(cur); cur = w; } else cur = t; }
-      if (cur) lines.push(cur);
-      lines.slice(0, 3).forEach((ln, i) => c.fillText(ln, 320, ty + 34 + i * 26));
+      c.fillStyle = '#8b94a5'; c.font = '500 19px "Plus Jakarta Sans", "Segoe UI", Arial'; c.fillText(line2 || '', 320, ty + 34);
     }
     return { src: rt.ph, w: 640, h: 360 };
   }
