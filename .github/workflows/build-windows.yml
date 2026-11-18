@@ -173,6 +173,9 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
+      - name: Sumber update di aplikasi (app-update.yml)
+        run: node build/release-tools.js app-update dist/win-unpacked/resources
+
       # ---- tanda tangan kode (opsional) ----
       # A) sertifikat .pfx: secret WIN_CSC_LINK (base64 .pfx) + WIN_CSC_KEY_PASSWORD
       - name: Tanda tangan KLM.exe & helper (sertifikat .pfx)

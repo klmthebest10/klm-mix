@@ -4,6 +4,7 @@
  *                                               (tanda tangan mengubah isi file; tanpa ini update di aplikasi ditolak)
  *   node build/release-tools.js notes <versi>  → tulis catatan rilis (bagian "Baru di v<versi>" README) ke dist/release-notes.md
  *   node build/release-tools.js repo <owner/repo> → ganti sumber update di package.json (repo rilis publik terpisah)
+ *   node build/release-tools.js app-update [folder resources] → tulis app-update.yml ke aplikasi hasil build
  */
 'use strict';
 const fs = require('fs');
@@ -30,6 +31,17 @@ if (cmd === 'fix-latest') {
   const bm = file + '.blockmap';
   if (fs.existsSync(bm)) fs.unlinkSync(bm);
   console.log('latest.yml diperbarui untuk ' + path.basename(file) + ' (' + buf.length + ' byte)');
+} else if (cmd === 'app-update') {
+  // resources/app-update.yml = alamat sumber update yang dibaca electron-updater di aplikasi terpasang.
+  // electron-builder hanya menulisnya saat target NSIS dibangun langsung; build dua tahap (folder → tanda tangan →
+  // --prepackaged) melewatkannya, jadi ditulis di sini.
+  const pkg = require('../package.json');
+  const pub = [].concat(pkg.build.publish || [])[0];
+  if (!pub) { console.log('build.publish kosong'); process.exit(1); }
+  const dir = path.resolve(arg || path.join(ROOT, 'dist', 'win-unpacked', 'resources'));
+  const yml = ['owner: ' + pub.owner, 'repo: ' + pub.repo, 'provider: ' + pub.provider, 'releaseType: ' + (pub.releaseType || 'release'), 'updaterCacheDirName: ' + pkg.name + '-updater', ''].join('\n');
+  fs.writeFileSync(path.join(dir, 'app-update.yml'), yml);
+  console.log('app-update.yml → ' + dir + '\n' + yml);
 } else if (cmd === 'notes') {
   const v = String(arg || require('../package.json').version).replace(/^v/, '');
   const md = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
