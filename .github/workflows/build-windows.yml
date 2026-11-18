@@ -156,6 +156,13 @@ jobs:
           path: ${{ runner.temp }}/smoke
           if-no-files-found: ignore
 
+      - name: Uji Device ID lisensi (harus dari perangkat keras, stabil)
+        shell: pwsh
+        run: |
+          $r = node -e "const L=require('./electron/license.js'); const a=L.deviceId(); delete require.cache[require.resolve('./electron/license.js')]; const b=require('./electron/license.js').deviceId(); console.log(JSON.stringify({id:a, sama:a===b, sumber:L.deviceSource()}))"
+          Write-Host "Device ID: $r"
+          if ($r -notmatch '"sumber":"hw') { Write-Host "::warning::Device ID tidak diambil dari perangkat keras" }
+
       - name: Build aplikasi (folder, belum jadi installer)
         run: npx electron-builder --win dir --x64 --publish never
         env:

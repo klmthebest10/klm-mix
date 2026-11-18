@@ -181,4 +181,7 @@ function lockedHtml(feature) {
     '<body><div class="b"><div class="i">🔒</div><h1>' + f + ' memerlukan lisensi KLM</h1><p>Aktifkan lisensi di komputer KLM: <b>Bantuan → 🔑 Lisensi</b>.</p><p>Lisensi dibeli sekali dan berlaku seumur hidup untuk komputer tersebut.</p></div></body></html>';
 }
 
-module.exports = { lockedHtml, create, deviceId, parse, PUBLIC_KEY, normId, parseSmbios };
+/** sumber Device ID (hw = perangkat keras, hws = serial board, win = instalasi Windows, fb = cadangan) — untuk diagnosa */
+const deviceSource = () => String(machineRaw()).split(':')[0];
+
+module.exports = { deviceSource, lockedHtml, create, deviceId, parse, PUBLIC_KEY, normId, parseSmbios };
