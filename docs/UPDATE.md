@@ -20,7 +20,7 @@ Sejak v1.17.0, KLM (versi installer) memeriksa versi baru sendiri dari **GitHub 
    git commit -am "KLM v1.17.1 [rilis]"
    git push origin main
    ```
-   (Cara lama tetap bisa: push tag `v1.17.1`.) Tag `v1.17.1` dibuat otomatis di repo rilis.
+   (Cara lama tetap bisa: push tag `v1.17.1`. Untuk merilis ulang APK saja pada versi yang sama, pakai `[rilis-hp]`.) Tag `v1.17.1` dibuat otomatis di repo rilis.
 4. GitHub Actions membangun installer, menandatanganinya bila sertifikat sudah dipasang (lihat `docs/SIGNING.md`), lalu menerbitkan Release di `klm-releases` berisi `KLM-Setup-1.17.1.exe`, `KLM-Portable-1.17.1.exe`, `latest.yml`, dan `KLM-HP.apk`.
 5. KLM di PC yang sedang menyala mendapat popup update dalam beberapa jam (atau saat dibuka). Aplikasi HP memeriksa saat dibuka.
 

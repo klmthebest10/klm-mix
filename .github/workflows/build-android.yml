@@ -32,7 +32,7 @@ jobs:
         run: |
           V=$(node -p "require('./package.json').version")
           echo "VERSION=$V" >> "$GITHUB_ENV"
-          if [[ "$GITHUB_REF" == refs/tags/v* ]] || { [[ "$GITHUB_REF" == refs/heads/main ]] && [[ "$MSG" == *"[rilis]"* ]]; }; then echo "RELEASE=1" >> "$GITHUB_ENV"; echo "RILIS v$V"; else echo "RELEASE=0" >> "$GITHUB_ENV"; echo "bukan rilis"; fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] || { [[ "$GITHUB_REF" == refs/heads/main ]] && { [[ "$MSG" == *"[rilis]"* ]] || [[ "$MSG" == *"[rilis-hp]"* ]]; }; }; then echo "RELEASE=1" >> "$GITHUB_ENV"; echo "RILIS v$V"; else echo "RELEASE=0" >> "$GITHUB_ENV"; echo "bukan rilis"; fi
 
       # Android SDK sudah tersedia di runner GitHub (ANDROID_HOME)
       - name: Cek Android SDK
@@ -55,7 +55,12 @@ jobs:
           KS: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
         run: |
           mkdir -p ~/.android
-          if [ -n "$KS" ]; then echo "$KS" | base64 -d > ~/.android/debug.keystore; echo "kunci tetap dipakai"; else echo "::warning::secret ANDROID_DEBUG_KEYSTORE kosong — APK ditandatangani kunci sementara (tidak bisa update menimpa)"; fi
+          if [ -n "$KS" ]; then
+            # buang spasi / baris baru / CR (sering ikut saat menempel dari Windows)
+            printf '%s' "$KS" | tr -d ' \r\n\t' | base64 -d > ~/.android/debug.keystore 2>/dev/null || { echo "::error::secret ANDROID_DEBUG_KEYSTORE bukan base64 yang valid — tempel ulang seluruh isi klm-hp-signing.keystore.base64.txt (panjang $(printf '%s' "$KS" | tr -d ' \r\n\t' | wc -c) karakter, seharusnya 3576)"; exit 1; }
+            keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep -i "fingerprint" || { echo "::error::keystore dari secret tidak bisa dibuka (alias/kata sandi salah)"; exit 1; }
+            echo "kunci tetap dipakai"
+          else echo "::warning::secret ANDROID_DEBUG_KEYSTORE kosong — APK ditandatangani kunci sementara (tidak bisa update menimpa)"; fi
 
       - name: Build APK
         working-directory: mobile/android
