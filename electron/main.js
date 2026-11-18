@@ -452,7 +452,8 @@ function smokeTest() {
       const li = JSON.parse(await js('JSON.stringify(KM.utc.layerInfo())'));
       log('lapisan: ' + JSON.stringify(li.map((l) => [l.id, l.frames, l.native, l.bbox && [l.bbox.x, l.bbox.y, l.bbox.w, l.bbox.h]])));
       const LI = Object.fromEntries(li.map((l) => [l.id, l]));
-      if (!LI.main.frames || !LI.tk.frames || !LI.logo.frames) { fail++; log('GAGAL: ada lapisan UTC yang tidak menerima frame'); }
+      // sejak v1.14.12 tiap grafis punya lapisan sendiri (lt / tt / loc / soc / oc / tk / logo)
+      if (!(LI.lt && LI.lt.frames) || !(LI.tk && LI.tk.frames) || !(LI.logo && LI.logo.frames)) { fail++; log('GAGAL: ada lapisan UTC yang tidak menerima frame'); }
       if (!LI.tk.native) { fail++; log('GAGAL: running text tidak masuk mode native'); }
       // kehalusan: langkah gulir per frame Program pada 60 fps
       await js('KM.settings.fps = 60');
