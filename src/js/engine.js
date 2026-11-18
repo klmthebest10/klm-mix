@@ -527,6 +527,7 @@
     if (!idle && E.frame % pvEvery === 0 && (outOn || !E.prevAt || now - E.dirtyAt < DIRTY_MS || now - (E.prevDrawAt || 0) > 1000 || previewMoving())) {
       const v = E.vctx, pw = E.prev.width, ph = E.prev.height;
       v.globalAlpha = 1;
+      if (pw < E.W) v.imageSmoothingQuality = 'high'; // Preview lebih kecil dari output (mode Hemat): perkecil dengan halus, tidak bergerigi
       if (E.gridActive()) { v.fillStyle = '#000'; v.fillRect(0, 0, pw, ph); drawPvGrid(v, pw, ph); }
       else if (S.previewId && S.previewId === S.programId && progClean()) v.drawImage(E.prog, 0, 0, pw, ph);
       else { v.fillStyle = '#000'; v.fillRect(0, 0, pw, ph); const pv = KM.getInput(S.previewId); if (pv) drawInputRect(v, pv, 0, 0, pw, ph, 0); }

@@ -513,9 +513,10 @@
     const st = KM.settings, grid = !!(KM.engine.gridActive && KM.engine.gridActive());
     let pw;
     if (grid) pw = Math.min(Math.round(W * Math.min(2, window.devicePixelRatio || 1)), 1600); // grid: kotak-kotak memakai seluruh bingkai
-    // resolusi Preview = ukuran tampil × skala layar Windows (125/150%), maksimal resolusi output → setajam Program
+    // Preview = resolusi output penuh, jalur gambar sama persis dengan Program → setajam & semulus Program
+    // (mode Hemat di PC lemah: mengikuti ukuran tampil agar ringan)
     else if (st.perfLite) pw = Math.min(W, Math.max(ow * (st.previewScale || 0.5), 360), ow);
-    else pw = Math.min(Math.round(W * Math.min(2, window.devicePixelRatio || 1)), ow);
+    else pw = ow;
     if (st.perfLite && grid) pw = Math.round(pw * 0.75);
     KM.engine.setPreviewSize(Math.round(pw), Math.round(pw / ar));
   }

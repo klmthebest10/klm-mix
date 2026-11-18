@@ -36,7 +36,15 @@ function create({ getWin, beforeInstall, log = () => {} }) {
     au.allowDowngrade = false;
     au.logger = { info: (m) => log('[update] ' + m), warn: (m) => log('[update] ⚠ ' + m), error: (m) => log('[update] ✗ ' + m), debug: () => {} };
     au.on('checking-for-update', () => emit({ state: 'checking' }));
-    au.on('update-available', (i) => emit({ state: 'available', version: i.version, notes: notesText(i.releaseNotes), date: i.releaseDate || '' }));
+    au.on('update-available', (i) => {
+      const notes = notesText(i.releaseNotes);
+      emit({ state: 'available', version: i.version, notes, date: i.releaseDate || '' });
+      // catatan dari feed GitHub kadang hanya judul ("KLM v1.17.2") → ambil isi lengkap rilis lewat API
+      if (repo && (!notes || notes.length < 40 || /^KLM v[\d.]+$/.test(notes))) {
+        net.fetch('https://api.github.com/repos/' + repo + '/releases/tags/v' + i.version, { headers: { 'User-Agent': 'KLM/' + current, Accept: 'application/vnd.github+json' } })
+          .then((r) => (r.ok ? r.json() : null)).then((j) => { const t = j && notesText(j.body); if (t && last.version === i.version && /available|downloading|downloaded/.test(last.state)) emit(Object.assign({}, last, { notes: t })); }).catch(() => {});
+      }
+    });
     au.on('update-not-available', () => emit({ state: 'latest' }));
     au.on('download-progress', (p) => emit({ state: 'downloading', version: last.version, notes: last.notes, percent: Math.round(p.percent || 0), bps: Math.round(p.bytesPerSecond || 0), total: p.total || 0, transferred: p.transferred || 0 }));
     au.on('update-downloaded', (i) => emit({ state: 'downloaded', version: i.version, notes: last.notes || notesText(i.releaseNotes) }));
