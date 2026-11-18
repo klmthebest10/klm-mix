@@ -1,9 +1,9 @@
-// klm-procaudio — tangkap suara PC (WASAPI process loopback, Windows 10 2004+) KECUALI suara KLM Mix sendiri,
-// lalu kirim ke port Mirroring KLM Mix (127.0.0.1) sebagai PCM s16le stereo 48 kHz (protokol KLMM, paket tipe 5).
+// klm-procaudio — tangkap suara PC (WASAPI process loopback, Windows 10 2004+) KECUALI suara KLM sendiri,
+// lalu kirim ke port Mirroring KLM (127.0.0.1) sebagai PCM s16le stereo 48 kHz (protokol KLMM, paket tipe 5).
 // Dipakai input "Android tanpa aplikasi — Miracast": suara HP yang diputar aplikasi Tampilan Nirkabel Windows ikut masuk
-// tanpa gema (keluaran KLM Mix tidak ikut tertangkap).
-//   klm-procaudio --port 8624 --token <hex> --exclude-pid <pid KLM Mix> [--name "Miracast"]
-// Status ke stdout (baris JSON). Lisensi: MIT (bagian dari KLM Mix).
+// tanpa gema (keluaran KLM tidak ikut tertangkap).
+//   klm-procaudio --port 8624 --token <hex> --exclude-pid <pid KLM> [--name "Miracast"]
+// Status ke stdout (baris JSON). Lisensi: MIT (bagian dari KLM).
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <winsock2.h>

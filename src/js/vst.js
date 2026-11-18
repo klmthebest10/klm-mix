@@ -1,5 +1,5 @@
-/* KLM Mix - host plugin VST asli (VST3 & VST2, versi PC).
- * Setiap plugin berjalan di proses helper terpisah (klm-vsthost.exe) — bila plugin crash, KLM Mix tetap jalan
+/* KLM - host plugin VST asli (VST3 & VST2, versi PC).
+ * Setiap plugin berjalan di proses helper terpisah (klm-vsthost.exe) — bila plugin crash, KLM tetap jalan
  * dan suara asli diteruskan. Audio: AudioWorklet 'klm-vst' <-MessagePort-> broker <-pipe-> helper, latensi tetap
  * (blok 256 sampel × 4 ≈ 21 ms @48 kHz); suara kering ikut ditunda agar Mix tidak "comb". */
 'use strict';
@@ -91,7 +91,7 @@
     V.insts.set(inst.id, inst);
     const wp = waitingPorts.get(inst.id); if (wp) { waitingPorts.delete(inst.id); inst.node.port.postMessage({ port: wp }, [wp]); }
     const id = inst.id;
-    inv('vst:create', { id, path: it.params.path, format: it.params.format, sr: inst.ctx.sampleRate, block: V.B, title: label(it) + ' — KLM Mix' }).then(async (info) => {
+    inv('vst:create', { id, path: it.params.path, format: it.params.format, sr: inst.ctx.sampleRate, block: V.B, title: label(it) + ' — KLM' }).then(async (info) => {
       if (inst.id !== id) return;
       inst.info = info || { ok: false, error: 'tidak ada jawaban' };
       if (!inst.info.ok) { inst.status = 'error'; inst.error = inst.info.error || 'gagal'; KM.toast('Plugin "' + label(it) + '" gagal dimuat: ' + inst.error, 'warn', 6000); notify(); return; }

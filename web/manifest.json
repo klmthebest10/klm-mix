@@ -1,6 +1,6 @@
 {
-  "name": "KLM Mix HP",
-  "short_name": "KLM Mix",
+  "name": "KLM HP",
+  "short_name": "KLM",
   "start_url": "/hp",
   "display": "standalone",
   "background_color": "#0e1014",

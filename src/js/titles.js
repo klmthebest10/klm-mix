@@ -1,4 +1,4 @@
-/* KLM Mix - Title "UTC KLM Acara" terintegrasi: lower third, judul, running text, jam, countdown,
+/* KLM - Title "UTC KLM Acara" terintegrasi: lower third, judul, running text, jam, countdown,
    pengantin, khitanan, ayat, pengajian, breaking, credits, logo. Semua digambar di kanvas (offline). */
 'use strict';
 (function (KM) {
@@ -518,7 +518,7 @@
       const exact = defs.find((f) => f.k.toLowerCase() === k.toLowerCase());
       if (exact) k = exact.k; else k = k.toLowerCase();
       if (!defs.find((f) => f.k === k)) {
-        // alias gaya vMix: Headline/Name → field pertama, Description/Title → field kedua
+        // alias umum: Headline/Name → field pertama, Description/Title → field kedua
         const al = { headline: 0, name: 0, nama: 0, description: 1, title: 1, ket: 1 };
         const fd = defs[al[k] != null ? al[k] : 0]; if (fd) k = fd.k;
       }

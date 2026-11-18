@@ -2,7 +2,7 @@
   "name": "klm-mix-hp",
   "version": "1.7.0",
   "private": true,
-  "description": "KLM Mix HP - KLMCAM, Remote, Title & Audio (Android APK)",
+  "description": "KLM HP - KLMCAM, Remote, Title & Audio (Android APK)",
   "scripts": {
     "prepare-www": "node prepare.js",
     "android": "node prepare.js && npx cap add android && node patch-android.js && npx cap sync android"

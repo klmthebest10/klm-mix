@@ -1,4 +1,4 @@
-/* KLM Mix - Skrip (JavaScript, pengganti VB.NET vMix), Trigger per input, dan Shortcut kustom */
+/* KLM - Skrip (JavaScript), Trigger per input, dan Shortcut kustom */
 'use strict';
 (function (KM) {
   const S = KM.state;
@@ -15,8 +15,8 @@
   SC.list = () => KM.settings.scripts || (KM.settings.scripts = []);
   SC.get = (key) => SC.list().find((s) => s.id === key || s.name.toLowerCase() === String(key).toLowerCase());
 
-  const SAMPLE = `// Contoh skrip KLM Mix (JavaScript)
-// API.Function(nama, parameter) — nama fungsi sama dengan vMix
+  const SAMPLE = `// Contoh skrip KLM (JavaScript)
+// API.Function(nama, parameter) — nama fungsi = KLM API
 // Sleep(ms) menunggu, Input(n) info input, Log(teks) catatan
 API.Function("PreviewInput", "Input=1");
 await Sleep(500);

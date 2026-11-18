@@ -1,9 +1,9 @@
 /*
- * KLM Mix - Server lokal (100% offline)
- * - HTTP  : UI mixer, halaman HP (KLMCAM, Remote), API kompatibel vMix
+ * KLM - Server lokal (100% offline)
+ * - HTTP  : UI mixer, halaman HP (KLMCAM, Remote), KLM API
  * - HTTPS : untuk kamera HP lewat browser biasa (butuh secure context)
  * - WS    : signaling WebRTC KLMCAM + remote + relay API
- * - TCP   : API teks gaya vMix (FUNCTION / XML / TALLY / SUBSCRIBE)
+ * - TCP   : KLM API teks (FUNCTION / XML / TALLY / SUBSCRIBE)
  * Bisa jalan di dalam Electron maupun `node electron/server.js` (mode web).
  */
 'use strict';
@@ -22,6 +22,7 @@ const license = require('./license').create({ configDir });
 const ROOT = path.join(__dirname, '..');
 const DEFAULTS = { httpPort: 8620, httpsPort: 8621, tcpPort: 8622, mirrorPort: 8624 };
 const mirror = require('./mirror').create();
+mirror.licensed = () => license.licensed(); // Mirroring HP terkunci tanpa lisensi
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
@@ -104,6 +105,10 @@ function onWsConnection(ws, req) {
     let msg; try { msg = JSON.parse(raw); } catch (e) { return; }
     if (msg.t === 'hello') {
       info.role = msg.role; info.name = msg.name || ''; info.slot = msg.slot || 0; info.meta = msg.meta || {};
+      if (msg.role === 'camera' && !license.licensed()) { // KLMCAM terkunci tanpa lisensi
+        send(ws, { t: 'locked', feature: 'KLMCAM', msg: 'KLMCAM memerlukan lisensi KLM. Aktifkan di komputer KLM: Bantuan → Lisensi.' });
+        return setTimeout(() => { try { ws.close(4003, 'license'); } catch (e) {} }, 300);
+      }
       if (msg.role === 'mixer') {
         mixerId = id;
         if (utc) setTimeout(() => { utc.onMixerState(); send(ws, { t: 'utc-status', status: utc.status() }); }, 50);
@@ -240,7 +245,7 @@ async function handleLicense(req, res, p) {
   const send = (code, o) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); };
   if (p === '/api/license' && req.method === 'GET') return send(200, license.status());
   // aktivasi / hapus hanya dari komputer ini sendiri (bukan dari perangkat lain di jaringan)
-  if (!isLoopback(req)) return send(403, { ok: false, reason: 'Aktivasi lisensi hanya bisa dari komputer KLM Mix itu sendiri' });
+  if (!isLoopback(req)) return send(403, { ok: false, reason: 'Aktivasi lisensi hanya bisa dari komputer KLM itu sendiri' });
   if (req.method !== 'POST') return send(405, { ok: false });
   if (p === '/api/license/activate') { const b = await readJsonBody(req); const r = license.activate(b.key); notifyLicense(); return send(r.ok ? 200 : 400, r); }
   if (p === '/api/license/remove') { const r = license.remove(); notifyLicense(); return send(200, r); }
@@ -251,6 +256,11 @@ function notifyLicense() { const m = mixer(); if (m) send(m, { t: 'license', sta
 async function handleHttp(req, res, ports) {
   const u = new URL(req.url, 'http://x');
   let p = decodeURIComponent(u.pathname);
+  // fitur premium tanpa lisensi: UTC Acara (+ overlay), KLMCAM, Mirroring HP
+  if (!license.licensed()) {
+    const f = (p === '/utc' || p.startsWith('/utc/')) ? 'UTC Acara' : /^\/(cam|camera)(\.html)?$/.test(p) ? 'KLMCAM' : /^\/mirror(\.html)?$/.test(p) ? 'Mirroring HP' : '';
+    if (f) { res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(require('./license').lockedHtml(f)); }
+  }
 
   if (p === '/api' || p === '/api/') {
     const fn = u.searchParams.get('Function') || u.searchParams.get('function');
@@ -258,7 +268,7 @@ async function handleHttp(req, res, ports) {
     if (!fn) {
       const r = await callMixer({ t: 'xml' });
       res.writeHead(r.ok === false ? 503 : 200, { 'Content-Type': 'text/xml; charset=utf-8' });
-      return res.end(r.xml || '<vmix><error>' + esc(r.msg || 'Mixer belum siap') + '</error></vmix>');
+      return res.end(r.xml || '<klm><error>' + esc(r.msg || 'Mixer belum siap') + '</error></klm>');
     }
     if (/^score(cmd)?$/i.test(fn)) {
       const r = score ? score.cmd(u.searchParams.get('Value') || u.searchParams.get('value') || '') : { ok: false, error: 'Scoreboard tidak aktif' };
@@ -279,7 +289,7 @@ async function handleHttp(req, res, ports) {
   if (p === '/api/mirror/allow') { if (!isLoopback(req)) { res.writeHead(403); return res.end(); } mirror.allow(u.searchParams.get('t'), u.searchParams.get('n')); res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end('{"ok":true}'); }
   if (p === '/info') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-    return res.end(JSON.stringify({ app: 'KLM Mix', version: require('../package.json').version, ips: localIPs(), ports: Object.assign({ score: score ? score.port() : 0 }, ports), mixer: !!mixer() }));
+    return res.end(JSON.stringify({ app: 'KLM', version: require('../package.json').version, ips: localIPs(), ports: Object.assign({ score: score ? score.port() : 0 }, ports), mixer: !!mixer() }));
   }
   if (utc && (p === '/utc' || p.startsWith('/utc/') || p.startsWith('/uploads/'))) return utc.handle(req, res, p, u.searchParams);
   if (p.startsWith('/hub/')) {
@@ -292,7 +302,13 @@ async function handleHttp(req, res, ports) {
     if (!f) { res.writeHead(400); return res.end(); }
     return serveFile(req, res, path.normalize(f));
   }
-  if (p === '/' || p === '/index.html') { const sh = appShell(); if (sh) return sendShell(req, res, sh.html, 'text/html; charset=utf-8', 'h' + sh.etag); }
+  if (p === '/' || p === '/index.html') {
+    // status lisensi disisipkan langsung ke halaman agar fitur terkunci/terbuka sudah benar sejak awal (sebelum skrip lain jalan)
+    const st = license.status(), tag = '<script>window.KLM_LIC=' + JSON.stringify({ licensed: !!st.licensed, deviceId: st.deviceId }) + ';</script>';
+    const sh = appShell();
+    if (sh) return sendShell(req, res, Buffer.from(sh.html.toString('utf8').replace('<head>', '<head>' + tag)), 'text/html; charset=utf-8', 'h' + sh.etag + (st.licensed ? 'L' : 'D'));
+    try { const html = fs.readFileSync(path.join(ROOT, 'src', 'index.html'), 'utf8').replace('<head>', '<head>' + tag); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }); return res.end(html); } catch (e) {}
+  }
   if (p === '/app.bundle.js') { const sh = appShell(); if (sh) return sendShell(req, res, sh.js, 'text/javascript; charset=utf-8', sh.etag); }
   // mesin segmentasi orang (MediaPipe Tasks Vision, ikut terpasang → jalan tanpa internet)
   if (p.startsWith('/vendor/mp/')) { const rel = path.normalize(p.slice(11)); if (rel.startsWith('..') || !/\.(mjs|js|wasm)$/.test(rel)) { res.writeHead(404); return res.end(); } return serveFile(req, res, path.join(ROOT, 'node_modules', '@mediapipe', 'tasks-vision', rel)); }
@@ -311,7 +327,7 @@ async function handleHttp(req, res, ports) {
   res.end('404');
 }
 
-// ---------- TCP API (gaya vMix) ----------
+// ---------- TCP KLM API ----------
 function handleTcp(sock) {
   let buf = '';
   sock.setNoDelay(true);
@@ -332,7 +348,7 @@ function handleTcp(sock) {
         sock.write(r.ok ? 'FUNCTION OK Completed\r\n' : ('FUNCTION ER ' + (r.msg || 'Error') + '\r\n'));
       } else if (C === 'XML') {
         const r = await callMixer({ t: 'xml' });
-        const xml = r.xml || '<vmix></vmix>';
+        const xml = r.xml || '<klm></klm>';
         sock.write('XML ' + Buffer.byteLength(xml) + '\r\n' + xml);
       } else if (C === 'TALLY') {
         sock.write('TALLY OK ' + tallyStr + '\r\n');
@@ -342,7 +358,7 @@ function handleTcp(sock) {
       } else if (C === 'UNSUBSCRIBE') {
         tcpSubs.delete(sock); sock.write('UNSUBSCRIBE OK ' + (rest[0] || 'TALLY') + '\r\n');
       } else if (C === 'VERSION') {
-        sock.write('VERSION OK KLM-Mix ' + require('../package.json').version + '\r\n');
+        sock.write('VERSION OK KLM ' + require('../package.json').version + '\r\n');
       } else if (C === 'QUIT') {
         sock.end();
       } else sock.write(C + ' ER Perintah tidak dikenal\r\n');
@@ -384,7 +400,7 @@ async function start(opts) {
   }
   if (!score && !process.env.KLM_NO_SCORE) {
     try {
-      score = createScore({ dataDir: path.join(configDir(), 'score'), pubDir: path.join(ROOT, 'src', 'score'), localIPs, mixPort: () => ports.http, bridgeFile: path.join(ROOT, 'web', 'klm-bridge.js') });
+      score = createScore({ licensed: () => license.licensed(), lockedHtml: () => require('./license').lockedHtml('UTC Score'), dataDir: path.join(configDir(), 'score'), pubDir: path.join(ROOT, 'src', 'score'), localIPs, mixPort: () => ports.http, bridgeFile: path.join(ROOT, 'web', 'klm-bridge.js') });
       let t = null;
       score.onChange(() => { clearTimeout(t); t = setTimeout(() => { const m = mixer(); if (m) send(m, { t: 'score-status', status: score.status() }); }, 300); });
       score.start(cfg.scorePort).then(() => { const m = mixer(); if (m) send(m, { t: 'score-status', status: score.status() }); });
@@ -397,7 +413,7 @@ async function start(opts) {
       if (!isLoopback(req)) return socket.destroy();
       return hub.wssOut.handleUpgrade(req, socket, head, (ws) => hub.wssOut.emit('connection', ws, req));
     }
-    if (req.url.startsWith('/mirror-feed')) { if (!isLoopback(req)) return socket.destroy(); return mirror.upgrade(req, socket, head); }
+    if (req.url.startsWith('/mirror-feed')) { if (!isLoopback(req) || !license.licensed()) return socket.destroy(); return mirror.upgrade(req, socket, head); }
     if (!req.url.startsWith('/ws')) return socket.destroy();
     wssA.handleUpgrade(req, socket, head, (ws) => wssA.emit('connection', ws, req));
   };
@@ -414,12 +430,12 @@ async function start(opts) {
   };
   const cert = readCert();
   if (cert) await startHttps(cert);
-  else makeCert().then(startHttps).then(() => { if (ports.https) console.log('[KLM Mix] HTTPS :' + ports.https + ' siap'); });
+  else makeCert().then(startHttps).then(() => { if (ports.https) console.log('[KLM] HTTPS :' + ports.https + ' siap'); });
   const tcpServer = net.createServer(handleTcp);
   ports.tcp = await listen(tcpServer, cfg.tcpPort);
   try { ports.mirror = mirror.port = await listen(mirror.server, cfg.mirrorPort || DEFAULTS.mirrorPort); } catch (e) { console.warn('[KLM] port mirroring gagal dibuka:', e.message); }
 
-  console.log(`[KLM Mix] HTTP :${ports.http}  HTTPS :${ports.https}  TCP :${ports.tcp}`);
+  console.log(`[KLM] HTTP :${ports.http}  HTTPS :${ports.https}  TCP :${ports.tcp}`);
   for (const ip of localIPs()) console.log(`   Mixer   : http://${ip.address}:${ports.http}/\n   Menu HP : http://${ip.address}:${ports.http}/hp\n   KLMCAM  : ${ports.https ? `https://${ip.address}:${ports.https}` : `http://${ip.address}:${ports.http}`}/cam\n   Remote  : http://${ip.address}:${ports.http}/remote\n   UTC     : http://${ip.address}:${ports.http}/utc${score && score.port() ? `\n   Score   : http://${ip.address}:${score.port()}/  (HP: /hp)` : ''}`);
   return { ports, ips: localIPs() };
 }

@@ -1,4 +1,4 @@
-/* KLMCAM - kamera HP → KLM Mix lewat WebRTC (LAN, latensi rendah, H.264, tally) */
+/* KLMCAM - kamera HP → KLM lewat WebRTC (LAN, latensi rendah, H.264, tally) */
 'use strict';
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -175,6 +175,7 @@
 
   async function onMsg(m) {
     switch (m.t) {
+      case 'locked': if (conn) conn.closed = true; setStatus('closed'); KMP.toast('🔒 ' + (m.msg || 'KLMCAM memerlukan lisensi KLM'), 15000); break;
       case 'welcome': setStatus(m.mixer ? 'open' : 'nomixer'); break;
       case 'mixer-gone': setStatus('nomixer'); setTally('off'); if (pc) { pc.close(); pc = null; } break;
       case 'cam-start': iceCfg = Array.isArray(m.ice) ? m.ice : []; if (!vTrack) await startMedia(); if (m.settings) await applySettings(m.settings); await startPeer(); break;

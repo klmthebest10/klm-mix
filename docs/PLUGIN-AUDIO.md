@@ -1,6 +1,6 @@
-# Plugin Audio KLM Mix
+# Plugin Audio KLM
 
-KLM Mix punya **rak efek** di setiap input audio dan di **Master** (tombol **FX** di mixer).
+KLM punya **rak efek** di setiap input audio dan di **Master** (tombol **FX** di mixer).
 Urutan efek bebas, tiap efek punya **bypass** dan **Mix** (wet/dry), dan rantai bisa disimpan sebagai **preset**.
 
 ## Efek bawaan (18)
@@ -16,13 +16,13 @@ Urutan efek bebas, tiap efek punya **bypass** dan **Mix** (wet/dry), dan rantai 
 Preset rantai bawaan: *Vokal Siaran, Ceramah / Pengajian, Podcast / Talkshow, Musik Latar, Suara Telepon / Radio, Qiraah / Adzan (reverb masjid), Master Siaran*.
 
 ## Memasang plugin eksternal
-- **FX → Pasang plugin / IR…** lalu pilih file, atau salin file ke **folder plugin** (`%APPDATA%\KLM Mix\config\plugins`) lalu **Muat ulang**.
+- **FX → Pasang plugin / IR…** lalu pilih file, atau salin file ke **folder plugin** (`%APPDATA%\KLM\config\plugins`) lalu **Muat ulang**.
 - **Impulse response** (`.wav`, `.flac`, `.mp3`, `.ogg`, `.aiff`): muncul di efek **Reverb → Ruang** dengan tanda 📂.
   Cocok untuk rekaman ruangan asli (masjid, aula), hall/plate komersial, atau kabinet speaker.
 - **Plugin JavaScript** (`.js`): format plugin KLM di bawah.
 
 > VST/AU tidak dapat dimuat langsung di mesin audio ini. Jalankan VST di host (mis. Cantabile Lite, LightHost)
-> lalu kirim ke KLM Mix lewat kabel audio virtual (VB-Cable) sebagai input **Mic / Audio Device**.
+> lalu kirim ke KLM lewat kabel audio virtual (VB-Cable) sebagai input **Mic / Audio Device**.
 
 ## Format plugin KLM (.js)
 Modul ES dengan `export default`:
@@ -38,7 +38,7 @@ export default {
   params: [ { k: 'drive', n: 'Drive', min: 0, max: 24, step: 0.5, def: 6, unit: 'dB' },
             { k: 'mode', n: 'Mode', def: 'a', options: [['a', 'Mode A'], ['b', 'Mode B']] } ],
   create(ctx, params, h) {
-    // ctx = AudioContext KLM Mix (48 kHz). h = { smooth(param, v), worklet(name, opts), dbToGain(db), irs }
+    // ctx = AudioContext KLM (48 kHz). h = { smooth(param, v), worklet(name, opts), dbToGain(db), irs }
     const g = ctx.createGain();
     return { input: g, output: g, set(k, v) { /* terapkan parameter */ }, destroy() {} };
   }

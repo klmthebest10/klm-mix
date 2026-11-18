@@ -1,6 +1,6 @@
-/* UTC KLM Acara × KLM Mix — tema & tata letak menyatu
- * html.klmui      : tema KLM Mix (warna, font, sudut, kontrol) — juga di HP / jendela terpisah
- * html.klm-embed  : di dalam KLM Mix: monitor Program & switcher dipakai dari mixer di atasnya,
+/* UTC KLM Acara × KLM — tema & tata letak menyatu
+ * html.klmui      : tema KLM (warna, font, sudut, kontrol) — juga di HP / jendela terpisah
+ * html.klm-embed  : di dalam KLM: monitor Program & switcher dipakai dari mixer di atasnya,
  *                   panel jadi 3 kolom ringkas: tombol tayang | navigasi | editor
  */
 html.klmui {
@@ -16,7 +16,7 @@ html.klmui input, html.klmui select, html.klmui textarea { border-radius: 6px; b
 html.klmui input:focus, html.klmui select:focus, html.klmui textarea:focus { border-color: #3d8bff; box-shadow: 0 0 0 3px rgba(61, 139, 255, .14); }
 html.klmui input[type=checkbox], html.klmui input[type=range] { accent-color: #3d8bff; }
 html.klmui header { background: #0a0c0f; border-bottom-color: #252a33; padding: 8px 14px; }
-html.klmui .brand i { background: linear-gradient(135deg, #ff4b3e, #ffb11f); box-shadow: 0 2px 10px rgba(255, 90, 50, .3); color: #fff; border-radius: 9px; }
+html.klmui .brand i { background: linear-gradient(135deg, #0f4a54, #03151a); box-shadow: inset 0 0 0 1px rgba(63, 240, 208, .3), 0 2px 10px rgba(22, 224, 198, .2); color: #d4ff3f; border-radius: 9px; }
 html.klmui .evsel { background: #14171c; border-color: #414a5a; font-weight: 800; }
 html.klmui .box { background: #191d23; border-color: #252a33; border-radius: 10px; }
 html.klmui .box h3 { font-size: 14px; font-weight: 800; }
@@ -49,7 +49,7 @@ html.klmui .tabs button .ki { width: 15px; height: 15px; }
 html.klmui .tabs button:hover { background: #20252d; color: #fff; }
 html.klmui .tabs button.act { background: rgba(240, 138, 36, .14); color: #ffc078; border-color: rgba(240, 138, 36, .5); }
 
-/* ================= menyatu di dalam KLM Mix ================= */
+/* ================= menyatu di dalam KLM ================= */
 html.klm-embed header { display: none; }
 html.klm-embed main { grid-template-columns: 340px 196px minmax(0, 1fr); gap: 12px; padding: 12px; height: 100vh; align-items: stretch; }
 html.klm-embed main > section:last-child { display: contents; }

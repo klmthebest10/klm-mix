@@ -1,4 +1,4 @@
-// KLM Mix — manajer host VST di proses utama: menjalankan broker (utilityProcess), menghubungkan MessagePort
+// KLM — manajer host VST di proses utama: menjalankan broker (utilityProcess), menghubungkan MessagePort
 // AudioWorklet <-> broker per instance plugin, dan meneruskan perintah/event lewat IPC.
 'use strict';
 const { app, ipcMain, utilityProcess, MessageChannelMain } = require('electron');
@@ -22,7 +22,7 @@ function helperPath() {
 
 function ensureBroker() {
   if (broker) return broker;
-  broker = utilityProcess.fork(path.join(__dirname, 'vst-broker.js'), [], { serviceName: 'KLM Mix VST Host', stdio: 'pipe' });
+  broker = utilityProcess.fork(path.join(__dirname, 'vst-broker.js'), [], { serviceName: 'KLM VST Host', stdio: 'pipe' });
   broker.stdout && broker.stdout.on('data', (d) => console.log('[vst-broker]', String(d).trim()));
   broker.stderr && broker.stderr.on('data', (d) => console.warn('[vst-broker]', String(d).trim()));
   broker.on('message', onBroker);

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-# KLM Mix — helper host plugin VST3/VST2 (klm-vsthost) + plugin uji
+# KLM — helper host plugin VST3/VST2 (klm-vsthost) + plugin uji
 # cmake -B build -DVST3_SDK=<path vst3sdk v3.8.x> && cmake --build build --config Release
 
 if(WIN32)

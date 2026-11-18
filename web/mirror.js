@@ -1,4 +1,4 @@
-/* KLM Mix HP — Mirroring layar: aplikasi (.apk) merekam layar dengan encoder H.264 hardware dan mengirim langsung ke PC lewat WiFi/USB lokal. */
+/* KLM HP — Mirroring layar: aplikasi (.apk) merekam layar dengan encoder H.264 hardware dan mengirim langsung ke PC lewat WiFi/USB lokal. */
 'use strict';
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -17,7 +17,7 @@
     const frag = location.hash.replace(/^#/, '');
     $('openApp').href = 'intent://mirror?' + frag + '#Intent;scheme=klmmix;package=com.klm.mix.hp;end';
     if (!fromUrl) $('openApp').classList.add('hide');
-    status('', 'Buka lewat aplikasi KLM Mix', 'Mirroring tidak bisa dari browser');
+    status('', 'Buka lewat aplikasi KLM', 'Mirroring tidak bisa dari browser');
     return;
   }
   $('appUi').classList.remove('hide');
@@ -53,13 +53,13 @@
   const stopScan = () => { clearInterval(timer); if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; $('scan').style.display = 'none'; };
   $('scanX').onclick = stopScan;
   $('bScan').onclick = async () => {
-    if (!('BarcodeDetector' in window)) return KMP.toast('Pemindai QR tidak tersedia di HP ini — scan QR dengan kamera bawaan HP, lalu pilih "Buka di aplikasi KLM Mix"', 7000);
+    if (!('BarcodeDetector' in window)) return KMP.toast('Pemindai QR tidak tersedia di HP ini — scan QR dengan kamera bawaan HP, lalu pilih "Buka di aplikasi KLM"', 7000);
     try {
       const det = new BarcodeDetector({ formats: ['qr_code'] });
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: false });
       $('sv').srcObject = stream; await $('sv').play(); $('scan').style.display = 'flex';
       timer = setInterval(async () => {
-        try { const r = await det.detect($('sv')); for (const c of r) { const o = parse(c.rawValue); if (o) { stopScan(); cfg = Object.assign({}, cfg, o, { q: o.q || cfg.q, f: o.f || cfg.f, b: o.b || cfg.b }); save(cfg); ui(); start(); return; } if (c.rawValue) $('scanMsg').textContent = 'Bukan QR Mirroring KLM Mix'; } } catch (e) {}
+        try { const r = await det.detect($('sv')); for (const c of r) { const o = parse(c.rawValue); if (o) { stopScan(); cfg = Object.assign({}, cfg, o, { q: o.q || cfg.q, f: o.f || cfg.f, b: o.b || cfg.b }); save(cfg); ui(); start(); return; } if (c.rawValue) $('scanMsg').textContent = 'Bukan QR Mirroring KLM'; } } catch (e) {}
       }, 220);
     } catch (e) { stopScan(); KMP.toast('Kamera tidak bisa dibuka: ' + e.message); }
   };

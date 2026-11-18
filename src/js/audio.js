@@ -1,4 +1,4 @@
-/* KLM Mix - mixer audio: per-input gain, EQ 3-band, kompresor, noise gate, delay, pan, fader, mute, solo,
+/* KLM - mixer audio: per-input gain, EQ 3-band, kompresor, noise gate, delay, pan, fader, mute, solo,
    bus Master / A / B, audio-follow-video (Auto), VU meter stereo, monitor headphone */
 'use strict';
 (function (KM) {

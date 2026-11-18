@@ -1,6 +1,6 @@
-/* KLM Mix - input "Mirroring HP": layar HP dikirim H.264 lewat TCP di jaringan lokal, didekode di sini dengan WebCodecs
+/* KLM - input "Mirroring HP": layar HP dikirim H.264 lewat TCP di jaringan lokal, didekode di sini dengan WebCodecs
  * (dekoder hardware bila ada) dengan antrean sependek mungkin → latensi rendah. Tanpa internet: cukup satu WiFi / hotspot.
- * Dua sumber: (1) Android lewat aplikasi KLM Mix (.apk), (2) iPhone / iPad / Mac tanpa aplikasi lewat penerima AirPlay
+ * Dua sumber: (1) Android lewat aplikasi KLM (.apk), (2) iPhone / iPad / Mac tanpa aplikasi lewat penerima AirPlay
  * bawaan (helper klm-airplay, mode opts.mode = 'airplay'). Android tanpa aplikasi memakai Miracast bawaan Windows +
  * tangkapan jendela (lihat dialog). */
 'use strict';
@@ -24,11 +24,11 @@
     if (!a.running && a.ev !== 'starting') return a.available === false ? 'Penerima AirPlay tidak tersedia di instalasi ini' : 'Penerima AirPlay mati';
     if (a.ev === 'starting') return 'Menyalakan penerima AirPlay…';
     if (a.ev === 'client' || a.ev === 'mirror') return (a.name || 'Perangkat Apple') + ' menyambung…';
-    return 'Siap — di iPhone: Pusat Kontrol → Pencerminan Layar → "' + (a.rname || 'KLM Mix') + '"';
+    return 'Siap — di iPhone: Pusat Kontrol → Pencerminan Layar → "' + (a.rname || 'KLM') + '"';
   };
   MR.apStart = (inp) => {
     if (!window.klm || !window.klm.invoke) { inp.rt.err = 'AirPlay hanya tersedia di versi PC (.exe)'; return; }
-    window.klm.invoke('airplay:start', { token: inp.opts.token, name: inp.opts.apName || 'KLM Mix' }).then((st) => { if (st) MR.ap = st; inp.rt.mst = MR.apText(); KM.changed('input'); }).catch((e) => { inp.rt.err = e.message; });
+    window.klm.invoke('airplay:start', { token: inp.opts.token, name: inp.opts.apName || 'KLM' }).then((st) => { if (st) MR.ap = st; inp.rt.mst = MR.apText(); KM.changed('input'); }).catch((e) => { inp.rt.err = e.message; });
   };
 
   /** codec string dari SPS (Annex-B): avc1.PPCCLL */
@@ -76,7 +76,7 @@
     if (rt.pcmWait) return;
     rt.pcmWait = true; pcmNode(inp, rate || 44100).catch((x) => { rt.pcmWait = false; console.warn('[mirror] suara', x); });
   }
-  /** suara PC tanpa suara KLM Mix (helper klm-procaudio, Windows): dipakai input tangkap layar / Miracast */
+  /** suara PC tanpa suara KLM (helper klm-procaudio, Windows): dipakai input tangkap layar / Miracast */
   MR.pcAudioStart = function (inp) {
     const rt = inp.rt, o = inp.opts;
     if (!window.klm || !window.klm.invoke) return;
@@ -187,7 +187,7 @@
   KM.inputTypes.mirror = {
     label: 'Mirroring HP / iPhone', icon: '📱',
     create(inp) {
-      inp.opts = Object.assign({ mode: 'app', token: '', size: 1280, fps: 60, bitrate: 8000, apName: 'KLM Mix' }, inp.opts);
+      inp.opts = Object.assign({ mode: 'app', token: '', size: 1280, fps: 60, bitrate: 8000, apName: 'KLM' }, inp.opts);
       if (!/^[a-f0-9]{8,32}$/.test(inp.opts.token)) inp.opts.token = rnd();
       inp.rt.ready = true;
       if (isAp(inp)) {
@@ -219,10 +219,10 @@
         info ? h('p', h('span.pill.ok', 'Tersambung'), ' ', h('b', info.name || info.model || 'HP'), ' • ' + (info.w || '?') + '×' + (info.h || '?') + ' • ' + ((inp.rt && inp.rt.mfps) || 0) + ' fps') : null,
         h('div.row', KM.dialogs.qr(MR.link(inp, ips[0].address)), h('div.grow',
           h('p', '1. HP & PC di jaringan yang sama (WiFi / hotspot HP / USB tethering) — ', h('b', 'tanpa internet pun bisa'), '.'),
-          h('p', '2. Buka aplikasi ', h('b', 'KLM Mix (.apk)'), ' di HP → ', h('b', 'Mirroring'), ' → ', h('b', 'Scan QR'), ' ini. Atau scan dengan kamera HP lalu pilih "Buka di aplikasi".'),
+          h('p', '2. Buka aplikasi ', h('b', 'KLM (.apk)'), ' di HP → ', h('b', 'Mirroring'), ' → ', h('b', 'Scan QR'), ' ini. Atau scan dengan kamera HP lalu pilih "Buka di aplikasi".'),
           h('p', '3. Izinkan "Mulai merekam/mentransmisikan layar" → layar HP langsung tampil di input ini.'),
           ips.length > 1 ? h('p.muted', 'PC punya beberapa alamat (' + ips.map((x) => x.address).join(', ') + ') — HP mencoba semuanya otomatis.') : null,
-          h('p.muted', 'Khusus Android 8+ lewat aplikasi KLM Mix. Untuk iPhone/iPad pilih mode AirPlay (tanpa aplikasi); Android tanpa aplikasi bisa lewat Miracast.')))));
+          h('p.muted', 'Khusus Android 8+ lewat aplikasi KLM. Untuk iPhone/iPad pilih mode AirPlay (tanpa aplikasi); Android tanpa aplikasi bisa lewat Miracast.')))));
     };
     draw();
     const iv = setInterval(() => { if (!box.isConnected) return clearInterval(iv); draw(); }, 1500);
@@ -235,7 +235,7 @@
     let detOpen = false;
     const inv = (ch) => window.klm && window.klm.invoke ? window.klm.invoke(ch).catch(() => {}) : Promise.resolve();
     const draw = () => {
-      const a = MR.ap || {}, info = inp.rt && inp.rt.minfo, nm = (inp.opts && inp.opts.apName) || a.rname || 'KLM Mix';
+      const a = MR.ap || {}, info = inp.rt && inp.rt.minfo, nm = (inp.opts && inp.opts.apName) || a.rname || 'KLM';
       const pill = info ? h('span.pill.ok', 'Tersambung') : a.ev === 'error' ? h('span.pill.red', 'Masalah') : a.running ? h('span.pill.ok', 'Siap menerima') : h('span.pill', inp.rt && inp.rt.ready ? 'Mati' : 'Belum dibuat');
       const nets = (a.nets || []).filter((n) => n.ip);
       const hot = nets.find((n) => n.hotspot);
@@ -249,9 +249,9 @@
           h('p', 'WiFi seperti itu memisahkan perangkat satu sama lain. Pakai jaringan sendiri, salah satu:'),
           h('p', 'A. ', h('b', 'Hotspot Seluler PC'), ': ', h('button.btn', { type: 'button', onclick: () => inv('airplay:hotspot') }, '📶 Buka Hotspot Seluler Windows'), ' → nyalakan → di iPhone sambungkan WiFi ke nama hotspot PC → "' + nm + '" muncul otomatis' + (hot ? ' (hotspot PC sudah aktif: ' + hot.ip + ')' : '') + '.'),
           h('p', 'B. ', h('b', 'Hotspot Pribadi iPhone'), ': nyalakan di iPhone (Pengaturan → Hotspot Pribadi), sambungkan WiFi PC ke iPhone.'),
-          h('p.muted', 'Lalu matikan-nyalakan WiFi iPhone bila perlu. KLM Mix mengumumkan diri di semua jaringan PC sekaligus dan mengikuti bila jaringan berubah.')),
+          h('p.muted', 'Lalu matikan-nyalakan WiFi iPhone bila perlu. KLM mengumumkan diri di semua jaringan PC sekaligus dan mengikuti bila jaringan berubah.')),
         null,
-        h('p.muted', 'Atur suara di strip audio input ini (A/V sync tersedia). Video ber-DRM (Netflix, Disney+, dll.) memang tidak boleh dicerminkan oleh iPhone — itu aturan Apple untuk semua penerima, bukan dari KLM Mix.')));
+        h('p.muted', 'Atur suara di strip audio input ini (A/V sync tersedia). Video ber-DRM (Netflix, Disney+, dll.) memang tidak boleh dicerminkan oleh iPhone — itu aturan Apple untuk semua penerima, bukan dari KLM.')));
     };
     const draw2 = () => { draw(); const d = box.querySelector('details'); if (d) d.open = detOpen; };
     draw2();

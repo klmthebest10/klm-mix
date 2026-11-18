@@ -1,4 +1,4 @@
-/* KLM Mix HP - helper bersama (dipakai di browser HP maupun APK) */
+/* KLM HP - helper bersama (dipakai di browser HP maupun APK) */
 'use strict';
 window.KMP = (function () {
   const DEFAULT_PORT = 8620;

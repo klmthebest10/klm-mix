@@ -1,4 +1,4 @@
-// KLM Mix VST host — proses helper (satu proses per instance plugin).
+// KLM VST host — proses helper (satu proses per instance plugin).
 // Protokol biner lewat stdin/stdout: [u32 len (termasuk byte tipe)][u8 tipe][payload], little-endian.
 //   -> 'P' u32 seq,u32 n,u32 ch, float32 planar      <- 'A' format sama (audio terproses)
 //   -> 'E' u8 0=tutup 1=buka 2=toggle                <- 'W' {"open":bool}
@@ -272,7 +272,7 @@ void showEditorWindow (void* hwnd)
 	if (!hw) return;
 	if (IsIconic (hw)) ShowWindow (hw, SW_RESTORE);
 	else ShowWindow (hw, SW_SHOW);
-	// bawa ke depan aplikasi KLM Mix (foreground lock Windows dilewati dengan topmost sesaat)
+	// bawa ke depan aplikasi KLM (foreground lock Windows dilewati dengan topmost sesaat)
 	SetWindowPos (hw, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 	SetWindowPos (hw, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 	SetForegroundWindow (hw);

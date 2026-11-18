@@ -1,8 +1,8 @@
-/* KLM Mix — penerima AirPlay bawaan (iPhone / iPad / Mac → Pusat Kontrol → "Pencerminan Layar" → KLM Mix).
+/* KLM — penerima AirPlay bawaan (iPhone / iPad / Mac → Pusat Kontrol → "Pencerminan Layar" → KLM).
  * Menjalankan helper terpisah klm-airplay(.exe) (GPL-3.0, dari pustaka UxPlay) yang mengumumkan diri di jaringan lokal
- * (mDNS, tanpa Bonjour) lalu meneruskan video H.264 + suara PCM ke port Mirroring KLM Mix (127.0.0.1:8624) dengan token input.
+ * (mDNS, tanpa Bonjour) lalu meneruskan video H.264 + suara PCM ke port Mirroring KLM (127.0.0.1:8624) dengan token input.
  * Satu helper per jaringan (WiFi, LAN, Hotspot Seluler PC, …) sehingga iPhone di jaringan mana pun yang terhubung ke PC
- * melihat "KLM Mix" — termasuk saat WiFi memblokir antar-perangkat dan iPhone disambungkan ke hotspot PC.
+ * melihat "KLM" — termasuk saat WiFi memblokir antar-perangkat dan iPhone disambungkan ke hotspot PC.
  * Windows Firewall: aturan izin diperiksa; bila belum ada / diblokir, diminta sekali lewat UAC (versi portable juga). */
 'use strict';
 const { app, ipcMain, shell } = require('electron');
@@ -65,7 +65,7 @@ function setup({ win, server, configDir }) {
     const m = [...b].map((x) => x.toString(16).padStart(2, '0')).join(':');
     writeCfg({ mac: m }); return m;
   }
-  const cleanName = (n) => String(n || '').replace(/[^\p{L}\p{N} ._'()-]/gu, '').trim().slice(0, 40) || ('KLM Mix ' + os.hostname()).slice(0, 40);
+  const cleanName = (n) => String(n || '').replace(/[^\p{L}\p{N} ._'()-]/gu, '').trim().slice(0, 40) || ('KLM ' + os.hostname()).slice(0, 40);
 
   function spawnInst(key, iface) {
     const exe = findExe();
@@ -93,7 +93,7 @@ function setup({ win, server, configDir }) {
         if (I.proc !== p) return;
         I.proc = null;
         const tail = I.err.split('\n').filter(Boolean).pop() || '';
-        if (code === 3221225781) { I.st = { ev: 'error', msg: 'file pendukung penerima AirPlay (DLL) hilang — pasang ulang KLM Mix' }; A.last.msg = I.st.msg; send(); return; }
+        if (code === 3221225781) { I.st = { ev: 'error', msg: 'file pendukung penerima AirPlay (DLL) hilang — pasang ulang KLM' }; A.last.msg = I.st.msg; send(); return; }
         if (A.want && A.insts.get(key) === I && I.restarts < 6) { // keluar tak terduga → nyalakan lagi
           I.restarts++; I.st = { ev: 'error', msg: 'penerima berhenti (kode ' + code + '), menyalakan ulang… ' + tail }; send();
           setTimeout(run, 1500 * I.restarts);
@@ -160,7 +160,7 @@ function setup({ win, server, configDir }) {
   async function fixFirewall() {
     if (process.platform !== 'win32') return { ok: false };
     const exe = findExe();
-    const cmdArgs = `/c netsh advfirewall firewall delete rule name=all program="${exe}" & netsh advfirewall firewall add rule name="KLM Mix AirPlay" dir=in action=allow program="${exe}" enable=yes profile=any`;
+    const cmdArgs = `/c netsh advfirewall firewall delete rule name=all program="${exe}" & netsh advfirewall firewall add rule name="KLM AirPlay" dir=in action=allow program="${exe}" enable=yes profile=any`;
     A.fwMsg = 'Menunggu izin administrator (jendela UAC)…'; send();
     const r = await ps(`try { Start-Process -FilePath cmd.exe -ArgumentList ${psq(cmdArgs)} -Verb RunAs -WindowStyle Hidden -Wait; 'OK' } catch { 'BATAL' }`, 120000);
     await checkFirewall(false);

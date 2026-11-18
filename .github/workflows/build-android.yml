@@ -42,17 +42,17 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
-          cp app/build/outputs/apk/debug/app-debug.apk ../../KLM-Mix-HP.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../../KLM-HP.apk
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KLM-Mix-Android
-          path: KLM-Mix-HP.apk
+          name: KLM-Android
+          path: KLM-HP.apk
           if-no-files-found: error
 
       - name: Publish release (tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: KLM-Mix-HP.apk
+          files: KLM-HP.apk

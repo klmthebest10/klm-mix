@@ -1,5 +1,5 @@
 /*
- * KLM Mix - Proses utama Electron (versi Windows .exe)
+ * KLM - Proses utama Electron (versi Windows .exe)
  */
 'use strict';
 const { app, BrowserWindow, ipcMain, dialog, desktopCapturer, session, screen, shell, Menu } = require('electron');
@@ -9,6 +9,8 @@ const fs = require('fs');
 
 const T0 = Date.now() - Math.round(process.uptime() * 1000); // saat proses dimulai (untuk ukur kecepatan buka)
 const T = {};
+// nama aplikasi kini "KLM" (dulu "KLM Mix"): folder data lama tetap dipakai agar pengaturan, preset UTC & lisensi tidak hilang
+try { app.setPath('userData', path.join(app.getPath('appData'), 'KLM Mix')); } catch (e) {}
 process.env.KLM_CONFIG_DIR = path.join(app.getPath('userData'), 'config');
 const server = require('./server');
 const setupUtcOsr = require('./utc-osr');
@@ -37,7 +39,7 @@ const browsers = new Map();
 // ---------------- layar pembuka (jendela kecil tanpa bingkai) ----------------
 // Jendela utama dimuat tersembunyi; layar pembuka menampilkan tahap penyiapan yang sebenarnya, lalu jendela utama
 // muncul sekaligus dalam keadaan siap (tidak ada jendela kosong / antarmuka setengah jadi).
-const BRAND_SVG = '<svg viewBox="0 0 24 24"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4b3e"/><stop offset="1" stop-color="#ffb11f"/></linearGradient></defs><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#g)"/><path d="M7.6 6.5h2.9v4.6l4.2-4.6h3.5l-4.95 5.25L18.4 17.5h-3.6l-4.3-4.75v4.75H7.6Z" fill="#fff"/></svg>';
+const BRAND_SVG = '<svg viewBox="0 0 24 24"><defs><linearGradient id="klmT" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f4a54"/><stop offset=".55" stop-color="#082a31"/><stop offset="1" stop-color="#03151a"/></linearGradient><linearGradient id="klmS" gradientUnits="userSpaceOnUse" x1="0" y1="3.5" x2="0" y2="20.5"><stop offset="0" stop-color="#d4ff3f"/><stop offset="1" stop-color="#16e0c6"/></linearGradient><radialGradient id="klmG" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff5d84" stop-opacity=".55"/><stop offset="1" stop-color="#ff5d84" stop-opacity="0"/></radialGradient><clipPath id="klmC"><path d="M12 9.6L8.3 20.1H15.7Z"/></clipPath></defs><rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#klmT)"/><rect x="1.9" y="1.9" width="20.2" height="20.2" rx="5.6" fill="none" stroke="#3ff0d0" stroke-opacity=".16" stroke-width=".35"/><g fill="none" stroke="url(#klmS)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.53 5.48A3.3 3.3 0 0 1 14.53 9.72M9.47 5.48A3.3 3.3 0 0 0 9.47 9.72"/><path d="M16.6 3.75A5.95 5.95 0 0 1 16.6 11.45M7.4 3.75A5.95 5.95 0 0 0 7.4 11.45" stroke-opacity=".85"/><path d="M10 13.2L15.2 18.1M14 13.2L8.8 18.1M8.6 17.9H15.4" stroke-width="1.05" stroke-linecap="butt" clip-path="url(#klmC)"/><path d="M12 9.6L8.3 20.1M12 9.6L15.7 20.1"/></g><circle cx="12" cy="7.6" r="3" fill="url(#klmG)"/><circle cx="12" cy="7.6" r="1.45" fill="#ff5d84"/><circle cx="11.6" cy="7.2" r=".45" fill="#fff" fill-opacity=".8"/></svg>';
 const splashHtml = (ver) => '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
   + 'html,body{margin:0;height:100%;overflow:hidden;background:#090b0f;color:#eceff4;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;-webkit-user-select:none;cursor:default}'
   + 'body{-webkit-app-region:drag;display:grid;grid-template-columns:200px 1fr;align-items:center;transition:opacity .32s ease, transform .32s ease}body.out{opacity:0;transform:scale(1.015)}'
@@ -49,17 +51,17 @@ const splashHtml = (ver) => '<!DOCTYPE html><html><head><meta charset="utf-8"><s
   + '.txt{position:relative;padding-right:40px}.wm{font-size:38px;font-weight:800;letter-spacing:-1px;line-height:1;animation:up .6s .08s cubic-bezier(.2,.8,.2,1) both}.wm span{font-weight:300;color:#c5ccd8}'
   + '.sub{margin-top:8px;color:#8a93a5;font-size:11.5px;font-weight:600;letter-spacing:3.2px;text-transform:uppercase;animation:up .6s .16s cubic-bezier(.2,.8,.2,1) both}'
   + '.st{margin-top:34px;font-size:12.5px;color:#aeb6c4;height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:up .6s .24s both}'
-  + '.bar{margin-top:9px;height:3px;border-radius:3px;background:rgba(255,255,255,.09);overflow:hidden}.bar i{display:block;height:100%;width:6%;border-radius:3px;background:linear-gradient(90deg,#ff4b3e,#ffb11f);transition:width .35s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 12px rgba(255,120,40,.7)}'
+  + '.bar{margin-top:9px;height:3px;border-radius:3px;background:rgba(255,255,255,.09);overflow:hidden}.bar i{display:block;height:100%;width:6%;border-radius:3px;background:linear-gradient(90deg,#d4ff3f,#16e0c6);transition:width .35s cubic-bezier(.2,.8,.2,1);box-shadow:0 0 12px rgba(255,120,40,.7)}'
   + '.ft{position:fixed;left:0;right:0;bottom:14px;padding:0 24px;display:flex;justify-content:space-between;font-size:10.5px;color:#5d6676;letter-spacing:.4px}.live{display:inline-flex;align-items:center;gap:6px}.live b{width:6px;height:6px;border-radius:50%;background:#ff4b3e;animation:bl 1.1s ease-in-out infinite}'
   + '@keyframes spin{to{transform:rotate(360deg)}}@keyframes pop{from{transform:scale(.6);opacity:0}}@keyframes up{from{transform:translateY(10px);opacity:0}}@keyframes bl{50%{opacity:.25}}'
   + '</style></head><body><div class="bg"></div><div class="mark"><i class="ring"></i><i class="ring b"></i>' + BRAND_SVG.replace('<svg ', '<svg class="k" ') + '</div>'
-  + '<div class="txt"><div class="wm">KLM <span>Mix</span></div><div class="sub">Studio Produksi Live</div><div class="st" id="st">Memulai…</div><div class="bar"><i id="pb"></i></div></div>'
+  + '<div class="txt"><div class="wm">KLM</div><div class="sub">Kinetic Live Mixer</div><div class="st" id="st">Memulai…</div><div class="bar"><i id="pb"></i></div></div>'
   + '<div class="ft"><span class="live"><b></b>MENYIAPKAN STUDIO</span><span>versi ' + ver + '</span></div>'
   + '<script>window.S=function(p,t){if(t)document.getElementById("st").textContent=t;if(p!=null)document.getElementById("pb").style.width=Math.max(6,Math.min(100,p))+"%"}</script></body></html>';
 let splashWin = null, revealed = false, splashAt = 0;
 function createSplash() {
   splashWin = new BrowserWindow({ width: 600, height: 300, frame: false, resizable: false, maximizable: false, minimizable: false, fullscreenable: false, center: true, show: true, skipTaskbar: false,
-    backgroundColor: '#090b0f', title: 'KLM Mix', icon: path.join(__dirname, '..', 'build', 'icon.png'), webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+    backgroundColor: '#090b0f', title: 'KLM', icon: path.join(__dirname, '..', 'build', 'icon.png'), webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
   splashAt = Date.now(); T.splash = Date.now() - T0; // jendela langsung tampil (latar gelap), isinya menyusul beberapa saat kemudian
   splashWin.webContents.once('did-finish-load', () => { T.splashPaint = Date.now() - T0; });
   splashWin.on('closed', () => { splashWin = null; });
@@ -86,7 +88,7 @@ function reveal(why) {
 function createMain() {
   mainWin = new BrowserWindow({
     width: 1600, height: 940, minWidth: 820, minHeight: 560,
-    backgroundColor: '#0a0c0f', title: 'KLM Mix', show: false,
+    backgroundColor: '#0a0c0f', title: 'KLM', show: false,
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -106,7 +108,7 @@ function createMain() {
     if (quitting || !d || d.reason === 'clean-exit' || d.reason === 'killed') return;
     console.warn('[KLM] proses tampilan berhenti:', d.reason, d.exitCode);
     const now = Date.now(); crashes = crashes.filter((t) => now - t < 120000); crashes.push(now);
-    if (crashes.length > 3) { dialog.showErrorBox('KLM Mix', 'Tampilan berhenti berulang kali (' + d.reason + '). Coba mode Hemat, perbarui driver grafis, atau jalankan ulang aplikasi.'); return; }
+    if (crashes.length > 3) { dialog.showErrorBox('KLM', 'Tampilan berhenti berulang kali (' + d.reason + '). Coba mode Hemat, perbarui driver grafis, atau jalankan ulang aplikasi.'); return; }
     setTimeout(() => { if (mainWin && !mainWin.isDestroyed() && netInfo) mainWin.loadURL(`http://127.0.0.1:${netInfo.ports.http}/#pulih`).catch(() => {}); }, 600);
   });
   let hungT = null;
@@ -115,7 +117,7 @@ function createMain() {
     clearTimeout(hungT);
     hungT = setTimeout(async () => { // masih macet setelah 12 detik → tawarkan muat ulang
       if (!mainWin || mainWin.isDestroyed()) return;
-      const r = await dialog.showMessageBox(mainWin, { type: 'warning', noLink: true, title: 'KLM Mix', message: 'KLM Mix tidak merespons', detail: 'Tunggu sebentar lagi, atau muat ulang tampilan (sesi terakhir dipulihkan otomatis).', buttons: ['Tunggu', 'Muat ulang'], defaultId: 0, cancelId: 0 });
+      const r = await dialog.showMessageBox(mainWin, { type: 'warning', noLink: true, title: 'KLM', message: 'KLM tidak merespons', detail: 'Tunggu sebentar lagi, atau muat ulang tampilan (sesi terakhir dipulihkan otomatis).', buttons: ['Tunggu', 'Muat ulang'], defaultId: 0, cancelId: 0 });
       if (r.response === 1 && mainWin && !mainWin.isDestroyed()) { try { mainWin.webContents.forcefullyCrashRenderer(); } catch (er) { mainWin.loadURL(`http://127.0.0.1:${netInfo.ports.http}/#pulih`).catch(() => {}); } }
     }, 12000);
   });
@@ -134,7 +136,7 @@ function createMain() {
           x: d.bounds.x + (full ? 0 : 80), y: d.bounds.y + (full ? 0 : 80),
           width: full ? d.bounds.width : 960, height: full ? d.bounds.height : 540,
           frame: !full, fullscreen: full, backgroundColor: '#000000', autoHideMenuBar: true,
-          title: 'KLM Mix - Output', webPreferences: { backgroundThrottling: false }
+          title: 'KLM - Output', webPreferences: { backgroundThrottling: false }
         }
       };
     }
@@ -146,7 +148,7 @@ function createMain() {
         action: 'allow',
         overrideBrowserWindowOptions: Object.assign({
           width: arena ? 1280 : 1440, height: arena ? 720 : 900, minWidth: 640, minHeight: 400, backgroundColor: '#090c13', autoHideMenuBar: true,
-          title: (arena ? 'Layar Arena' : 'UTC KLM Scoreboard') + ' • KLM Mix', icon: path.join(__dirname, '..', 'build', 'icon.png'), webPreferences: { backgroundThrottling: false }
+          title: (arena ? 'Layar Arena' : 'UTC KLM Scoreboard') + ' • KLM', icon: path.join(__dirname, '..', 'build', 'icon.png'), webPreferences: { backgroundThrottling: false }
         }, d ? { x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height, fullscreen: true, frame: false } : {})
       };
     }
@@ -155,7 +157,7 @@ function createMain() {
         action: 'allow',
         overrideBrowserWindowOptions: {
           width: 1440, height: 900, minWidth: 900, minHeight: 600, backgroundColor: '#0b0d12', autoHideMenuBar: true,
-          title: 'UTC KLM Acara • KLM Mix', icon: path.join(__dirname, '..', 'build', 'icon.png'), webPreferences: { backgroundThrottling: false }
+          title: 'UTC KLM Acara • KLM', icon: path.join(__dirname, '..', 'build', 'icon.png'), webPreferences: { backgroundThrottling: false }
         }
       };
     }
@@ -183,7 +185,7 @@ async function askClose() {
   const wc = mainWin.webContents;
   const alive = await Promise.race([wc.executeJavaScript('!!(window.KM && KM.ui && KM.ui.requestClose)', true).catch(() => false), later(2500, false)]);
   if (!alive) { // halaman tidak menjawab: konfirmasi sederhana
-    const c = dialog.showMessageBoxSync(mainWin, { type: 'question', buttons: ['Keluar', 'Batal'], defaultId: 1, cancelId: 1, noLink: true, title: 'KLM Mix', message: 'Tutup KLM Mix?', detail: 'Rekaman dan streaming yang berjalan akan dihentikan.' });
+    const c = dialog.showMessageBoxSync(mainWin, { type: 'question', buttons: ['Keluar', 'Batal'], defaultId: 1, cancelId: 1, noLink: true, title: 'KLM', message: 'Tutup KLM?', detail: 'Rekaman dan streaming yang berjalan akan dihentikan.' });
     if (c === 0) hardQuit('tutup jendela');
     return;
   }
@@ -335,7 +337,7 @@ ipcMain.handle('browser:open', async (e, { url, width, height, visible }) => {
     width: width || 1280, height: height || 720, useContentSize: true,
     x: visible ? 100 : -(width || 1280) - 200, y: visible ? 100 : 0,
     frame: !!visible, skipTaskbar: !visible, focusable: !!visible, transparent: false,
-    backgroundColor: '#00000000', title: 'KLM Mix - Browser Input',
+    backgroundColor: '#00000000', title: 'KLM - Browser Input',
     webPreferences: { backgroundThrottling: false, contextIsolation: true }
   });
   w.webContents.setAudioMuted(true);
@@ -382,7 +384,7 @@ app.on('before-quit', () => { try { server.hub.shutdown(); } catch (e) {} });
 app.on('will-quit', (e) => { if (!quitting) { e.preventDefault(); hardQuit('will-quit'); } });
 
 // Keluar total. Di Windows, proses Chromium (GPU / renderer offscreen) bisa tertinggal setelah keluar biasa sehingga
-// KLM Mix tidak bisa dibuka lagi (single instance). Jadi: hentikan renderer UTC, server media & jendela browser,
+// KLM tidak bisa dibuka lagi (single instance). Jadi: hentikan renderer UTC, server media & jendela browser,
 // tutup file rekaman yang masih terbuka, lalu akhiri proses sepenuhnya.
 let quitting = false;
 function hardQuit(why) {
@@ -647,7 +649,7 @@ function smokeTest() {
     if (process.env.KLM_APTEST) {
       try {
         const a1 = JSON.parse(await js(`(async () => { const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-          const m = KM.inputs.create('mirror', { title: 'iPhone uji', opts: { mode: 'airplay', apName: 'KLM Mix Uji' } }); KM.engine.cut(m.id);
+          const m = KM.inputs.create('mirror', { title: 'iPhone uji', opts: { mode: 'airplay', apName: 'KLM Uji' } }); KM.engine.cut(m.id);
           for (let i = 0; i < 40 && KM.mirror.ap.ev !== 'ready'; i++) await sleep(250);
           window.__apId = m.id; return JSON.stringify({ token: m.opts.token, ap: KM.mirror.ap }); })()`));
         log('airplay: ' + JSON.stringify(a1.ap));
@@ -663,7 +665,7 @@ function smokeTest() {
         log('airplay video uji: ' + JSON.stringify(a2) + ', helper: ' + so.trim().split('\n').pop() + ', setelah input dihapus berjalan=' + off);
         if (!(a2.w > 0 && a2.st && a2.st.out > 30)) { fail++; log('GAGAL: video AirPlay uji tidak terdekode'); }
         if (process.env.KLM_APTEST_AUDIO && !(a2.st && a2.st.audio > 50 && a2.pcm && a2.strip)) { fail++; log('GAGAL: suara AirPlay uji tidak sampai ke strip audio'); }
-        // suara PC tanpa KLM Mix (process loopback) — runner CI tanpa kartu suara bisa menolak; dicatat saja
+        // suara PC tanpa KLM (process loopback) — runner CI tanpa kartu suara bisa menolak; dicatat saja
         try {
           const pa = await js(`(async () => { const t = 'abcabc' + Date.now().toString(16).slice(-6); const ev = []; window.klm.on('procaudio:status', (d) => ev.push(d.st.ev + (d.st.msg ? ':' + d.st.msg : ''))); const st = await window.klm.invoke('procaudio:start', { token: t, name: 'uji' }); await new Promise((r) => setTimeout(r, 3000)); await window.klm.invoke('procaudio:stop', { token: t }); return JSON.stringify({ avail: await window.klm.invoke('procaudio:available'), st, ev }); })()`);
           log('suara PC (process loopback): ' + pa);

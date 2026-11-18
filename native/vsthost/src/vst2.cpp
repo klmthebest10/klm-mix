@@ -1,4 +1,4 @@
-// KLM Mix VST host — plugin VST 2.x (Windows). ABI VST2 dideklarasikan sendiri (struktur publik yang
+// KLM VST host — plugin VST 2.x (Windows). ABI VST2 dideklarasikan sendiri (struktur publik yang
 // umum dipakai host open-source); tidak memakai header SDK VST2.
 #include "plug.h"
 
@@ -104,7 +104,7 @@ struct Vst2Plug : Plug
 			case amGetBlockSize: return gMaxBlock;
 			case amGetCurrentProcessLevel: return (p && GetCurrentThreadId () == p->audioThread) ? 2 : 1;
 			case amGetVendorString: if (ptr) std::strcpy ((char*)ptr, "KLM"); return 1;
-			case amGetProductString: if (ptr) std::strcpy ((char*)ptr, "KLM Mix"); return 1;
+			case amGetProductString: if (ptr) std::strcpy ((char*)ptr, "KLM"); return 1;
 			case amGetVendorVersion: return 1700;
 			case amCanDo:
 				if (ptr && (!std::strcmp ((char*)ptr, "sizeWindow") || !std::strcmp ((char*)ptr, "sendVstTimeInfo") || !std::strcmp ((char*)ptr, "supplyIdle"))) return 1;

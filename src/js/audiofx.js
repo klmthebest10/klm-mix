@@ -1,9 +1,9 @@
-/* KLM Mix - Efek & plugin audio
+/* KLM - Efek & plugin audio
  * Rak efek (insert) di setiap input dan di Master: urutan bebas, bypass, mix wet/dry, preset rantai.
  * 18 plugin bawaan (Web Audio + AudioWorklet DSP) + plugin eksternal:
  *   - file .js (format plugin KLM, boleh memakai AudioWorklet sendiri)
  *   - file impulse response .wav/.flac/.mp3 (reverb ruangan asli, hall, plate, kabinet speaker)
- * Semua berjalan real-time di mesin audio KLM Mix → ikut monitor, rekam, stream, SRT, NDI.
+ * Semua berjalan real-time di mesin audio KLM → ikut monitor, rekam, stream, SRT, NDI.
  */
 'use strict';
 (function (KM) {
@@ -564,8 +564,8 @@
       return h('div.sec', { style: { marginTop: '12px' } }, h('h4', KI.el('search'), 'Plugin terpasang di PC (VST3 / VST2 / CLAP)'), head, info,
         pc && pc.plugins.length ? pcList() : null,
         pc ? h('p.muted', { style: { fontSize: '11.5px' } }, KM.vst && KM.vst.ok
-          ? '"Pasang" menjalankan plugin VST3/VST2 aslinya di dalam KLM Mix (proses terpisah — bila plugin crash, suara asli tetap mengalir; pengaturan plugin ikut tersimpan di preset). Tombol nama efek memasang padanan bawaan KLM Mix (tanda ≈).'
-          : 'Tombol ＋ memasang efek bawaan KLM Mix yang setara (diberi tanda ≈ nama plugin). Host VST asli hanya tersedia di versi PC (.exe) Windows.') : null);
+          ? '"Pasang" menjalankan plugin VST3/VST2 aslinya di dalam KLM (proses terpisah — bila plugin crash, suara asli tetap mengalir; pengaturan plugin ikut tersimpan di preset). Tombol nama efek memasang padanan bawaan KLM (tanda ≈).'
+          : 'Tombol ＋ memasang efek bawaan KLM yang setara (diberi tanda ≈ nama plugin). Host VST asli hanya tersedia di versi PC (.exe) Windows.') : null);
     }
     if (KM.vst && KM.isElectron && !KM.vst.ok) KM.vst.ready().then((ok) => { if (ok && body.isConnected) draw(); });
     if (KM.isElectron && !FX.pc && !FX._autoScan) { FX._autoScan = true; FX.scanPC().then(() => draw()).catch(() => {}); }

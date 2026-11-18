@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-# klm-procaudio — tangkap suara PC kecuali KLM Mix (WASAPI process loopback, Windows 10 2004+). Lisensi MIT.
+# klm-procaudio — tangkap suara PC kecuali KLM (WASAPI process loopback, Windows 10 2004+). Lisensi MIT.
 project(klm_procaudio CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>") # tanpa DLL runtime VC++

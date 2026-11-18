@@ -1,4 +1,4 @@
-/* KLM Mix - Rekam (MP4/WebM), Streaming (RTMP/RTMPS/SRT multi-tujuan via ffmpeg), MultiCorder, Snapshot */
+/* KLM - Rekam (MP4/WebM), Streaming (RTMP/RTMPS/SRT multi-tujuan via ffmpeg), MultiCorder, Snapshot */
 'use strict';
 (function (KM) {
   const S = KM.state;
@@ -47,7 +47,7 @@
     if (S.recording) return true;
     const mime = pickMime(KM.settings.recFormat);
     if (!mime) { KM.toast('Browser tidak mendukung perekaman', 'err'); return false; }
-    const name = 'KLM-Mix-' + KM.stamp() + '.' + ext(mime);
+    const name = 'KLM-' + KM.stamp() + '.' + ext(mime);
     const w = await makeWriter(name, 'rec');
     const mr = new MediaRecorder(mixStream(), { mimeType: mime, videoBitsPerSecond: Math.round(KM.settings.recVideoKbps * 1000 * R.fpsScale()), audioBitsPerSecond: KM.settings.recAudioKbps * 1000 });
     mr.ondataavailable = (e) => { if (e.data && e.data.size) w.write(e.data); };
@@ -221,7 +221,7 @@
   R.startNdi = async function (name) {
     if (S.ndiOut) return true;
     const w = Math.min(KM.settings.width, KM.settings.ndiWidth || 1280), hgt = Math.round(w * KM.settings.height / KM.settings.width);
-    const r = await openHubOut('ndi', { opts: { name: name || KM.settings.ndiName || 'KLM Mix', width: w, height: hgt, fps: Math.min(30, KM.settings.fps) } }, (m) => {
+    const r = await openHubOut('ndi', { opts: { name: name || KM.settings.ndiName || 'KLM', width: w, height: hgt, fps: Math.min(30, KM.settings.fps) } }, (m) => {
       if (m.t === 'closed' && S.ndiOut) { S.ndiOut = false; KM.changed('ndi'); }
     });
     if (!r.ok) { KM.toast('NDI gagal: ' + r.msg, 'err', 7000); return false; }
@@ -229,7 +229,7 @@
     R.ndiWs = r.ws;
     R.ndiRec = pipeRecorder(r.ws, KM.engine.programStream(), h264.replace(',opus', ''), 15e6, 50);
     S.ndiOut = true; KM.changed('ndi');
-    KM.toast('NDI aktif: "' + (name || KM.settings.ndiName || 'KLM Mix') + '" — pakai NDI Webcam untuk virtual camera', 'ok', 5000);
+    KM.toast('NDI aktif: "' + (name || KM.settings.ndiName || 'KLM') + '" — pakai NDI Webcam untuk virtual camera', 'ok', 5000);
     return true;
   };
   R.stopNdi = function () {

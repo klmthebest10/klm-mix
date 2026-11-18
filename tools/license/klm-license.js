@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-/* KLM Mix - alat penjual: buat kunci lisensi per perangkat (TIDAK ikut dalam aplikasi yang dijual)
+/* KLM (Kinetic Live Mixer) - alat penjual: buat kunci lisensi per perangkat (TIDAK ikut dalam aplikasi yang dijual)
  *
  *   node klm-license.js keygen  [folder]                      → buat pasangan kunci baru (privat + publik)
- *   node klm-license.js issue   <DEVICE-ID> --name "Pembeli" [--plan Pro] [--days 365] [--key kunci-privat.pem] [--out file.klmlic]
+ *   node klm-license.js issue   <DEVICE-ID> --name "Pembeli" [--plan Pro] [--key kunci-privat.pem] [--out file.klmlic]
  *   node klm-license.js verify  <KUNCI | file.klmlic> [--pub kunci-publik.pem]
  *
  * Kunci privat default dicari di:  KLM_LICENSE_KEY (env)  →  ./klm-mix-private-key.pem  →  ~/klm-license-keys/klm-mix-private-key.pem
@@ -55,8 +55,8 @@ if (cmd === 'keygen') {
   const key = head + '.' + b64u(sig);
   const out = opt('out', 'lisensi-' + dev + '.klmlic');
   fs.writeFileSync(out, key + '\n');
-  try { fs.appendFileSync('lisensi-terbit.csv', [new Date(now).toISOString(), payload.s, dev, JSON.stringify(name), payload.p, payload.e ? new Date(payload.e).toISOString().slice(0, 10) : 'selamanya'].join(',') + '\n'); } catch (e) {}
-  console.log('✓ Lisensi untuk ' + name + ' (' + dev + ')' + (payload.e ? ' berlaku sampai ' + new Date(payload.e).toLocaleDateString('id-ID') : ' — selamanya') + '\n  File: ' + out + '\n\n' + key);
+  try { fs.appendFileSync('lisensi-terbit.csv', [new Date(now).toISOString(), payload.s, dev, JSON.stringify(name), payload.p, payload.e ? new Date(payload.e).toISOString().slice(0, 10) : 'seumur-hidup'].join(',') + '\n'); } catch (e) {}
+  console.log('✓ Lisensi untuk ' + name + ' (' + dev + ')' + (payload.e ? ' berlaku sampai ' + new Date(payload.e).toLocaleDateString('id-ID') : ' — seumur hidup') + '\n  File: ' + out + '\n\n' + key);
 } else if (cmd === 'verify') {
   let key = args[1] || '';
   if (fs.existsSync(key)) key = fs.readFileSync(key, 'utf8');

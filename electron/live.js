@@ -1,4 +1,4 @@
-/* KLM Mix — akun live streaming: kredensial API (YouTube OAuth, token Facebook) disimpan terenkripsi
+/* KLM — akun live streaming: kredensial API (YouTube OAuth, token Facebook) disimpan terenkripsi
  * (safeStorage Windows/DPAPI) di folder konfigurasi, tidak pernah dikirim ke halaman. */
 'use strict';
 const { ipcMain, shell, safeStorage } = require('electron');

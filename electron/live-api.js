@@ -1,4 +1,4 @@
-/* KLM Mix — API platform live (YouTube Data API v3, Facebook Graph Live Video API).
+/* KLM — API platform live (YouTube Data API v3, Facebook Graph Live Video API).
  * Fungsi murni berbasis fetch; alamat server bisa diganti (uji dengan server tiruan).
  * TikTok & Instagram tidak menyediakan API publik untuk membuat siaran → cukup server + stream key. */
 'use strict';
@@ -42,15 +42,15 @@ function googleLogin({ clientId, clientSecret, open, base, timeoutMs }) {
     const srv = http.createServer(async (rq, rs) => {
       const u = new URL(rq.url, 'http://127.0.0.1');
       if (u.pathname !== '/' || (!u.searchParams.get('code') && !u.searchParams.get('error'))) { rs.writeHead(404); return rs.end(); }
-      const page = (ok, m) => { rs.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); rs.end('<!doctype html><meta charset="utf-8"><title>KLM Mix</title><body style="font:16px system-ui;background:#0b0d12;color:#eceff4;display:grid;place-items:center;height:100vh;margin:0"><div style="text-align:center"><h2>' + (ok ? '✅ Akun terhubung ke KLM Mix' : '⚠ Gagal menghubungkan') + '</h2><p>' + m + '</p><p style="color:#8a93a5">Jendela ini boleh ditutup.</p></div>'); };
+      const page = (ok, m) => { rs.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); rs.end('<!doctype html><meta charset="utf-8"><title>KLM</title><body style="font:16px system-ui;background:#0b0d12;color:#eceff4;display:grid;place-items:center;height:100vh;margin:0"><div style="text-align:center"><h2>' + (ok ? '✅ Akun terhubung ke KLM' : '⚠ Gagal menghubungkan') + '</h2><p>' + m + '</p><p style="color:#8a93a5">Jendela ini boleh ditutup.</p></div>'); };
       if (u.searchParams.get('state') !== state) { page(false, 'Permintaan tidak cocok (state).'); return; }
       if (u.searchParams.get('error')) { page(false, 'Izin ditolak: ' + u.searchParams.get('error')); finish(new Error('Izin Google ditolak (' + u.searchParams.get('error') + ')')); return; }
       try {
         const port = srv.address().port;
         const tok = await req(B.googleToken, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: form({ code: u.searchParams.get('code'), client_id: clientId, client_secret: clientSecret, redirect_uri: 'http://127.0.0.1:' + port, grant_type: 'authorization_code', code_verifier: verifier }) });
-        if (!tok.refresh_token) throw new Error('Google tidak memberi refresh token — cabut akses KLM Mix di myaccount.google.com/permissions lalu coba lagi');
-        page(true, 'Kembali ke KLM Mix.');
+        if (!tok.refresh_token) throw new Error('Google tidak memberi refresh token — cabut akses KLM di myaccount.google.com/permissions lalu coba lagi');
+        page(true, 'Kembali ke KLM.');
         finish(null, tok);
       } catch (e) { page(false, e.message); finish(e); }
     });
@@ -87,8 +87,8 @@ function yt(base) {
       let stream = null;
       if (streamId) { try { const j = await call(tok, 'GET', '/liveStreams', { part: 'id,cdn,status', id: streamId }); stream = j.items && j.items[0]; } catch (e) {} }
       if (!stream) stream = await call(tok, 'POST', '/liveStreams', { part: 'snippet,cdn,contentDetails,status' },
-        { snippet: { title: 'KLM Mix' }, cdn: { ingestionType: 'rtmp', resolution: 'variable', frameRate: 'variable' }, contentDetails: { isReusable: true } });
-      const title = String(meta.title || 'Live KLM Mix').slice(0, 100), description = String(meta.desc || '').slice(0, 5000);
+        { snippet: { title: 'KLM' }, cdn: { ingestionType: 'rtmp', resolution: 'variable', frameRate: 'variable' }, contentDetails: { isReusable: true } });
+      const title = String(meta.title || 'Live KLM').slice(0, 100), description = String(meta.desc || '').slice(0, 5000);
       const b = await call(tok, 'POST', '/liveBroadcasts', { part: 'snippet,status,contentDetails' }, {
         snippet: { title, description, scheduledStartTime: new Date(Date.now() + 5000).toISOString() },
         status: { privacyStatus: ['public', 'unlisted', 'private'].includes(meta.privacy) ? meta.privacy : 'public', selfDeclaredMadeForKids: false },

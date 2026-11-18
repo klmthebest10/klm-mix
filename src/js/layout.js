@@ -1,4 +1,4 @@
-/* KLM Mix - Penyusun tata letak visual (layer / multiview) & Virtual Set multi kamera.
+/* KLM - Penyusun tata letak visual (layer / multiview) & Virtual Set multi kamera.
  * Editor: seret kotak, ubah ukuran dari sudut/sisi, roda mouse = zoom, mode "Isi" untuk menggeser/zoom/pangkas
  * gambar di dalam kotak tanpa mengubah input aslinya; input dasar (yang sedang diatur) juga bisa digeser/zoom/pangkas.
  * Virtual Set: latar (gaya bawaan / warna / gambar / video loop) + kotak kamera sebanyak yang diinginkan,

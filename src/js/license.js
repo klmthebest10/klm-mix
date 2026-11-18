@@ -1,27 +1,30 @@
-/* KLM Mix - lisensi per perangkat: status, aktivasi, mode DEMO (watermark di Program) */
+/* KLM - lisensi per perangkat (seumur hidup).
+ * Tanpa lisensi KLM berjalan normal tanpa watermark; fitur premium (UTC Acara, UTC Score, Mirroring HP, KLMCAM)
+ * terkunci — bila diklik, dialog lisensi muncul. */
 'use strict';
 (function (KM) {
   const h = KM.h, UI = KM.ui;
-  const L = KM.license = { status: null, demo: true, checked: false };
+  const pre = window.KLM_LIC || null; // disisipkan server ke halaman → status sudah benar sejak awal
+  const L = KM.license = { status: pre, demo: !(pre && pre.licensed), checked: !!pre };
   const fmtDate = (ms) => (ms ? new Date(ms).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
 
   L.set = function (st) {
     L.status = st || null;
     L.demo = !(st && st.licensed);
     L.checked = true;
-    wm = null; // gambar ulang watermark
-    if (KM.engine) KM.engine.dirtyAt = KM.now();
     badge();
+    document.body && document.body.classList.toggle('lic-locked', L.demo);
+    try { if (KM.state && !KM.state.inputs.length && KM.changed) KM.changed('inputs'); } catch (e) {}
     KM.changed && KM.changed('license');
   };
   L.refresh = async function () {
     try { const r = await fetch('/api/license', { cache: 'no-store' }); if (!r.ok) throw new Error('HTTP ' + r.status); L.set(await r.json()); }
-    catch (e) { L.set({ licensed: false, demo: true, deviceId: '', reason: 'Server lisensi tidak tersedia (jalankan versi PC KLM Mix)' }); }
+    catch (e) { L.set({ licensed: false, demo: true, deviceId: '', reason: 'Server lisensi tidak tersedia (jalankan versi PC KLM)' }); }
     return L.status;
   };
   async function post(path, body) {
     try { const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }); return await r.json(); }
-    catch (e) { return { ok: false, reason: 'Tidak bisa menghubungi KLM Mix: ' + e.message }; }
+    catch (e) { return { ok: false, reason: 'Tidak bisa menghubungi KLM: ' + e.message }; }
   }
   L.activate = async function (key) {
     const r = await post('/api/license/activate', { key: String(key || '').trim() });
@@ -30,30 +33,19 @@
   };
   L.remove = async function () { const r = await post('/api/license/remove'); if (r.status) L.set(r.status); return r; };
 
-  // ---------- watermark DEMO (digambar engine di atas Program → ikut rekaman, streaming, SRT, NDI, output eksternal) ----------
-  let wm = null;
-  function buildWm(W, H) {
-    const c = document.createElement('canvas'); c.width = W; c.height = H;
-    const x = c.getContext('2d'), u = Math.min(W, H) / 1080;
-    // label pojok kanan bawah
-    const fs = Math.round(34 * u), pad = Math.round(18 * u), text = 'KLM MIX • VERSI DEMO';
-    x.font = '800 ' + fs + 'px "Plus Jakarta Sans","Segoe UI",Arial,sans-serif';
-    const tw = x.measureText(text).width, bw = tw + pad * 2, bh = fs + pad * 1.3;
-    const bx = W - bw - Math.round(36 * u), by = H - bh - Math.round(36 * u);
-    x.fillStyle = 'rgba(0,0,0,.55)'; x.beginPath(); (x.roundRect ? x.roundRect(bx, by, bw, bh, 10 * u) : x.rect(bx, by, bw, bh)); x.fill();
-    x.fillStyle = 'rgba(255,255,255,.92)'; x.textBaseline = 'middle'; x.fillText(text, bx + pad, by + bh / 2 + 1);
-    // teks samar di tengah
-    x.save(); x.translate(W / 2, H / 2); x.rotate(-0.18);
-    x.font = '800 ' + Math.round(96 * u) + 'px "Plus Jakarta Sans","Segoe UI",Arial,sans-serif'; x.textAlign = 'center';
-    x.fillStyle = 'rgba(255,255,255,.10)'; x.fillText('KLM MIX DEMO', 0, 0);
-    x.font = '700 ' + Math.round(30 * u) + 'px "Plus Jakarta Sans","Segoe UI",Arial,sans-serif'; x.fillText('Aktifkan lisensi untuk menghapus watermark', 0, 60 * u);
-    x.restore();
-    return c;
-  }
-  L.watermark = function (ctx, W, H) {
-    if (!L.demo) return;
-    if (!wm || wm.width !== W || wm.height !== H) wm = buildWm(W, H);
-    ctx.drawImage(wm, 0, 0);
+  // ---------- fitur premium yang terkunci tanpa lisensi ----------
+  const FEAT = {
+    utc: 'UTC Acara', score: 'UTC Score', mirror: 'Mirroring HP', klmcam: 'KLMCAM'
+  };
+  L.FEAT = FEAT;
+  /** true bila fitur (jenis input) terkunci karena belum ada lisensi */
+  L.locked = (f) => !!FEAT[f] && L.demo;
+  /** dipanggil saat fitur terkunci diklik: tampilkan dialog lisensi. Mengembalikan true bila terkunci. */
+  L.require = function (f) {
+    if (!L.locked(f)) return false;
+    KM.toast('🔒 ' + (FEAT[f] || 'Fitur ini') + ' memerlukan lisensi KLM', 'warn', 4000);
+    L.dialog(FEAT[f]);
+    return true;
   };
 
   // ---------- tanda DEMO di bar atas ----------
@@ -63,7 +55,7 @@
     let b = document.getElementById('licBadge');
     if (!L.demo) { if (b) b.remove(); return; }
     if (!b) {
-      b = h('button#licBadge.st', { title: 'KLM Mix belum diaktifkan — klik untuk memasukkan kunci lisensi', onclick: () => L.dialog() }, 'DEMO');
+      b = h('button#licBadge.st', { title: 'KLM belum diaktifkan — UTC Acara, UTC Score, Mirroring HP & KLMCAM terkunci. Klik untuk memasukkan kunci lisensi', onclick: () => L.dialog() }, '🔒 Aktifkan');
       Object.assign(b.style, { background: 'linear-gradient(180deg,#e07a17,#b85f0d)', color: '#fff', border: '0', fontWeight: '800', cursor: 'pointer', borderRadius: '7px', padding: '0 10px', height: '28px', flex: 'none', whiteSpace: 'nowrap', letterSpacing: '1px' });
       bar.insertBefore(b, bar.firstChild);
     }
@@ -88,7 +80,7 @@
     const doActivate = async () => {
       msg.style.color = 'var(--tx2)'; msg.textContent = 'Memeriksa…';
       const r = await L.activate(keyIn.value);
-      if (r.ok) { msg.style.color = '#2ecc71'; msg.textContent = '✓ Lisensi aktif. Terima kasih!'; KM.toast('Lisensi KLM Mix aktif — watermark dihapus', 'ok', 5000); setTimeout(() => render(), 600); }
+      if (r.ok) { msg.style.color = '#2ecc71'; msg.textContent = '✓ Lisensi aktif. Terima kasih!'; KM.toast('Lisensi KLM aktif — semua fitur terbuka', 'ok', 5000); setTimeout(() => render(), 600); }
       else { msg.style.color = '#ff6b6b'; msg.textContent = r.reason || 'Aktivasi gagal'; }
     };
     function render() {
@@ -96,16 +88,18 @@
       const head = s.licensed
         ? h('div.sec', h('h4', '✓ Lisensi aktif'),
             h('div', 'Pemilik: ', h('b', s.name || '—')), s.plan ? h('div', 'Paket: ', h('b', s.plan)) : null,
-            h('div', 'Terbit: ', fmtDate(s.issued)), h('div', 'Berlaku: ', h('b', s.expires ? 'sampai ' + fmtDate(s.expires) : 'selamanya')),
+            h('div', 'Terbit: ', fmtDate(s.issued)), h('div', 'Berlaku: ', h('b', s.expires ? 'sampai ' + fmtDate(s.expires) : 'seumur hidup')),
             s.serial ? h('div.muted', 'Nomor lisensi: ' + s.serial) : null)
-        : h('div.sec', h('h4', 'KLM Mix belum diaktifkan (mode DEMO)'),
-            h('p', 'Semua fitur bisa dicoba, tetapi output Program (rekaman, streaming, SRT, NDI, layar eksternal) diberi watermark "VERSI DEMO".'),
+        : h('div.sec', h('h4', (L._want ? '🔒 ' + L._want + ' memerlukan lisensi' : 'KLM belum diaktifkan')),
+            h('p', 'KLM tetap bisa dipakai seperti biasa tanpa watermark. Fitur premium berikut terbuka setelah lisensi diaktifkan:'),
+            h('ul', { style: { margin: '4px 0 8px 18px' } }, Object.values(FEAT).map((t) => h('li', h('b', t)))),
+            h('p.muted', 'Lisensi dibeli sekali, berlaku seumur hidup untuk komputer ini — termasuk setelah install ulang Windows (cukup masukkan kunci yang sama lagi).'),
             s.reason && s.reason !== 'Belum diaktifkan' ? h('p', { style: { color: '#ff9f43', fontWeight: '700' } }, s.reason) : null);
       box.replaceChildren(head,
         h('div.sec', h('h4', 'Device ID komputer ini'), idBox,
           h('p.muted', 'Kirim Device ID ini ke penjual untuk mendapatkan kunci lisensi. Satu lisensi hanya berlaku untuk satu komputer.')),
         s.licensed
-          ? h('div.sec', h('button.btn', { onclick: async () => { if (confirm('Hapus lisensi dari komputer ini? KLM Mix akan kembali ke mode DEMO.')) { await L.remove(); render(); } } }, 'Hapus lisensi dari komputer ini'))
+          ? h('div.sec', h('button.btn', { onclick: async () => { if (confirm('Hapus lisensi dari komputer ini? UTC Acara, UTC Score, Mirroring HP & KLMCAM akan terkunci lagi.')) { await L.remove(); render(); } } }, 'Hapus lisensi dari komputer ini'))
           : h('div.sec', h('h4', 'Masukkan kunci lisensi'), keyIn, fileIn,
               h('div', { style: { display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' } },
                 h('button.btn.pri', { onclick: doActivate }, 'Aktifkan'),
@@ -115,15 +109,16 @@
     L._render = render;
     return box;
   };
-  L.dialog = async function () {
+  L.dialog = async function (want) {
+    L._want = want || '';
     await L.refresh();
-    UI.modal('🔑 Lisensi KLM Mix', L.panel(), [{ label: L.demo ? 'Lanjut mode demo' : 'Tutup', cls: L.demo ? '' : 'pri' }]);
+    document.querySelectorAll('.modal-bg.lic-dlg').forEach((m) => m.remove());
+    const m = UI.modal('🔑 Lisensi KLM', L.panel(), [{ label: 'Tutup', cls: L.demo ? '' : 'pri' }]);
+    try { (m && m.closest ? m.closest('.modal-bg') : document.querySelector('.modal-bg:last-of-type')).classList.add('lic-dlg'); } catch (e) {}
+    L._want = '';
   };
 
-  // cek saat aplikasi dibuka; tanpa lisensi → dialog muncul sekali (setelah antarmuka siap)
-  async function boot() {
-    await L.refresh();
-    if (L.demo && !/[?&]nolicprompt/.test(location.search)) setTimeout(() => { if (!document.querySelector('.modal')) L.dialog(); }, 1500);
-  }
+  // cek status saat aplikasi dibuka (tanpa memunculkan dialog: KLM tetap bisa dipakai normal)
+  async function boot() { await L.refresh(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else setTimeout(boot, 0);
 })(window.KM);

@@ -1,4 +1,4 @@
-/* KLM Mix Remote - kontrol switcher dari HP */
+/* KLM Remote - kontrol switcher dari HP */
 'use strict';
 (function () {
   const $ = (id) => document.getElementById(id);

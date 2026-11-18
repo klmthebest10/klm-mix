@@ -1,4 +1,4 @@
-/* KLM Mix - dialog: Tambah Input, Pengaturan Input, Pengaturan Aplikasi, Output Eksternal, Bantuan */
+/* KLM - dialog: Tambah Input, Pengaturan Input, Pengaturan Aplikasi, Output Eksternal, Bantuan */
 'use strict';
 (function (KM) {
   const h = KM.h, S = KM.state, UI = KM.ui;
@@ -48,9 +48,11 @@
     let current = null, creator = null;
     const tiles = h('div.tiles', ORDER.map((t) => {
       const T = KM.inputTypes[t];
-      return h('button.tile', { 'data-t': t, onclick: () => pick(t) }, h('b', T.icon), h('span', T.label));
+      const lock = KM.license && KM.license.locked(t);
+      return h('button.tile' + (lock ? '.locked' : ''), { 'data-t': t, onclick: () => pick(t), title: lock ? 'Memerlukan lisensi KLM' : '' }, h('b', T.icon), h('span', T.label), lock ? h('i.lic-lock', '🔒') : null);
     }));
     function pick(t) {
+      if (KM.license && KM.license.require(t)) return;
       current = t;
       KM.$$('.tile', tiles).forEach((b) => b.classList.toggle('on', b.dataset.t === t));
       form.innerHTML = '';
@@ -74,7 +76,7 @@
           h('li', 'Atur, edit, simpan, tambah & ubah semuanya di ', h('b', 'Panel lengkap'), ' (klik ganda input / F9).'),
           h('li', 'Input bisa dipakai di Program, Overlay 1–4, layer & multiview.')),
         chk('Langsung tampil di atas Program (UTC ACARA ON AIR)', true, (v) => { o.onAir = v; })));
-      return () => { if (KM.utc.has()) { KM.toast('UTC Acara sudah ada — dibuka di panel samping', 'info'); } KM.utc.addInput(o); UI.openSide('utc'); };
+      return () => { if (KM.utc.has()) { KM.toast('UTC Acara sudah ada — dibuka di panel samping', 'info'); } if (KM.utc.addInput(o)) UI.openSide('utc'); };
     },
     score(form) {
       const o = { onAir: true };
@@ -83,9 +85,9 @@
         h('ul.muted', { style: { margin: '6px 0 10px 18px', lineHeight: 1.7 } },
           h('li', 'Setelah ditambahkan, tab ', h('b', 'UTC Score'), ' muncul di panel samping: tombol skor ±, jam mulai/jeda, babak, foul, kartu, timeout, popup, tukar sisi.'),
           h('li', 'Atur tim, logo, warna, aturan & turnamen di ', h('b', 'Panel lengkap'), ' (klik ganda input / F9), atau dari HP.'),
-          h('li', 'Alamat lama tetap jalan untuk OBS/vMix: http://IP:7171/overlay')),
+          h('li', 'Alamat lama tetap jalan untuk OBS / software siaran lain: http://IP:7171/overlay')),
         chk('Langsung tampil di atas Program (UTC SCORE ON AIR)', true, (v) => { o.onAir = v; })));
-      return () => { if (KM.score.has()) { KM.toast('UTC Score sudah ada — dibuka di panel samping', 'info'); } KM.score.addInput(o); UI.openSide('score'); };
+      return () => { if (KM.score.has()) { KM.toast('UTC Score sudah ada — dibuka di panel samping', 'info'); } if (KM.score.addInput(o)) UI.openSide('score'); };
     },
     stream(form) {
       const o = { source: 'listen-rtmp', url: '', mode: 'copy', latency: 120, maxLag: 0.6, ndiName: '', ndiLow: false, key: 'klm' + Math.floor(Math.random() * 900 + 100) };
@@ -94,7 +96,7 @@
       const draw = () => {
         const urlIn = h('input.grow', { value: o.url, placeholder: 'rtsp://admin:pass@192.168.1.64:554/stream1', oninput: (e) => { o.url = e.target.value; } });
         let detail;
-        if (o.source === 'listen-rtmp') detail = h('div.sec', h('h4', 'Kirim dari OBS / Larix / vMix / HP ke alamat ini'), h('div.urlbox', 'Server : rtmp://' + ip + ':1935/live'), h('div.urlbox', 'Key    : ' + o.key), h('p.muted', 'Bisa juga menerima dari aplikasi streaming HP (Larix Broadcaster, PRISM, dll).'));
+        if (o.source === 'listen-rtmp') detail = h('div.sec', h('h4', 'Kirim dari OBS / Larix / software lain / HP ke alamat ini'), h('div.urlbox', 'Server : rtmp://' + ip + ':1935/live'), h('div.urlbox', 'Key    : ' + o.key), h('p.muted', 'Bisa juga menerima dari aplikasi streaming HP (Larix Broadcaster, PRISM, dll).'));
         else if (o.source === 'listen-srt') detail = h('div.sec', h('h4', 'Kirim SRT (caller) ke'), h('div.urlbox', 'srt://' + ip + ':' + (o.srtPort || 9000)), row('Port', h('input', { type: 'number', value: o.srtPort || 9000, style: { width: '90px' }, onchange: (e) => { o.srtPort = +e.target.value; draw(); } })));
         else if (o.source === 'ndi') {
           const ndiSel = h('select.grow', h('option', { value: '' }, 'Klik "Cari" …'));
@@ -195,15 +197,15 @@
       window.klm.invoke('desktop:sources').then((list) => {
         grid.replaceChildren(...list.map((s) => h('button.tile', { onclick: (e) => { o.sourceId = s.id; chosen = s.name; KM.$$('.tile', grid).forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); } }, h('img', { src: s.thumb }), h('span', s.name))));
       });
-      form.append(row('FPS', sel([15, 25, 30, 60], sfps, (v) => { o.fps = +v; }), chk('Suara PC (tanpa suara KLM Mix — tidak menggema)', false, (v) => { o.pcAudio = v; })),
-        h('div.row', h('label', ''), chk('Rekam audio sistem lama (khusus layar penuh, ikut suara KLM Mix)', false, (v) => { o.sysAudio = v; })), h('div', { style: { marginTop: '8px' } }, grid));
+      form.append(row('FPS', sel([15, 25, 30, 60], sfps, (v) => { o.fps = +v; }), chk('Suara PC (tanpa suara KLM — tidak menggema)', false, (v) => { o.pcAudio = v; })),
+        h('div.row', h('label', ''), chk('Rekam audio sistem lama (khusus layar penuh, ikut suara KLM)', false, (v) => { o.sysAudio = v; })), h('div', { style: { marginTop: '8px' } }, grid));
       return () => { if (!o.sourceId) { KM.toast('Pilih layar/jendela'); return false; } KM.inputs.create('screen', { title: chosen || 'Layar', opts: o }); };
     },
     mirror(form) {
-      const o = { mode: 'app', token: Array.from(crypto.getRandomValues(new Uint8Array(6))).map((b) => b.toString(16).padStart(2, '0')).join(''), size: 1280, fps: 60, bitrate: 8000, apName: KM.settings.airplayName || 'KLM Mix' };
+      const o = { mode: 'app', token: Array.from(crypto.getRandomValues(new Uint8Array(6))).map((b) => b.toString(16).padStart(2, '0')).join(''), size: 1280, fps: 60, bitrate: 8000, apName: KM.settings.airplayName || 'KLM' };
       const fake = { opts: o, rt: {}, title: 'Mirroring HP' };
       KM.mirror.allow(o.token, 'Mirroring HP');
-      const MODES = [['app', '📱', 'Android — aplikasi KLM Mix', 'Paling halus & latensi terendah (scan QR)'],
+      const MODES = [['app', '📱', 'Android — aplikasi KLM', 'Paling halus & latensi terendah (scan QR)'],
         ['airplay', '📲', 'iPhone / iPad / Mac — AirPlay', 'Tanpa aplikasi: Pencerminan Layar bawaan iPhone'],
         ['miracast', '📡', 'Android tanpa aplikasi — Miracast', 'Fitur "Cast / Smart View" bawaan HP ke Windows']];
       const body = h('div');
@@ -231,7 +233,7 @@
             qr);
           redraw();
         } else if (o.mode === 'airplay') {
-          const nm = h('input', { value: o.apName, maxlength: 40, placeholder: 'KLM Mix', oninput: () => { o.apName = nm.value.trim() || 'KLM Mix'; box.replaceChildren(KM.mirror.connectBox(fake)); } });
+          const nm = h('input', { value: o.apName, maxlength: 40, placeholder: 'KLM', oninput: () => { o.apName = nm.value.trim() || 'KLM'; box.replaceChildren(KM.mirror.connectBox(fake)); } });
           const box = h('div', KM.mirror.connectBox(fake));
           body.replaceChildren(row('Nama di iPhone', nm), box,
             KM.isElectron ? null : h('p.muted', '⚠ Penerima AirPlay hanya ada di versi PC (.exe).'));
@@ -242,7 +244,7 @@
             h('p', '1. Sekali saja: pasang fitur Windows ', h('b', '"Tampilan Nirkabel" (Wireless Display)'), ' ', btn('Buka Fitur opsional', () => window.klm.invoke('sys:open-settings', 'features')), ' → Tambah fitur → cari "Wireless Display".'),
             h('p', '2. Buka ', btn('Proyeksikan ke PC ini', () => window.klm.invoke('sys:open-settings', 'project')), ' → izinkan "Tersedia di mana saja", lalu tekan ', h('b', 'Luncurkan aplikasi Tampilan Nirkabel'), '.'),
             h('p', '3. Di HP: tarik panel atas → ', h('b', 'Cast / Smart View / Screen Cast / Tampilan nirkabel'), ' → pilih nama PC ini → terima di PC.'),
-            chk('Ambil suara HP (suara PC tanpa suara KLM Mix — tidak menggema; Windows 10 versi 2004+)', mcAudio, (v) => { mcAudio = v; }),
+            chk('Ambil suara HP (suara PC tanpa suara KLM — tidak menggema; Windows 10 versi 2004+)', mcAudio, (v) => { mcAudio = v; }),
             h('p', '4. ', btn('🔍 Cari jendela Miracast', () => findMiracast(grid, true).then((n) => KM.toast(n ? 'Jendela Miracast ditemukan' : 'Jendela Miracast belum ditemukan — pilih manual', n ? 'ok' : ''))), ' lalu tekan ', h('b', 'Tambah'), ' — jendela itu ditangkap sebagai input (tidak perlu dibuka penuh).'),
             h('p.muted', 'Butuh WiFi PC yang mendukung Miracast (kebanyakan laptop). HP Samsung: Smart View; Xiaomi: Cast; Oppo/Realme/Vivo: Screen Cast / Proyeksi layar. iPhone tidak mendukung Miracast — pakai mode AirPlay.')), grid);
           if (KM.isElectron) findMiracast(grid, true).catch(() => {});
@@ -273,7 +275,7 @@
         chk('Kirim audio mic HP', true, (v) => { o.audio = v; }),
         h('div.sec', { style: { marginTop: '10px' } }, h('h4', '📱 Hubungkan HP (Wi-Fi yang sama)'),
           h('div.row', D.qr(urls[0] ? urls[0].cam : ''), h('div.grow',
-            h('p', '1. Buka aplikasi ', h('b', 'KLM Mix (APK)'), ' → mode ', h('b', 'Kamera'), ' → isi IP PC: ', h('b.urlbox', urls.map((u) => u.ip).join(' / '))),
+            h('p', '1. Buka aplikasi ', h('b', 'KLM (APK)'), ' → mode ', h('b', 'Kamera'), ' → isi IP PC: ', h('b.urlbox', urls.map((u) => u.ip).join(' / '))),
             h('p', '2. Atau scan QR / buka di Chrome HP:'), ...urls.map((u) => h('div.urlbox', u.cam)),
             h('p.muted', 'Di browser HP akan muncul peringatan sertifikat → pilih Lanjutkan/Advanced. Pilih slot yang sama di HP.')))));
       return () => { KM.inputs.create('klmcam', { title: 'KLMCAM ' + o.slot, opts: o }); UI.openSide('klmcam'); };
@@ -642,12 +644,12 @@
       },
       ndi() {
         return h('div', h('div.sec', h('h4', 'Output NDI'),
-          row('Nama sumber', h('input', { value: st.ndiName || 'KLM Mix', onchange: (e) => { st.ndiName = e.target.value; save(); } })),
+          row('Nama sumber', h('input', { value: st.ndiName || 'KLM', onchange: (e) => { st.ndiName = e.target.value; save(); } })),
           row('Resolusi NDI', sel([[960, '960×540 (ringan)'], [1280, '1280×720'], [1920, '1920×1080']], st.ndiWidth || 1280, (v) => { st.ndiWidth = +v; save(); })),
           h('div.row', h('button.btn' + (S.ndiOut ? '.red' : '.green'), { onclick: async () => { await KM.rec.toggleNdi(); show('ndi'); } }, S.ndiOut ? '■ Matikan NDI' : '▶ Nyalakan NDI'),
             h('button.btn', { onclick: async () => { const r = await fetch('/hub/ndi/check').then((x) => x.json()).catch(() => ({ ok: false, msg: 'Hub tidak tersedia' })); KM.toast(r.ok ? 'NDI Runtime terdeteksi ✓' : '⚠ ' + r.msg, r.ok ? 'ok' : 'warn', 6000); } }, 'Cek NDI Runtime'))),
           h('div.sec', h('h4', '🎦 Virtual Camera (Zoom, Google Meet, Teams, OBS)'),
-            h('ol', h('li', 'Instal NDI Tools (gratis) dari ndi.video.'), h('li', 'Nyalakan NDI di atas (tombol NDI / VCam di bar bawah).'), h('li', 'Buka aplikasi "NDI Webcam" → pilih sumber "' + (st.ndiName || 'KLM Mix') + '".'), h('li', 'Di Zoom/Meet/Teams pilih kamera "NDI Webcam Video 1".')),
+            h('ol', h('li', 'Instal NDI Tools (gratis) dari ndi.video.'), h('li', 'Nyalakan NDI di atas (tombol NDI / VCam di bar bawah).'), h('li', 'Buka aplikasi "NDI Webcam" → pilih sumber "' + (st.ndiName || 'KLM') + '".'), h('li', 'Di Zoom/Meet/Teams pilih kamera "NDI Webcam Video 1".')),
             h('p.muted', 'Input NDI dari jaringan: Tambah Input → Stream Masuk → NDI.')));
       },
       keys() {
@@ -713,7 +715,7 @@
           h('div.sec', h('h4', 'Efek overlay 1–4'), ...st.overlayFx.map((o, i) => row('Overlay ' + (i + 1), sel(Object.entries(KM.engine.OVERLAY_FX), o.type, (v) => { o.type = v; save(); }), h('label', 'Durasi (ms)'), h('input', { type: 'number', value: o.dur, step: 50, style: { width: '90px' }, onchange: (e) => { o.dur = +e.target.value; save(); } })))));
       },
       rec() {
-        const folder = h('input.grow', { value: st.recFolder, placeholder: 'Default: Videos\\KLM Mix', onchange: (e) => { st.recFolder = e.target.value; save(); } });
+        const folder = h('input.grow', { value: st.recFolder, placeholder: 'Default: Videos\\KLM', onchange: (e) => { st.recFolder = e.target.value; save(); } });
         const mcSel = st.multicorder || [];
         return h('div', h('div.sec', h('h4', 'Perekaman program'),
           row('Format', sel([['mp4', 'MP4 (H.264 + AAC)'], ['webm', 'WebM']], st.recFormat, (v) => { st.recFormat = v; save(); }), h('span.muted', 'Codec dipakai: ' + (KM.rec.pickMime(st.recFormat) || 'tidak didukung'))),
@@ -768,9 +770,9 @@
         return h('div',
           !KM.isElectron ? h('div.sec', h('p', '⚠ Output SRT memerlukan versi PC (.exe) — memakai ffmpeg bawaan.')) : null,
           h('div.sec', h('h4', '📡 Status SRT'), stBox, h('div', { style: { marginTop: '10px' } }, urlBox),
-            h('p.muted', 'Program dikirim realtime ke gateway / decoder TV (Haivision, Kiloview, Magewell, Matrox, vMix, OBS, Wowza, dll). Berjalan terpisah dari tombol Stream — bisa bersamaan.')),
+            h('p.muted', 'Program dikirim realtime ke gateway / decoder TV (Haivision, Kiloview, Magewell, Matrox, OBS, Wowza, dll). Berjalan terpisah dari tombol Stream — bisa bersamaan.')),
           h('div.sec', h('h4', 'Koneksi'),
-            row('Mode', sel([['caller', 'Caller — KLM Mix menyambung ke gateway (umum)'], ['listener', 'Listener — gateway menyambung ke PC ini'], ['rendezvous', 'Rendezvous']], c.mode, (v) => { c.mode = v; save(); show('srt'); })),
+            row('Mode', sel([['caller', 'Caller — KLM menyambung ke gateway (umum)'], ['listener', 'Listener — gateway menyambung ke PC ini'], ['rendezvous', 'Rendezvous']], c.mode, (v) => { c.mode = v; save(); show('srt'); })),
             c.mode !== 'listener' ? row('IP / host gateway', inp('host', { placeholder: 'contoh: 192.168.1.50 atau gateway.tvku.id', class: 'grow' }), h('label', 'Port'), inp('port', { type: 'number', style: { width: '90px' } }, (v) => +v || 9000))
               : row('Port di PC ini', inp('port', { type: 'number', style: { width: '90px' } }, (v) => +v || 9000), h('span.muted', 'Gateway menyambung ke srt://' + ((KM.link.ips[0] || {}).address || 'IP-PC') + ':' + c.port)),
             row('Latensi', sel([[80, '80 ms (LAN)'], [120, '120 ms'], [200, '200 ms (disarankan)'], [500, '500 ms'], [1000, '1 detik (internet)'], [2000, '2 detik (jaringan buruk)']], c.latency, (v) => { c.latency = +v; save(); upd(); }), h('label', 'Stream ID'), inp('streamid', { placeholder: 'opsional, mis. #!::r=live/tv1,m=publish', class: 'grow' })),
@@ -782,7 +784,7 @@
             row('Audio', sel([['aac', 'AAC (umum)'], ['mp2', 'MPEG-1 Layer II (decoder siaran lama)']], c.audioCodec, (v) => { c.audioCodec = v; save(); }), sel([[128, '128 kbps'], [192, '192 kbps'], [256, '256 kbps'], [320, '320 kbps']], c.audioBitrate, (v) => { c.audioBitrate = +v; save(); }),
               h('label', 'GOP'), sel([[0.5, '0,5 dtk'], [1, '1 dtk (cepat pulih)'], [2, '2 dtk']], c.gop, (v) => { c.gop = +v; save(); })),
             chk('CBR + muxrate MPEG-TS tetap (wajib untuk banyak decoder hardware / modulator)', c.cbr !== false, (v) => { c.cbr = v; save(); }),
-            chk('Mulai SRT otomatis saat KLM Mix dibuka', !!c.autoStart, (v) => { c.autoStart = v; save(); }),
+            chk('Mulai SRT otomatis saat KLM dibuka', !!c.autoStart, (v) => { c.autoStart = v; save(); }),
             h('p.muted', 'Putus koneksi (gateway restart / jaringan) disambung ulang otomatis tanpa menghentikan mixer. Video dikirim dengan GOP tetap tanpa B-frame agar decoder TV cepat mengunci gambar.')),
           R.srtLog ? h('details', h('summary', 'Log ffmpeg SRT'), h('pre', { style: { maxHeight: '200px', overflow: 'auto', fontSize: '11px', userSelect: 'text' } }, R.srtLog)) : null);
       },
@@ -815,7 +817,7 @@
           h('div.sec', h('h4', 'Alamat untuk HP (Wi-Fi/LAN yang sama, tanpa internet)'),
             ...urls.map((u) => h('div.row', D.qr(u.hp), h('div.grow', h('div', h('b', u.name || 'Jaringan') + ''), h('div.urlbox', '📱 Menu HP: ' + u.hp), h('div.urlbox', '📷 KLMCAM: ' + u.cam), h('div.urlbox', '🎛 Remote: ' + u.remote)))),
             chk('Otomatis tambah input saat KLMCAM terhubung', st.autoAddCam, (v) => { st.autoAddCam = v; save(); })),
-          h('div.sec', h('h4', 'API (kompatibel vMix — Stream Deck / Bitfocus Companion / tally)'),
+          h('div.sec', h('h4', 'KLM API (Stream Deck / Bitfocus Companion / tally / otomatisasi)'),
             h('div.urlbox', `HTTP : http://${urls[0] ? urls[0].ip : '127.0.0.1'}:${KM.link.ports.http}/api/?Function=Cut`),
             h('div.urlbox', `XML  : http://${urls[0] ? urls[0].ip : '127.0.0.1'}:${KM.link.ports.http}/api`),
             h('div.urlbox', `TCP  : port ${KM.link.ports.tcp} (FUNCTION, XML, TALLY, SUBSCRIBE TALLY)`)));
@@ -824,16 +826,16 @@
             const hp = h('input', { type: 'number', value: c.httpPort, style: { width: '90px' } }), hs = h('input', { type: 'number', value: c.httpsPort, style: { width: '90px' } }), tp = h('input', { type: 'number', value: c.tcpPort, style: { width: '90px' } });
             box.append(h('div.sec', h('h4', 'Port server (ubah jika bentrok dengan aplikasi lain)'),
               row('HTTP', hp, h('label', 'HTTPS'), hs, h('label', 'TCP'), tp),
-              h('div.row', h('button.btn.pri', { onclick: async () => { await window.klm.invoke('server:set', { httpPort: +hp.value, httpsPort: +hs.value, tcpPort: +tp.value }); if (await UI.confirm('Port disimpan. Mulai ulang KLM Mix sekarang?', 'Mulai ulang')) window.klm.invoke('app:relaunch'); } }, 'Simpan port'),
-                h('span.muted', 'Default 8620/8621/8622 — tidak bentrok dengan vMix (8088/8099), UTC KLM & KLMCAM lama.'))));
+              h('div.row', h('button.btn.pri', { onclick: async () => { await window.klm.invoke('server:set', { httpPort: +hp.value, httpsPort: +hs.value, tcpPort: +tp.value }); if (await UI.confirm('Port disimpan. Mulai ulang KLM sekarang?', 'Mulai ulang')) window.klm.invoke('app:relaunch'); } }, 'Simpan port'),
+                h('span.muted', 'Default 8620/8621/8622 — tidak bentrok dengan software siaran lain, UTC KLM & KLMCAM lama.'))));
           });
         }
         return box;
       },
       lisensi() { if (KM.license) { KM.license.refresh().then(() => KM.license._render && KM.license._render()); return KM.license.panel(); } return h('p', 'Modul lisensi tidak tersedia'); },
       about() {
-        return h('div', h('div.sec', h('h4', 'KLM Mix ' + KM.version),
-          h('p', 'Studio produksi live all-in-one: switcher, transisi, overlay, grafis UTC Acara, scoreboard UTC Score, kamera HP KLMCAM, mixer audio, rekam, streaming multi-platform, instant replay, playlist, multiview & API vMix.'),
+        return h('div', h('div.sec', h('h4', 'KLM — Kinetic Live Mixer ' + KM.version),
+          h('p', 'Studio produksi live all-in-one: switcher, transisi, overlay, grafis UTC Acara, scoreboard UTC Score, kamera HP KLMCAM, mixer audio, rekam, streaming multi-platform, instant replay, playlist, multiview & KLM API.'),
           h('p.muted', 'Berjalan 100% offline. Versi PC (.exe) & aplikasi HP (.apk).')),
           h('div.sec', h('h4', 'Browser engine'), h('div.muted', navigator.userAgent)));
       }
@@ -863,7 +865,7 @@
   // =================== BANTUAN ===================
   D.help = function () {
     const sc = [['Spasi', 'Cut'], ['Enter', 'Transisi 1 (Auto)'], ['Q', 'Quick Play preview'], ['1–9, 0', 'Pilih preview input 1–10'], ['Shift + 1–9', 'Cut langsung ke input'], ['F1–F4', 'Overlay 1–4 (dengan input preview)'], ['B', 'Fade To Black'], ['P', 'Play/Pause input preview'], ['← / →', 'Preview sebelum/berikutnya'], ['M', 'Tandai replay 8 detik'], ['Ctrl+R', 'Mulai/stop rekam'], ['Ctrl+L', 'Mulai/stop streaming'], ['Ctrl+I', 'Tambah input'], ['Ctrl+S / Ctrl+O', 'Simpan / buka proyek'], ['Ctrl+Shift+S', 'Snapshot'], ['F11', 'Layar penuh'], ['Ctrl + klik thumbnail', 'Cut ke input'], ['Dobel klik thumbnail', 'Pengaturan input']];
-    UI.modal('❔ Bantuan KLM Mix', h('div',
+    UI.modal('❔ Bantuan KLM', h('div',
       h('div.sec', h('h4', 'Shortcut keyboard'), h('div.help-grid', sc.map(([k, v]) => h('div', h('code', k), h('span', v))))),
       h('div.sec', h('h4', 'Alur kerja cepat'),
         h('ol', h('li', 'Tambah input (kamera, KLMCAM HP, video, gambar, title).'), h('li', 'Klik thumbnail → masuk Preview (hijau).'), h('li', 'Tekan Cut / transisi → masuk Program (merah).'), h('li', 'Pakai tombol 1–4 di kartu untuk overlay (lower third, logo, running text).'), h('li', 'Rekam / Stream dari bar bawah.'))),

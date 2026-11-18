@@ -1,4 +1,4 @@
-/* KLM Mix - panel samping: Mixer Audio, UTC Acara, UTC Score, KLMCAM, Title, Replay, Playlist, PTZ, Skrip
+/* KLM - panel samping: Mixer Audio, UTC Acara, UTC Score, KLMCAM, Title, Replay, Playlist, PTZ, Skrip
  * Tab UTC Acara / UTC Score / KLMCAM hanya muncul bila inputnya sudah ditambahkan. */
 'use strict';
 (function (KM) {
@@ -228,7 +228,7 @@
         h('div.qrrow', KM.dialogs.qr(u.cam || u.hp || ''), h('div.grow',
           h('p', 'Kamera langsung (HTTPS):'), ...urls.map((x) => h('div.urlbox', x.cam)),
           h('p', 'Menu HP:'), ...urls.map((x) => h('div.urlbox', x.hp)),
-          h('p.muted', 'Atau aplikasi KLM Mix .apk → mode Kamera → IP: ' + urls.map((x) => x.ip).join(' / ') + ' • pilih slot yang sama.')))),
+          h('p.muted', 'Atau aplikasi KLM .apk → mode Kamera → IP: ' + urls.map((x) => x.ip).join(' / ') + ' • pilih slot yang sama.')))),
       netFold()));
   }
   // KLMCAM lewat internet: HP di WiFi lain / data seluler
@@ -246,7 +246,7 @@
             h('p', 'Kode internet:'), h('div.urlbox', { style: { letterSpacing: '3px', fontWeight: '800', fontSize: '15px' } }, c.room || '…'),
             h('div.bgrid', h('button.btn.sm', { onclick: () => copy(c.room, 'Kode') }, KI.el('copy'), 'Salin kode'), h('button.btn.sm', { onclick: () => copy(link, 'Tautan') }, KI.el('link'), 'Salin tautan'),
               h('button.btn.sm', { title: 'Buat kode baru (HP lama harus memakai kode baru)', onclick: async () => { c.room = KLMNet.newRoom(); KM.saveSettings(); await L.netStart(); renderPhone(); } }, KI.el('refresh'), 'Kode baru')),
-            h('p.muted', 'Di HP: aplikasi KLM Mix (.apk) → Kamera → ⚙ → isi "Kode internet", atau scan QR / buka tautan di Chrome. Pilih slot yang sama dengan input KLMCAM.'))),
+            h('p.muted', 'Di HP: aplikasi KLM (.apk) → Kamera → ⚙ → isi "Kode internet", atau scan QR / buka tautan di Chrome. Pilih slot yang sama dengan input KLMCAM.'))),
           h('p.muted.cinfo', 'Jalur sinyal: ' + N.online + ' dari ' + KLMNet.BROKERS.length + ' tersambung' + (N.err ? ' • ' + N.err : '')),
           h('details', { open: !!tr.url }, h('summary', { style: { cursor: 'pointer', color: 'var(--tx2)', fontWeight: '600' } }, 'Server TURN (bila sambungan langsung diblokir)'),
             h('p.muted', 'Sebagian jaringan seluler / kantor memblokir sambungan langsung. Isi server TURN milik sendiri atau sewaan agar tetap tersambung (video lewat server itu).'),
@@ -419,7 +419,7 @@
           rally ? null : c('goalpopup-home', 'GOL ' + st.home, 'Popup gol tuan rumah'), rally ? null : c('goalpopup-away', 'GOL ' + st.away, 'Popup gol tamu'),
           c('scorepopup', 'Popup skor'), c('clearpopup', 'Tutup popup'),
           c('swap', '⇄ Tukar sisi', 'Tukar posisi tim'), c('undo', '↶ Undo', 'Batalkan langkah terakhir')),
-        h('p.muted.note', 'Dari HP: http://' + ((KM.link.ips[0] && KM.link.ips[0].address) || location.hostname) + ':' + st.port + '/hp • data vMix/OBS: :' + st.port + '/data.json'))));
+        h('p.muted.note', 'Dari HP: http://' + ((KM.link.ips[0] && KM.link.ips[0].address) || location.hostname) + ':' + st.port + '/hp • data OBS / software lain: :' + st.port + '/data.json'))));
   }
 
   KM.on('change', (w) => {

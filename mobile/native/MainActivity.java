@@ -21,7 +21,7 @@ public class MainActivity extends BridgeActivity {
         handleLink(intent);
     }
 
-    // tautan klmmix://mirror?h=...&p=...&t=... (dari QR Mirroring di KLM Mix PC)
+    // tautan klmmix://mirror?h=...&p=...&t=... (dari QR Mirroring di KLM PC)
     private void handleLink(Intent intent) {
         if (intent == null) return;
         Uri d = intent.getData();

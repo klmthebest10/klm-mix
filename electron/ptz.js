@@ -1,4 +1,4 @@
-/* KLM Mix - kontrol kamera PTZ fisik
+/* KLM - kontrol kamera PTZ fisik
  * Protokol: VISCA over IP (Sony UDP 52381), VISCA UDP mentah (1259), VISCA TCP (5678, PTZOptics/kebanyakan PTZ China),
  *           HTTP-CGI (PTZOptics/HuddleCam/Minrray: /cgi-bin/ptzctrl.cgi)
  */

@@ -1,4 +1,4 @@
-/* KLM Mix - inti: namespace, utilitas, state, pengaturan */
+/* KLM - inti: namespace, utilitas, state, pengaturan */
 'use strict';
 window.KM = window.KM || {};
 (function (KM) {
@@ -7,7 +7,7 @@ window.KM = window.KM || {};
     const orig = Element.prototype[fn];
     Element.prototype[fn] = function (...kids) { return orig.apply(this, kids.filter((x) => x != null && x !== false)); };
   }
-  KM.version = '1.15.0';
+  KM.version = '1.16.0';
   KM.isElectron = !!(window.klm && window.klm.isElectron);
 
   // ---------- event bus ----------
@@ -159,9 +159,9 @@ window.KM = window.KM || {};
   KM.defaultFolder = async (kind) => {
     if (!KM.isElectron) return '';
     if (!KM._appInfo) KM._appInfo = await window.klm.invoke('app:info');
-    if (kind === 'rec') return KM.settings.recFolder || (KM._appInfo.videos + '\\KLM Mix');
-    if (kind === 'snap') return KM.settings.snapFolder || (KM._appInfo.pictures + '\\KLM Mix');
-    return KM._appInfo.documents + '\\KLM Mix';
+    if (kind === 'rec') return KM.settings.recFolder || (KM._appInfo.videos + '\\KLM');
+    if (kind === 'snap') return KM.settings.snapFolder || (KM._appInfo.pictures + '\\KLM');
+    return KM._appInfo.documents + '\\KLM';
   };
   KM.joinPath = (a, b) => (a.endsWith('\\') || a.endsWith('/') ? a + b : a + (a.includes('\\') ? '\\' : '/') + b);
 })(window.KM);

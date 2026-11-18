@@ -1,5 +1,5 @@
-/* KLM Mix — penerima Mirroring HP.
- * HP (aplikasi KLM Mix .apk) merekam layarnya dengan encoder H.264 hardware lalu mengirim lewat TCP langsung ke PC (LAN,
+/* KLM — penerima Mirroring HP.
+ * HP (aplikasi KLM .apk) merekam layarnya dengan encoder H.264 hardware lalu mengirim lewat TCP langsung ke PC (LAN,
  * tanpa internet). Server ini memeriksa token, lalu meneruskan paket apa adanya ke halaman mixer lewat WebSocket lokal
  * (/mirror-feed) untuk didekode dengan WebCodecs.
  * HP → PC : 'KLMM' u8 versi, u16 panjang, JSON {token,name,w,h,fps,model}; lalu paket: u8 tipe, u32 panjang, i64 ptsUs, data
@@ -27,6 +27,7 @@ function create() {
   const state = (token, o) => { for (const ws of wss.clients) if (ws.token === token && ws.readyState === 1) ws.send(JSON.stringify(o)); };
 
   function onSocket(sock) {
+    if (M.licensed && !M.licensed()) { try { sock.destroy(); } catch (e) {} return; } // Mirroring HP terkunci tanpa lisensi
     sock.setNoDelay(true); sock.setKeepAlive(true, 3000);
     let buf = Buffer.alloc(0), ses = null, token = '';
     const fail = (why) => { try { sock.destroy(); } catch (e) {} if (!ses) console.warn('[mirror] ditolak:', why, sock.remoteAddress); };

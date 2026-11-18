@@ -1,4 +1,4 @@
-/* KLM Mix - Media Hub (proses Node): semua pekerjaan ffmpeg & perangkat jaringan
+/* KLM - Media Hub (proses Node): semua pekerjaan ffmpeg & perangkat jaringan
  *  - Input stream masuk: RTMP/RTMPS, SRT, RTSP (CCTV/kamera IP), HLS/HTTP, UDP — mode tarik atau menerima (listener)
  *    → ffmpeg (copy H.264 = sangat ringan, atau transcode) → fragmented MP4 → mixer lewat MSE
  *  - Output streaming (RTMP/SRT multi-tujuan) & output NDI lewat WebSocket /hub/out

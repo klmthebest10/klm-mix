@@ -1,5 +1,5 @@
-/* KLM Mix - render grafis UTC secara offscreen (tanpa jendela, dengan alpha asli), BERLAPIS
- * Overlay asli (HTML/CSS/font/animasi/video persis seperti di OBS/vMix) dirender Chromium di belakang layar.
+/* KLM - render grafis UTC secara offscreen (tanpa jendela, dengan alpha asli), BERLAPIS
+ * Overlay asli (HTML/CSS/font/animasi/video persis seperti di OBS) dirender Chromium di belakang layar.
  * Agar tetap mulus walau banyak grafis tampil bersamaan, overlay dipecah menjadi beberapa lapisan,
  * masing-masing di renderer sendiri:
  *   main  : lower third, title, lokasi, sosmed, opening/closing      (UTC KLM Acara)
@@ -45,7 +45,7 @@ module.exports = function setupUtcOsr(o) {
     });
     const wc = win.webContents;
     L.win = win; L.wc = wc;
-    wc.setAudioMuted(true); // suara video opening/closing diputar oleh mixer audio KLM Mix (ikut rekam/stream)
+    wc.setAudioMuted(true); // suara video opening/closing diputar oleh mixer audio KLM (ikut rekam/stream)
     wc.on('paint', (e, dirty, image) => {
       const t = L.t; if (!t || L.paused) return;
       const sz = image.getSize();

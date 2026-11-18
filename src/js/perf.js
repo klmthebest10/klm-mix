@@ -1,4 +1,4 @@
-/* KLM Mix - mode performa (Hemat / Seimbang / Kualitas) */
+/* KLM - mode performa (Hemat / Seimbang / Kualitas) */
 'use strict';
 (function (KM) {
   const PRESET = {

@@ -1,16 +1,16 @@
 /*
- * klm-airplay — penerima AirPlay Mirroring untuk KLM Mix (iPhone / iPad / Mac → "Screen Mirroring", tanpa aplikasi).
+ * klm-airplay — penerima AirPlay Mirroring untuk KLM (iPhone / iPad / Mac → "Screen Mirroring", tanpa aplikasi).
  *
  * Program kecil ini memakai pustaka AirPlay dari proyek UxPlay (https://github.com/FDH2/UxPlay, GPL-3.0) dan karena itu
- * dilisensikan GPL-3.0-or-later. Ia berjalan sebagai proses terpisah dari KLM Mix: menerima layar perangkat Apple,
- * lalu meneruskan video H.264 (sudah didekripsi) ke port Mirroring KLM Mix lewat TCP lokal dengan protokol:
+ * dilisensikan GPL-3.0-or-later. Ia berjalan sebagai proses terpisah dari KLM: menerima layar perangkat Apple,
+ * lalu meneruskan video H.264 (sudah didekripsi) ke port Mirroring KLM lewat TCP lokal dengan protokol:
  *   "KLMM" u8 versi, u16 panjang, JSON {token,name,model,w,h,fps}; lalu paket [u8 tipe][u32 panjang][i64 ptsUs][data]
  *   tipe 1 = SPS/PPS, 2 = frame kunci, 3 = frame biasa, 4 = info JSON,
  *   tipe 5 = suara PCM s16le stereo 44100 Hz (didekode di sini dari AAC-ELD / AAC-LC / ALAC dengan libavcodec, LGPL).
- * Status dicetak ke stdout sebagai baris JSON untuk dibaca KLM Mix.
+ * Status dicetak ke stdout sebagai baris JSON untuk dibaca KLM.
  *
  * uji  : klm-airplay --port 8624 --token <hex> --selftest video.h264 [detik] [suara-aac-lc.adts]
- * pakai: klm-airplay --name "KLM Mix" --port 8624 --token <hex> --mac AA:BB:CC:DD:EE:FF --keyfile <path> [--fps 60] [--debug]
+ * pakai: klm-airplay --name "KLM" --port 8624 --token <hex> --mac AA:BB:CC:DD:EE:FF --keyfile <path> [--fps 60] [--debug]
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,7 +49,7 @@ typedef int sock_t;
 #include "logger.h"
 #include "stream.h"
 
-static char g_name[128] = "KLM Mix";
+static char g_name[128] = "KLM";
 static char g_token[64] = "";
 static char g_mac[32] = "";
 static char g_keyfile[1024] = "";
@@ -65,7 +65,7 @@ static char client_name[160] = "", client_model[96] = "";
 static int vid_w = 0, vid_h = 0, need_cfg = 1;
 static uint64_t pts0 = 0, frames = 0, audio_frames = 0;
 
-/* ---------- status ke KLM Mix ---------- */
+/* ---------- status ke KLM ---------- */
 static void jesc(const char *s, char *o, size_t n) {
     size_t k = 0;
     for (; *s && k + 7 < n; s++) {
@@ -83,7 +83,7 @@ static void status(const char *ev, const char *msg) {
     fflush(stdout);
 }
 
-/* ---------- sambungan keluar ke KLM Mix ---------- */
+/* ---------- sambungan keluar ke KLM ---------- */
 static int send_all(sock_t s, const void *p, int n) {
     const char *c = (const char *) p;
     while (n > 0) {

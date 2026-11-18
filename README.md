@@ -1,6 +1,6 @@
-# KLM Mix
+# KLM — Kinetic Live Mixer
 
-Studio produksi live all‑in‑one — switcher, transisi, overlay, title **UTC KLM Acara**, kamera HP **KLMCAM**, mixer audio, rekam, streaming multi‑platform, instant replay, playlist, multiview, dan API kompatibel vMix. Berjalan **100% offline** di jaringan lokal.
+Studio produksi live all‑in‑one — switcher, transisi, overlay, title **UTC KLM Acara**, kamera HP **KLMCAM**, mixer audio, rekam, streaming multi‑platform, instant replay, playlist, multiview, dan **KLM API**. Berjalan **100% offline** di jaringan lokal.
 
 - **PC Windows (.exe)** — aplikasi utama (mixer). Tidak perlu Node.js.
 - **HP Android (.apk)** — KLMCAM (kamera wireless), Remote Switcher, Title & Audio.
@@ -14,12 +14,12 @@ klm-mix/
 ├── electron/                 # proses utama Windows (.exe)
 │   ├── main.js               # jendela, dialog file, capture layar, output monitor-2, browser input
 │   ├── preload.js            # jembatan aman renderer ↔ main
-│   ├── server.js             # server lokal: HTTP/HTTPS/WebSocket/TCP + API vMix
+│   ├── server.js             # server lokal: HTTP/HTTPS/WebSocket/TCP + KLM API
 │   ├── hub.js                # media hub: input stream (RTMP/SRT/RTSP/HLS/NDI), streaming keluar, deteksi GPU encoder
 │   ├── ffmpeg-args.js        # perintah ffmpeg streaming (RTMP/RTMPS/SRT, multi-tujuan)
 │   ├── ptz.js                # kontrol PTZ: VISCA over IP (Sony/PTZOptics/umum) & HTTP-CGI
 │   ├── utc.js                # server UTC KLM Acara (API sama persis dgn versi 9.0, preset/logo/video, impor data lama)
-│   ├── utc-switch.js         # switcher panel UTC: KLM Mix (bawaan) / OBS (websocket v5) / vMix
+│   ├── utc-switch.js         # switcher panel UTC: KLM (bawaan) / OBS (websocket v5) / vMix
 │   ├── utc-osr.js            # render overlay UTC asli offscreen BERLAPIS (Acara, running text, logo, scoreboard)
 │   ├── osr-preload.js        # jembatan halaman overlay offscreen → mixer (running text native)
 │   ├── score.js              # server UTC KLM Scoreboard (port 7171, API & alamat sama dengan aplikasi aslinya)
@@ -50,7 +50,7 @@ klm-mix/
 │       ├── record.js         # rekam, streaming, MultiCorder, snapshot
 │       ├── replay.js         # instant replay + playlist
 │       ├── link.js           # KLMCAM WebRTC, tally, remote HP
-│       ├── api.js            # 226 fungsi API (nama sama dengan vMix, + UTC*, SRT)
+│       ├── api.js            # fungsi KLM API (+ UTC*, SRT)
 │       ├── ptz.js            # panel PTZ fisik + PTZ virtual
 │       ├── script.js         # skrip JavaScript, trigger per input, shortcut kustom
 │       ├── designer.js       # Title Designer (desain title bebas) + impor CSV
@@ -81,10 +81,10 @@ File dibangun otomatis oleh **GitHub Actions** (gratis):
 
 1. Buat repo baru di GitHub (mis. `klm-mix`), lalu unggah **seluruh isi folder ini** (termasuk folder `.github`).
 2. Buka tab **Actions** → tunggu dua workflow selesai (±5–10 menit):
-   - **Build Windows (.exe)** → artifact `KLM-Mix-Windows` berisi
-     - `KLM-Mix-Setup-1.14.2.exe` (installer, otomatis membuka firewall untuk HP)
-     - `KLM-Mix-Portable-1.14.2.exe` (tanpa instal)
-   - **Build Android (.apk)** → artifact `KLM-Mix-Android` berisi `KLM-Mix-HP.apk`
+   - **Build Windows (.exe)** → artifact `KLM-Windows` berisi
+     - `KLM-Setup-1.14.2.exe` (installer, otomatis membuka firewall untuk HP)
+     - `KLM-Portable-1.14.2.exe` (tanpa instal)
+   - **Build Android (.apk)** → artifact `KLM-Android` berisi `KLM-HP.apk`
 3. Untuk rilis resmi: buat tag `v1.14.2` → file otomatis muncul di halaman **Releases**.
 
 > Versi portable: saat pertama dibuka, Windows menanyakan izin jaringan → pilih **Allow / Izinkan** (centang Private & Public) agar HP bisa terhubung.
@@ -104,7 +104,7 @@ PC dan HP harus di **Wi‑Fi/LAN yang sama** (tidak perlu internet).
 
 | Cara | Langkah |
 |---|---|
-| **Aplikasi APK** (disarankan) | Instal `KLM-Mix-HP.apk` → isi IP PC (lihat menu **📱 HP & Jaringan** di PC) → pilih Kamera / Remote / Title / Audio |
+| **Aplikasi APK** (disarankan) | Instal `KLM-HP.apk` → isi IP PC (lihat menu **📱 HP & Jaringan** di PC) → pilih Kamera / Remote / Title / Audio |
 | **Browser HP** | Scan QR di PC, atau buka `http://IP-PC:8620/hp`. Kamera via browser memakai `https://IP-PC:8621/cam` (terima peringatan sertifikat) |
 
 **KLMCAM:** pilih slot yang sama dengan input KLMCAM di PC (atau biarkan otomatis — input dibuat saat HP terhubung). Tally merah/hijau tampil di layar HP. Dari PC bisa atur zoom, senter, ganti kamera, fokus, kualitas (720p/1080p, 30/60fps) & bitrate.
@@ -130,23 +130,30 @@ Tips latensi rendah: Wi‑Fi 5 GHz, HP dekat router, kualitas 720p60 atau 1080p3
 ### Jenis input
 Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capture card (hingga 4K), **KLMCAM** (HP), **Stream Masuk** (terima RTMP/SRT dari OBS/HP/encoder, tarik RTSP CCTV/kamera IP, HLS, UDP, **NDI**), **KLM Call** (tamu jarak jauh), Tangkap Layar/Jendela (+audio sistem), **Grafis UTC KLM Acara**, Title Cepat (kanvas), Mic/Audio device, File Audio, Warna/Gradien, Color Bars + tone, **Web Browser**, Virtual Set, Instant Replay, Video dari URL.
 
-### Fitur pro tambahan (setara vMix Pro)
+### Fitur pro tambahan
 - **NDI** masuk & keluar (butuh NDI Tools/Runtime gratis) — sekaligus **Virtual Camera** untuk Zoom/Meet/Teams lewat aplikasi *NDI Webcam*
 - **Stream masuk** RTMP/SRT listener (port 1935 / 9000), RTSP, HLS, UDP — mode *Copy* tanpa encode ulang (sangat ringan), latensi bisa diatur 0.3–2.5 dtk
-- **KLM Call** (pengganti vMix Call): tamu bergabung lewat link, melihat *return feed* program dan mendengar audio **mix-minus** (tanpa gema suaranya sendiri), tally ON AIR
+- **KLM Call**: tamu bergabung lewat link, melihat *return feed* program dan mendengar audio **mix-minus** (tanpa gema suaranya sendiri), tally ON AIR
 - **PTZ**: kontrol kamera PTZ fisik (VISCA over IP Sony 52381, VISCA TCP/UDP PTZOptics & umum, HTTP-CGI) — joystick, zoom, fokus, 8 preset; plus **PTZ Virtual** (pan/zoom halus otomatis dari 1 kamera)
 - **Title Designer** (pengganti GT Designer): teks, kotak, lingkaran, garis, gambar; gradien, bayangan, outline; animasi per elemen + jeda; field bernama untuk SetText; pustaka template sendiri; **impor CSV** untuk daftar nama
 - **Skrip JavaScript** (pengganti VB.NET): `API.Function("Cut")`, `Sleep()`, `Input()`, jalankan dari tombol/shortcut/trigger/Stream Deck
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.16.0
+- **Nama baru: KLM — Kinetic Live Mixer**, dengan **logo antena siaran** baru (menara pemancar, lampu suar koral, gelombang sinyal hijau limau→tosca di latar teal tinta). Ikon Windows (.ico multi-ukuran), Android, PWA HP, dan logo di dalam aplikasi ikut diganti. Pengaturan, preset, dan lisensi dari versi sebelumnya tetap terbaca (folder data lama tetap dipakai).
+- **KLM API**: API milik KLM tidak lagi memakai nama/format merek lain. Status XML kini `<klm>…</klm>`; nama fungsi (Cut, Fade, OverlayInput1In, …) tetap sama sehingga tombol Stream Deck/Companion berbasis HTTP tetap jalan.
+- **Kebijakan lisensi baru**: tanpa lisensi KLM berjalan normal **tanpa watermark**; yang terkunci hanya **UTC Acara, UTC Score, Mirroring HP, dan KLMCAM** (di aplikasi maupun halaman HP/browser). Klik fitur terkunci → dialog lisensi.
+- **Lisensi seumur hidup yang tahan install ulang Windows**: Device ID kini diambil dari UUID perangkat keras (SMBIOS motherboard), bukan dari instalasi Windows. Setelah install ulang, cukup masukkan kunci lisensi yang sama.
+- **Signing installer**: pipeline CI siap menandatangani `KLM.exe` dan installer dengan SSL.com eSigner atau sertifikat .pfx (lihat [docs/SIGNING.md](docs/SIGNING.md)).
+
 ### Baru di v1.15.0
-- **Lisensi per perangkat (offline).** Tiap komputer punya Device ID (`KLM-XXXX-XXXX-XXXX-XXXX`); penjual membuat kunci lisensi bertanda tangan (ECDSA P-256) untuk Device ID itu. Tanpa lisensi KLM Mix berjalan dalam **mode DEMO** (semua fitur jalan, Program diberi watermark). Aktivasi di **Bantuan → 🔑 Lisensi**, **Pengaturan → Lisensi**, atau klik tanda **DEMO** di bar atas. Alat penjual: `tools/license/pembuat-lisensi.html` (offline) dan `tools/license/klm-license.js`. Panduan: [docs/LISENSI.md](docs/LISENSI.md).
+- **Lisensi per perangkat (offline).** Tiap komputer punya Device ID (`KLM-XXXX-XXXX-XXXX-XXXX`); penjual membuat kunci lisensi bertanda tangan (ECDSA P-256) untuk Device ID itu. Tanpa lisensi KLM berjalan dalam **mode DEMO** (semua fitur jalan, Program diberi watermark). Aktivasi di **Bantuan → 🔑 Lisensi**, **Pengaturan → Lisensi**, atau klik tanda **DEMO** di bar atas. Alat penjual: `tools/license/pembuat-lisensi.html` (offline) dan `tools/license/klm-license.js`. Panduan: [docs/LISENSI.md](docs/LISENSI.md).
 - Perbaikan: fungsi API `StartCountdown` / `PauseCountdown` / `StopCountdown` tidak lagi error bila diarahkan ke input yang bukan Title.
 
 ### Baru di v1.14.13
 - **Panel lengkap UTC Acara tampil normal lagi.** Sejak v1.14.6 panel terjepit di bawah monitor (di PC sebagian isi terpotong, di HP/APK hanya ±50 px sehingga panel seolah hilang). Kini panel selalu mendapat tinggi cukup dan monitor Preview/Program tetap ukuran penuh; bila layar kurang tinggi halaman cukup digulir.
-- **Jendela sendiri UTC Acara dikembalikan seperti semula**: tombol mengambang KLM Mix kembali ada, tombol tambahan "UTC ON AIR" di header dihapus, daftar input kembali "INPUT n + nama".
+- **Jendela sendiri UTC Acara dikembalikan seperti semula**: tombol mengambang KLM kembali ada, tombol tambahan "UTC ON AIR" di header dihapus, daftar input kembali "INPUT n + nama".
 - Perubahan yang tidak diminta dibatalkan: tampilan monitor di HP (v1.14.9), tampilan monitor panel UTC di HP (v1.14.10), dan pembungkusan teks placeholder (v1.14.8). Yang tetap: label nama di atas monitor Preview/Program panel UTC dihapus, label PREVIEW/PROGRAM KLM Remote di luar bingkai, dan grafis UTC ringan (v1.14.12).
 
 ### Baru di v1.14.12
@@ -160,14 +167,14 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 
 ### Baru di v1.14.10
 - **Nama input di daftar input UTC Acara kembali tampil** (nomor + nama). Keterangan nama hanya dihilangkan dari dalam layout monitor Preview & Program UTC Acara.
-- **HP / APK: tulisan PREVIEW & PROGRAM di panel UTC Acara juga dipindah ke luar bingkai monitor**, sama seperti monitor utama KLM Mix (v1.14.9).
+- **HP / APK: tulisan PREVIEW & PROGRAM di panel UTC Acara juga dipindah ke luar bingkai monitor**, sama seperti monitor utama KLM (v1.14.9).
 
 ### Baru di v1.14.9
 - **HP / APK Android: label PREVIEW & PROGRAM dipindah ke luar bingkai monitor** (di atas gambar), sehingga bingkai hanya berisi gambar.
 
 ### Baru di v1.14.8
 - **Keterangan nama input dihapus dari panel lengkap UTC Acara**: label "2. …" di atas monitor Preview/Program dan caption nama di kartu input bawah kini hanya menampilkan nomor. Nama tetap muncul sebagai tooltip.
-- **Panel jendela sendiri UTC Acara (`/utc`) dirapikan**: tombol **UTC ON AIR** kini ada di header, dan bingkai floating KLM Mix tidak lagi tampil di atas panel bila dibuka dari KLM Mix. Teks placeholder lower third kini turun baris (word-wrap) agar tidak terpotong.
+- **Panel jendela sendiri UTC Acara (`/utc`) dirapikan**: tombol **UTC ON AIR** kini ada di header, dan bingkai floating KLM tidak lagi tampil di atas panel bila dibuka dari KLM. Teks placeholder lower third kini turun baris (word-wrap) agar tidak terpotong.
 
 ### Baru di v1.14.7
 - **Popup 'Pulihkan sesi terakhir' saat membuka aplikasi dihapus.** Pemulihan manual tetap tersedia lewat menu Preset → Pulihkan sesi terakhir. Pemulihan otomatis setelah gangguan tidak berubah.
@@ -196,19 +203,19 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 
 ### Baru di v1.14
 - **Suara iPhone ikut** (AirPlay): suara dari iPhone/iPad/Mac (AAC-ELD saat mirroring, AAC/ALAC saat AirPlay audio) didekode di PC dan masuk ke strip audio input — bisa diatur volume, EQ, kompresor, A/V sync seperti input lain
-- **Firewall otomatis**: KLM Mix memeriksa Windows Firewall untuk penerima AirPlay; bila belum diizinkan atau terblokir, izin diminta sekali (jendela UAC) — juga di versi portable; tombol *Izinkan di firewall* bila dibatalkan
+- **Firewall otomatis**: KLM memeriksa Windows Firewall untuk penerima AirPlay; bila belum diizinkan atau terblokir, izin diminta sekali (jendela UAC) — juga di versi portable; tombol *Izinkan di firewall* bila dibatalkan
 - **Tidak terhalang WiFi tamu/kantor**: penerima AirPlay kini diumumkan di **semua jaringan PC sekaligus** (WiFi, LAN, **Hotspot Seluler PC**) dan mengikuti bila jaringan berubah. WiFi memblokir antar-perangkat? Nyalakan Hotspot Seluler PC (tombol langsung di panel) dan sambungkan iPhone ke situ, atau sambungkan PC ke Hotspot Pribadi iPhone
-- **Suara HP di mode Miracast** + opsi baru di Tangkap Layar/Jendela: **suara PC tanpa suara KLM Mix** (Windows 10 versi 2004+), jadi tidak ada gema/umpan balik walau monitor audio menyala
+- **Suara HP di mode Miracast** + opsi baru di Tangkap Layar/Jendela: **suara PC tanpa suara KLM** (Windows 10 versi 2004+), jadi tidak ada gema/umpan balik walau monitor audio menyala
 
 ### Baru di v1.13
-- **iPhone / iPad / Mac mirroring tanpa aplikasi** (Tambah Input → Mirroring HP / iPhone → *iPhone / iPad / Mac — AirPlay*): KLM Mix punya **penerima AirPlay bawaan** — di iPhone cukup buka **Pusat Kontrol → Pencerminan Layar → "KLM Mix"** (nama bisa diganti). Tanpa internet: iPhone & PC cukup satu WiFi atau PC tersambung ke hotspot iPhone. Video didekode WebCodecs seperti mirroring Android; ukuran/rotasi mengikuti; bila halaman disambung ulang gambar langsung kembali (frame sejak frame kunci terakhir disimpan). Suara iPhone belum ikut. Penerima hanya menyala selama ada input AirPlay. Installer menambahkan izin Windows Firewall untuk penerima ini (versi portable: izinkan saat ditanya)
+- **iPhone / iPad / Mac mirroring tanpa aplikasi** (Tambah Input → Mirroring HP / iPhone → *iPhone / iPad / Mac — AirPlay*): KLM punya **penerima AirPlay bawaan** — di iPhone cukup buka **Pusat Kontrol → Pencerminan Layar → "KLM"** (nama bisa diganti). Tanpa internet: iPhone & PC cukup satu WiFi atau PC tersambung ke hotspot iPhone. Video didekode WebCodecs seperti mirroring Android; ukuran/rotasi mengikuti; bila halaman disambung ulang gambar langsung kembali (frame sejak frame kunci terakhir disimpan). Suara iPhone belum ikut. Penerima hanya menyala selama ada input AirPlay. Installer menambahkan izin Windows Firewall untuk penerima ini (versi portable: izinkan saat ditanya)
 - **Android tanpa aplikasi — Miracast** (mode ketiga di dialog yang sama): panduan langkah demi langkah memakai fitur bawaan Windows *Tampilan Nirkabel / Proyeksikan ke PC ini* (tombol langsung ke halaman pengaturannya) + fitur Cast / Smart View di HP, lalu **jendela Miracast dicari otomatis** dan ditangkap sebagai input
-- Mirroring lewat aplikasi KLM Mix (.apk) tetap ada dan tetap pilihan paling halus untuk Android
+- Mirroring lewat aplikasi KLM (.apk) tetap ada dan tetap pilihan paling halus untuk Android
 - Komponen penerima AirPlay (`klm-airplay.exe`) adalah program terpisah berlisensi GPL-3.0 berbasis pustaka [UxPlay](https://github.com/FDH2/UxPlay); kode sumber & cara membangun di `native/airplay/`
 
 ### Baru di v1.12
 - **Latar AI — deteksi orang tanpa green screen** (⚙ input KLMCAM / kamera / tamu / video → tab *Latar AI*): **hapus latar** (transparan), **buramkan**, **ganti gambar**, atau **warna polos** secara realtime; indikator *orang terdeteksi*; **bingkai otomatis mengikuti orang**; sembunyikan input bila tidak ada orang; kelembutan & keketatan tepi. Berjalan di PC **tanpa internet** (model MediaPipe Selfie Segmenter + mesin WASM/GPU ikut terpasang). **Chroma Key tetap ada** dan bisa digabung
-- **Input baru: Mirroring HP** (Tambah Input → Mirroring HP → **scan QR**): layar HP Android tampil langsung di KLM Mix. Aplikasi KLM Mix (.apk) merekam layar dengan encoder H.264 hardware dan mengirim langsung lewat WiFi / hotspot / USB tethering (**tanpa internet**); PC mendekode dengan WebCodecs dan antrean sependek mungkin. Pilihan 960 / 1280 / 1920, 30 / 60 fps, 4–20 Mbps; rotasi layar diikuti; sambung ulang otomatis. Scan QR dari dalam aplikasi atau dengan kamera bawaan HP (tautan `klmmix://`)
+- **Input baru: Mirroring HP** (Tambah Input → Mirroring HP → **scan QR**): layar HP Android tampil langsung di KLM. Aplikasi KLM (.apk) merekam layar dengan encoder H.264 hardware dan mengirim langsung lewat WiFi / hotspot / USB tethering (**tanpa internet**); PC mendekode dengan WebCodecs dan antrean sependek mungkin. Pilihan 960 / 1280 / 1920, 30 / 60 fps, 4–20 Mbps; rotasi layar diikuti; sambung ulang otomatis. Scan QR dari dalam aplikasi atau dengan kamera bawaan HP (tautan `klmmix://`)
 
 ### Baru di v1.11
 - **Daftar input tidak lagi patah-patah saat kamera dipakai di input lain**: kartu input gabungan (Virtual Set / layer berisi kamera, KLMCAM, video) kini digambar 16–30 fps walau Program sedang diam; kamera yang sama dipakai di dua input berbagi satu stream (perangkat tidak dibuka dua kali)
@@ -233,8 +240,8 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - Perbaikan: status bitrate streaming kini tampil juga saat multi-tujuan / mode copy; teks "null" yang muncul di header Preview hilang
 
 ### Baru di v1.8
-- **Host plugin VST asli (VST3 & VST2, 64-bit)**: dialog Efek audio → *Plugin terpasang di PC* → **Pasang**. Plugin berjalan di dalam KLM Mix, **tampilan/editor asli plugin** langsung terbuka (tombol *Editor* untuk membuka lagi), bisa juga diatur lewat daftar parameter. Pengaturan plugin (state) ikut tersimpan di preset & dipulihkan saat dibuka lagi
-  - Setiap plugin berjalan di **proses terpisah** (`klm-vsthost.exe`): bila plugin crash, KLM Mix tetap jalan dan suara asli diteruskan; tombol *Muat ulang* menjalankannya kembali dengan pengaturan terakhir
+- **Host plugin VST asli (VST3 & VST2, 64-bit)**: dialog Efek audio → *Plugin terpasang di PC* → **Pasang**. Plugin berjalan di dalam KLM, **tampilan/editor asli plugin** langsung terbuka (tombol *Editor* untuk membuka lagi), bisa juga diatur lewat daftar parameter. Pengaturan plugin (state) ikut tersimpan di preset & dipulihkan saat dibuka lagi
+  - Setiap plugin berjalan di **proses terpisah** (`klm-vsthost.exe`): bila plugin crash, KLM tetap jalan dan suara asli diteruskan; tombol *Muat ulang* menjalankannya kembali dengan pengaturan terakhir
   - Latensi ±21 ms (blok 256 × 4 @48 kHz), otomatis bertambah bila PC sedang sibuk agar suara tidak putus-putus; suara kering ikut ditunda sehingga slider **Mix** bersih (tanpa efek "comb")
   - Plugin 32-bit dan CLAP ditandai (belum didukung) — untuk itu tetap tersedia tombol padanan efek bawaan
 - **Dialog simpan saat menutup aplikasi**: muncul dialog **Simpan / Jangan simpan / Batal**. *Simpan* menulis ke **preset yang sedang dimuat**, atau membuat **preset baru** (pilih nama & lokasi) bila belum ada; batal memilih file = aplikasi tetap terbuka. Dialog juga memberi tahu bila ada perubahan yang belum disimpan dan rekaman/streaming yang sedang berjalan. Nama preset tampil di judul jendela; menu *Proyek* kini *Preset*
@@ -255,7 +262,7 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
   - KLMCAM: PVW/CUT, balik kamera, senter, fokus, zoom, kualitas, sambung ulang, QR sambung HP
 - **Panel lengkap** tetap tersedia untuk atur, edit, simpan, tambah & ubah (klik ganda input / klik kanan → Panel lengkap / F9)
 - **Running text: judul + banyak baris** — tiap pesan punya judul (tampil sebagai label berwarna aksen) dan isi boleh banyak baris (tiap baris berjalan berurutan); ikut mode gulir native yang mulus
-- **Fitur KLM Mix di dalam UTC Acara & UTC Score** (tombol *KLM Mix* di pojok panel, juga di jendela terpisah & HP): status Program/Preview, ON AIR, CUT/AUTO/FTB, Rekam/Live, tanda overlay & SRT, monitor Program mini, "Jadikan input KLM Mix"
+- **Fitur KLM di dalam UTC Acara & UTC Score** (tombol *KLM* di pojok panel, juga di jendela terpisah & HP): status Program/Preview, ON AIR, CUT/AUTO/FTB, Rekam/Live, tanda overlay & SRT, monitor Program mini, "Jadikan input KLM"
 - **Buka aplikasi lebih cepat**: renderer grafis dinyalakan bertahap hanya untuk grafis yang tampil, panel scoreboard disiapkan setelah aplikasi siap, cache kompilasi skrip, ukuran aplikasi lebih kecil (modul NDI hanya untuk Windows x64)
 - API baru: `ScoreOnAir`, `ScoreOnAirOn/Off`, `ScoreAddInput`, `UTCAddInput`; perintah UTC `tkset` (ganti pesan running text)
 
@@ -269,7 +276,7 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 ### Baru di v1.4
 - **SRT caller ke gateway / decoder TV** (Pengaturan → SRT / TV, tombol **SRT** di bar bawah): MPEG-TS siaran (H.264 GOP tetap tanpa B-frame, CBR + muxrate, AAC/MP2), latensi diatur, enkripsi AES-128/192/256, Stream ID, mode caller/listener/rendezvous, encoder GPU otomatis, **sambung ulang otomatis** bila gateway restart. Berjalan bersamaan dengan Stream. API: `StartSRT`, `StopSRT`, `StartStopSRT`
 - **Efek & plugin audio lengkap**: rak efek per input & Master (tombol **FX** di mixer) — 18 efek bawaan (EQ parametrik, filter, penghilang dengung 50 Hz, kompresor, limiter, gate, peredam bising, de-esser, AGC, reverb ruang/masjid, delay, chorus, flanger, tremolo, saturasi, pitch, stereo width, gain/phase), preset rantai (Vokal Siaran, Ceramah, Qiraah/Adzan, Podcast, Master Siaran…), preset sendiri, **plugin eksternal** (.js format KLM & impulse response .wav) — lihat [docs/PLUGIN-AUDIO.md](docs/PLUGIN-AUDIO.md)
-- **UTC KLM Acara menyatu**: panel muncul di bawah monitor Preview/Program (monitor & transisi tetap terlihat), tata letak 3 kolom (tombol tayang • navigasi • editor), tema KLM Mix, pilihan acara & "Semua OFF" di header
+- **UTC KLM Acara menyatu**: panel muncul di bawah monitor Preview/Program (monitor & transisi tetap terlihat), tata letak 3 kolom (tombol tayang • navigasi • editor), tema KLM, pilihan acara & "Semua OFF" di header
 - **Kamera di daftar input mulus** (frame penuh, langsung dari stream kamera) — sebelumnya diperbarui ±2–3 kali/detik
 - **Lebih ringan**: adegan diam otomatis dirender hemat (kembali penuh saat ada gerakan/rekam/stream), renderer grafis UTC baru menyala saat dipakai & jeda saat tidak ada grafis, sertifikat HTTPS dibuat di latar belakang (pembukaan pertama tidak tertahan), video sumber tidak di-throttle Chromium
 - **Lebih tahan galat**: setiap modul dinyalakan terpisah — bila satu gagal, aplikasi tetap jalan
@@ -282,19 +289,19 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - Aplikasi HP (menu, Remote, KLMCAM, KLM Call) memakai bahasa desain yang sama
 
 ### UTC KLM Acara — menyatu penuh (bukan tiruan)
-Aplikasi **UTC KLM Acara 9.0 asli** kini ada di dalam KLM Mix — semua fiturnya, tanpa dipangkas:
+Aplikasi **UTC KLM Acara 9.0 asli** kini ada di dalam KLM — semua fiturnya, tanpa dipangkas:
 - **13 jenis acara** (Pengajian, Pernikahan, Khitanan, Aqiqah, Tasyakuran, Maulid, Isra Mi'raj, Halal bi Halal, Tabligh Akbar, Wisuda, Seminar, Ulang Tahun, Lainnya)
 - **20 layout Lower Third**, **15 layout Title**, **14 layout Running Text**, Title **Lokasi**, **Sosial Media**, **Logo pojok** (banyak sekaligus), **Opening/Closing** animasi atau **video** (dengan suara)
 - Banyak lower third sekaligus, format **B/I/U** & ukuran per baris, tema & warna, animasi masuk/keluar, posisi **seret langsung di preview**, auto-hide, **preset** acara, 12 font offline
 - Buka: tombol **🎬 UTC KLM Acara** di bar atas (atau **F9**) → panel lengkap; **⧉ Jendela terpisah** untuk monitor ke‑2; tab dock **🎬 UTC Acara** untuk kontrol cepat
 - Grafis **otomatis tampil di Program** (lapisan **UTC ON AIR** di atas Overlay 1–4, di bawah FTB) → ikut rekam, streaming, output eksternal, NDI. Tanpa Browser Source.
 - Bisa juga dijadikan **input** "Grafis UTC KLM Acara" (untuk Overlay 1–4, layer PiP, multiview)
-- Switcher di panel UTC memakai **KLM Mix** langsung (input, Preview/Program, TAKE/CUT, transisi, FTB); OBS & vMix tetap bisa dipilih
+- Switcher di panel UTC memakai **KLM** langsung (input, Preview/Program, TAKE/CUT, transisi, FTB); OBS & vMix tetap bisa dipilih
 - Suara **video opening/closing** masuk mixer audio (strip "UTC Opening/Closing")
 - HP: menu **🎬 UTC KLM Acara** di APK / `http://IP-PC:8620/utc` — panel yang sama persis; Remote HP punya tombol cepat
-- **Data lama otomatis pindah**: preset, logo, video & pengaturan dari `%LOCALAPPDATA%\Programs\UTC KLM Acara\data` (atau folder `utc-klm-acara` di Desktop/Downloads/Documents) disalin saat pertama dibuka. Data baru: `%APPDATA%\KLM Mix\config\utc`
+- **Data lama otomatis pindah**: preset, logo, video & pengaturan dari `%LOCALAPPDATA%\Programs\UTC KLM Acara\data` (atau folder `utc-klm-acara` di Desktop/Downloads/Documents) disalin saat pertama dibuka. Data baru: `%APPDATA%\KLM\config\utc`
 - API: `UTCShow` / `UTCHide` / `UTCToggle` (Value = `lt` `title` `ticker` `logo` `loc` `soc`), `UTCNext`, `UTCPrevious`, `UTCSelect` (Value=lt, Name=2), `UTCSetText`, `UTCHideAll`, `UTCOpening`, `UTCClosing`, `UTCOpeningClosingOff`, `UTCEvent`, `UTCPreset`, `UTCOnAir`/`On`/`Off` — contoh `http://IP:8620/api/?Function=UTCNext&Value=lt`
-- Overlay untuk OBS/vMix di PC lain tetap tersedia: `http://IP:8620/utc/overlay` (`?only=lt|title|ticker|logo|loc|soc|oc`)
+- Overlay untuk OBS / software lain di PC lain tetap tersedia: `http://IP:8620/utc/overlay` (`?only=lt|title|ticker|logo|loc|soc|oc`)
 
 ### Title Cepat (kanvas, 16 template × 8 tema)
 Lower Third Klasik / Modern / Elegan, Judul Tengah, Running Text, Logo/Bug + LIVE, Jam & Tanggal + Hijriah, Hitung Mundur, **Pernikahan**, **Khitanan**, **Ayat/Hadits** (Arab + terjemahan), **Info Kajian/Pengajian**, Breaking/Pengumuman, Ucapan Selamat Datang, Credit Roll, Skor Lomba.
@@ -315,7 +322,7 @@ Strip per input: fader, VU stereo, mute, **Solo**, **Auto** (audio ikut video), 
 ### Kontrol
 - **Shortcut keyboard** (Spasi = Cut, Enter = Transisi, 1–0 = Preview, F1–F4 = Overlay, B = FTB, Ctrl+R/L = Rekam/Live, M = Replay …)
 - **Remote HP**: input, cut/transisi/T‑bar, overlay, title, audio, rekam/stream, replay, playlist
-- **API kompatibel vMix** — Stream Deck / Bitfocus Companion / aplikasi tally:
+- **KLM API** — Stream Deck / Bitfocus Companion (modul HTTP generik) / aplikasi tally:
   - HTTP: `http://IP:8620/api/?Function=Cut&Input=2`  · status XML: `http://IP:8620/api`
   - TCP port `8622`: `FUNCTION`, `XML`, `TALLY`, `SUBSCRIBE TALLY`
 
@@ -326,17 +333,17 @@ Strip per input: fader, VU stereo, mute, **Solo**, **Auto** (audio ikut video), 
 - Input stream mode *Copy* (tanpa decode-encode), UI digabung per frame, VU meter berhenti saat tidak terlihat
 - HP Remote hanya menerima gambar yang sedang ditampilkan + tombol 🍃 **hemat data**; KLMCAM punya mode 🌙 **hemat baterai** (layar gelap, kamera tetap mengirim)
 
-### Port (tidak bentrok dengan vMix 8088/8099, UTC KLM, KLMCAM lama)
+### Port (tidak bentrok dengan software siaran lain, UTC KLM, KLMCAM lama)
 | Layanan | Port |
 |---|---|
 | HTTP (mixer, HP, API, WebSocket) | 8620 |
 | HTTPS (kamera & KLM Call di browser HP) | 8621 |
 | TCP API | 8622 |
-| UTC KLM Scoreboard (panel, overlay, HP `/hp`, data vMix) | 7171 (otomatis pindah bila terpakai) |
+| UTC KLM Scoreboard (panel, overlay, HP `/hp`, data JSON/XML) | 7171 (otomatis pindah bila terpakai) |
 | Terima RTMP (Stream Masuk) | 1935 |
 | Terima SRT (Stream Masuk) | 9000 (bisa diubah) |
 
-Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix otomatis mencoba port lain.
+Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM otomatis mencoba port lain.
 
 ---
 
@@ -347,4 +354,4 @@ Bisa diubah di **Pengaturan → Jaringan & HP**. Jika port terpakai, KLM Mix oto
 - Performa 4K/60 sangat bergantung GPU — pakai mode Seimbang/Hemat di PC biasa.
 
 ---
-KLM Mix 1.14.2
+KLM 1.14.2

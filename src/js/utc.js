@@ -1,5 +1,5 @@
-/* KLM Mix - UTC KLM Acara & UTC KLM Scoreboard menyatu di KLM Mix
- * - Panel kontrol asli tampil di dalam KLM Mix (workspace penuh / jendela terpisah / HP)
+/* KLM - UTC KLM Acara & UTC KLM Scoreboard menyatu di KLM
+ * - Panel kontrol asli tampil di dalam KLM (workspace penuh / jendela terpisah / HP)
  * - Overlay asli dirender offscreen oleh Electron, BERLAPIS (lihat electron/utc-osr.js):
  *     score → main (LT/title/lokasi/sosmed/opening-closing) → tk (running text) → logo
  *   tiap lapisan = tekstur WebGL sendiri, hanya bagian yang berubah yang diunggah, dan hanya kotak
@@ -8,7 +8,7 @@
  *   frame Program sesuai jam → gerak halus & stabil di 30/50/60 fps walau banyak grafis/input.
  * - Lapisan tampil di atas Program (di bawah FTB): ikut rekam, stream, SRT, output eksternal, NDI, multiview.
  * - Input "Grafis UTC KLM Acara" / "Scoreboard UTC KLM" untuk Overlay 1–4, layer, multiview.
- * - Suara video opening/closing masuk mixer audio KLM Mix (strip "UTC Opening/Closing").
+ * - Suara video opening/closing masuk mixer audio KLM (strip "UTC Opening/Closing").
  */
 'use strict';
 (function (KM) {
@@ -221,13 +221,13 @@
   // lapisan dinyalakan satu per satu & hanya yang menampilkan sesuatu (tidak membebani saat aplikasi dibuka)
   const BOOT_AT = performance.now();
   U.start = function () {
-    if (!isEl()) { U.err = 'Lapisan UTC ON AIR hanya di versi PC (.exe). Di mode web, pakai alamat overlay di OBS/vMix.'; return; }
+    if (!isEl()) { U.err = 'Lapisan UTC ON AIR hanya di versi PC (.exe). Di mode web, pakai alamat overlay di OBS / software siaran lain.'; return; }
     U.avail = true; U.started = true; U.paused = false;
     const wait = Math.max(0, 1500 - (performance.now() - BOOT_AT));
     ACARA.filter((id) => anyKey(id) && U.status).forEach((id, i) => setTimeout(() => { if (U.has() && anyKey(id) && !LY[id].started) startLayer(id); }, wait + i * 250));
   };
   U.boot = function () { // dipanggil saat aplikasi dibuka: hanya menyiapkan, belum merender
-    if (!isEl()) { U.err = 'Lapisan UTC ON AIR hanya di versi PC (.exe). Di mode web, pakai alamat overlay di OBS/vMix.'; return; }
+    if (!isEl()) { U.err = 'Lapisan UTC ON AIR hanya di versi PC (.exe). Di mode web, pakai alamat overlay di OBS / software siaran lain.'; return; }
     U.avail = true;
     if (U.has()) U.ensure();
     if (SC.has()) setTimeout(() => { if (SC.want()) SC.ensure(); }, 2000); // tidak membebani saat aplikasi dibuka
@@ -276,6 +276,7 @@
     }
   };
   U.addInput = (opts) => {
+    if (KM.license && KM.license.require('utc')) return null;
     const ex = U.input();
     if (ex) { KM.engine.setPreview(ex.id); return ex; }
     if (opts && opts.onAir != null) KM.settings.utcOnAir = !!opts.onAir;
@@ -355,6 +356,7 @@
     }
   };
   SC.addInput = (opts) => {
+    if (KM.license && KM.license.require('score')) return null;
     const ex = SC.input();
     if (ex) { KM.engine.setPreview(ex.id); return ex; }
     if (opts && opts.onAir != null) KM.settings.scoreOnAir = !!opts.onAir;

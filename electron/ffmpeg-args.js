@@ -1,4 +1,4 @@
-/* KLM Mix - argumen ffmpeg untuk streaming (WebM dari MediaRecorder → RTMP/RTMPS/SRT, multi-tujuan) */
+/* KLM - argumen ffmpeg untuk streaming (WebM dari MediaRecorder → RTMP/RTMPS/SRT, multi-tujuan) */
 'use strict';
 function buildFfmpegArgs(cfg) {
   const fps = cfg.fps || 30;

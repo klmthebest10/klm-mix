@@ -1,9 +1,9 @@
-/* KLM Mix — UTC KLM Scoreboard (olahraga) menyatu
+/* KLM — UTC KLM Scoreboard (olahraga) menyatu
  * Aplikasi scoreboard asli (src/score/index.html) dijalankan di port sendiri agar semua alamat
  * absolutnya (/api/*, /events, /overlay, /hp, /data.json …) tetap sama seperti aplikasi UTC KLM:
- *   http://127.0.0.1:7171/          panel kontrol      /overlay   grafis (dipakai KLM Mix & OBS/vMix)
+ *   http://127.0.0.1:7171/          panel kontrol      /overlay   grafis (dipakai KLM & OBS)
  *   /arena  /turnamen  /hp           layar arena, turnamen, aplikasi HP
- * Port 7171 dicoba lebih dulu (alamat lama di OBS/vMix tetap jalan), lalu port berikutnya.
+ * Port 7171 dicoba lebih dulu (alamat lama di OBS tetap jalan), lalu port berikutnya.
  * Data (skor, data turnamen, preset) disimpan di <config>/score dan dipindahkan otomatis
  * dari instalasi UTC KLM lama bila ada.
  */
@@ -99,6 +99,7 @@ module.exports = function createScore(opts) {
       const kill = "self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>{e.waitUntil((async()=>{try{const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)))}catch(_){}await self.registration.unregister()})())})";
       return send(res, 200, kill, 'text/javascript; charset=utf-8');
     }
+    if (opts.licensed && !opts.licensed() && !/^\/(icon-\d+\.png|favicon\.ico|manifest\.webmanifest|api\/ping)$/.test(p)) return send(res, 403, opts.lockedHtml ? opts.lockedHtml() : 'UTC Score memerlukan lisensi KLM', 'text/html; charset=utf-8', { 'Cache-Control': 'no-store' });
     if (req.method === 'OPTIONS') return send(res, 204, '', 'text/plain', { 'Access-Control-Allow-Methods': 'GET,POST', 'Access-Control-Allow-Headers': 'Content-Type' });
     if (p === '/manifest.webmanifest') {
       return send(res, 200, JSON.stringify({ name: 'UTC KLM Scoreboard', short_name: 'UTC KLM', start_url: '/hp', scope: '/', display: 'standalone', orientation: 'portrait', background_color: '#090C13', theme_color: '#090C13',
@@ -111,7 +112,7 @@ module.exports = function createScore(opts) {
       const control = p === '/' || p === '/control' || p === '/index.html';
       return fs.readFile(APP_FILE, (err, buf) => {
         if (err) return send(res, 500, 'index.html tidak ditemukan', 'text/plain');
-        if (control && opts.mixPort) { // panel kontrol: tampilkan fitur KLM Mix (ON AIR, CUT/AUTO, REC/LIVE, monitor Program)
+        if (control && opts.mixPort) { // panel kontrol: tampilkan fitur KLM (ON AIR, CUT/AUTO, REC/LIVE, monitor Program)
           const inj = '<script>window.KLM_MIX={app:"score",port:' + (opts.mixPort() || 8620) + '};</script><script src="/klm-bridge.js" defer></script>';
           const html = buf.toString('utf8'), i = html.lastIndexOf('</body>');
           buf = Buffer.from(i >= 0 ? html.slice(0, i) + inj + html.slice(i) : html + inj);
@@ -121,7 +122,7 @@ module.exports = function createScore(opts) {
     }
     if (p === '/klm-bridge.js' && opts.bridgeFile) return fs.readFile(opts.bridgeFile, (e, b) => e ? send(res, 404, '', 'text/plain') : send(res, 200, b, 'text/javascript; charset=utf-8'));
     if (p === '/fonts-builtin/builtin.css') return send(res, 200, '/* huruf ada di fonts/fonts.css */', 'text/css; charset=utf-8', { 'Cache-Control': 'public, max-age=86400' });
-    if (p === '/api/ping') return json(res, { app: 'UTC KLM', host: 'KLM Mix', now: Date.now(), port: PORT, ips: lan(), nets: lan().map((ip) => ({ ip, name: '', virt: false })), clients: clients.size });
+    if (p === '/api/ping') return json(res, { app: 'UTC KLM', host: 'KLM', now: Date.now(), port: PORT, ips: lan(), nets: lan().map((ip) => ({ ip, name: '', virt: false })), clients: clients.size });
     if (p === '/api/state' && req.method === 'GET') return json(res, { state });
     if (p === '/api/state' && req.method === 'POST') {
       try {
@@ -234,7 +235,7 @@ module.exports = function createScore(opts) {
     return new Promise((resolve) => {
       const rq = http.get({ host, port, path: '/api/ping', timeout: 1200 }, (r) => {
         let b = ''; r.on('data', (c) => b += c);
-        r.on('end', () => { try { resolve(JSON.parse(b).host === 'KLM Mix' ? 'ours' : 'other'); } catch (e) { resolve('other'); } });
+        r.on('end', () => { try { resolve(['KLM', 'KLM Mix'].includes(JSON.parse(b).host) ? 'ours' : 'other'); } catch (e) { resolve('other'); } });
       });
       rq.on('error', (e) => resolve(/ECONNREFUSED|EADDRNOTAVAIL|ENETUNREACH|EAFNOSUPPORT/.test(e.code || '') ? 'none' : 'other'));
       rq.on('timeout', () => { rq.destroy(); resolve('other'); });
@@ -252,7 +253,7 @@ module.exports = function createScore(opts) {
       if ((await probe(p, '127.0.0.1')) === 'ours' && (await probe(p, '::1')) !== 'other') break;
       PORT = 0; await closeS();
     }
-    if (PORT) console.log('[KLM Mix] Scoreboard :' + PORT);
+    if (PORT) console.log('[KLM] Scoreboard :' + PORT);
     else console.warn('[KLM] Scoreboard: tidak ada port kosong');
     return PORT;
   }

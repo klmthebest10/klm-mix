@@ -1,5 +1,5 @@
 // Tambal proyek Android hasil `npx cap add android`:
-// izin kamera/mic/jaringan, cleartext ke IP PC, layar tetap menyala, ikon KLM Mix
+// izin kamera/mic/jaringan, cleartext ke IP PC, layar tetap menyala, ikon KLM
 const fs = require('fs');
 const path = require('path');
 const A = path.join(__dirname, 'android', 'app', 'src', 'main');

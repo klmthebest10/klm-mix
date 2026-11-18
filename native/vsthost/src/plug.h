@@ -1,4 +1,4 @@
-// KLM Mix VST host — antarmuka plugin bersama (VST3 & VST2)
+// KLM VST host — antarmuka plugin bersama (VST3 & VST2)
 #pragma once
 #include <atomic>
 #include <cstdint>

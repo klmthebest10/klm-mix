@@ -1,4 +1,4 @@
-/* KLM Mix - set ikon garis (SVG 24px, gaya seragam) dipakai di PC & HP.
+/* KLM - set ikon garis (SVG 24px, gaya seragam) dipakai di PC & HP.
  * KI.svg('play')      → string <svg>
  * KI.el('play')       → elemen <svg>
  * KI.img('play', c)   → <img> (untuk digambar di kanvas)
@@ -126,7 +126,7 @@
     signal: '<path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 4v16"/>',
     power: '<path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>',
     send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
-    logo: '<rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#kmg)" stroke="none"/><path d="M7.6 6.5h2.9v4.6l4.2-4.6h3.5l-4.95 5.25L18.4 17.5h-3.6l-4.3-4.75v4.75H7.6Z" fill="#fff" stroke="none"/>'
+    logo: '<rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#klmT)"/><rect x="1.9" y="1.9" width="20.2" height="20.2" rx="5.6" fill="none" stroke="#3ff0d0" stroke-opacity=".16" stroke-width=".35"/><g fill="none" stroke="url(#klmS)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.53 5.48A3.3 3.3 0 0 1 14.53 9.72M9.47 5.48A3.3 3.3 0 0 0 9.47 9.72"/><path d="M16.6 3.75A5.95 5.95 0 0 1 16.6 11.45M7.4 3.75A5.95 5.95 0 0 0 7.4 11.45" stroke-opacity=".85"/><path d="M10 13.2L15.2 18.1M14 13.2L8.8 18.1M8.6 17.9H15.4" stroke-width="1.05" stroke-linecap="butt" clip-path="url(#klmC)"/><path d="M12 9.6L8.3 20.1M12 9.6L15.7 20.1"/></g><circle cx="12" cy="7.6" r="3" fill="url(#klmG)"/><circle cx="12" cy="7.6" r="1.45" fill="#ff5d84"/><circle cx="11.6" cy="7.2" r=".45" fill="#fff" fill-opacity=".8"/>'
   };
   const SOLID = { play: 1, pause: 1, stop: 1, rec: 1, dot: 1, 'skip-back': 1, 'skip-fwd': 1, rewind: 1, 'play-back': 1, logo: 1 };
   // simbol/emoji lama → nama ikon
@@ -150,7 +150,7 @@
   function svg(name, size, extra) {
     const p = P[name] || P.circle;
     const s = size ? ' width="' + size + '" height="' + size + '"' : '';
-    const defs = name === 'logo' ? '<defs><linearGradient id="kmg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4b3e"/><stop offset="1" stop-color="#ffb11f"/></linearGradient></defs>' : '';
+    const defs = name === 'logo' ? '<defs><linearGradient id="klmT" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f4a54"/><stop offset=".55" stop-color="#082a31"/><stop offset="1" stop-color="#03151a"/></linearGradient><linearGradient id="klmS" gradientUnits="userSpaceOnUse" x1="0" y1="3.5" x2="0" y2="20.5"><stop offset="0" stop-color="#d4ff3f"/><stop offset="1" stop-color="#16e0c6"/></linearGradient><radialGradient id="klmG" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff5d84" stop-opacity=".55"/><stop offset="1" stop-color="#ff5d84" stop-opacity="0"/></radialGradient><clipPath id="klmC"><path d="M12 9.6L8.3 20.1H15.7Z"/></clipPath></defs>' : '';
     return '<svg class="ki ki-' + name + (extra ? ' ' + extra : '') + '" viewBox="0 0 24 24"' + s + ' fill="none" stroke="currentColor" stroke-width="' + (SOLID[name] ? 0 : 1.8) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + defs + p + '</svg>';
   }
   const tpl = document.createElement('template');

@@ -1,4 +1,4 @@
-/* KLM Mix - Latar AI: deteksi orang, hapus / ganti / buramkan latar secara realtime, dan bingkai otomatis mengikuti orang.
+/* KLM - Latar AI: deteksi orang, hapus / ganti / buramkan latar secara realtime, dan bingkai otomatis mengikuti orang.
  * Berjalan sepenuhnya di PC tanpa internet (model segmentasi & mesin WASM/GPU ikut terpasang bersama aplikasi).
  * Chroma key tetap tersedia dan bisa dipakai bersamaan (diproses setelah tahap ini). */
 'use strict';

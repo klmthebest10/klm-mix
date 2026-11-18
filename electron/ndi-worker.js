@@ -1,4 +1,4 @@
-/* KLM Mix - proses NDI terpisah (aman: jika NDI bermasalah, aplikasi utama tetap jalan)
+/* KLM - proses NDI terpisah (aman: jika NDI bermasalah, aplikasi utama tetap jalan)
  * Butuh NDI Runtime / NDI Tools (gratis dari ndi.video). Memakai koffi (FFI) untuk memanggil Processing.NDI.Lib.
  * - Terima (input NDI)  : NDI BGRA → ffmpeg (H.264 ultrafast) → fMP4 → mixer (MSE)
  * - Kirim (output NDI)  : program WebM → ffmpeg decode BGRA → NDI (bisa dipakai NDI Webcam = virtual camera)
@@ -74,7 +74,7 @@ const recvs = new Map();
 function recvStart(id, srcName, opts) {
   if (!load()) return { ok: false, msg: loadErr };
   recvStop(id);
-  const r = N.recv_create({ source_to_connect_to: { p_ndi_name: srcName, p_url_address: null }, color_format: 0, bandwidth: opts && opts.low ? 10 : 100, allow_video_fields: false, p_ndi_recv_name: 'KLM Mix' });
+  const r = N.recv_create({ source_to_connect_to: { p_ndi_name: srcName, p_url_address: null }, color_format: 0, bandwidth: opts && opts.low ? 10 : 100, allow_video_fields: false, p_ndi_recv_name: 'KLM' });
   if (!r) return { ok: false, msg: 'Gagal membuat penerima NDI' };
   const st = { r, ff: null, w: 0, h: 0, alive: true, fps: (opts && opts.fps) || 30 };
   recvs.set(id, st);
@@ -122,7 +122,7 @@ function sendStart(o) {
   if (!load()) return { ok: false, msg: loadErr };
   sendStop();
   const w = o.width || 1280, hh = o.height || 720, fps = o.fps || 30, size = w * hh * 4;
-  const s = N.send_create({ p_ndi_name: o.name || 'KLM Mix', p_groups: null, clock_video: false, clock_audio: false });
+  const s = N.send_create({ p_ndi_name: o.name || 'KLM', p_groups: null, clock_video: false, clock_audio: false });
   if (!s) return { ok: false, msg: 'Gagal membuat pengirim NDI' };
   const mem = koffi.alloc('uint8_t', size);
   const view = koffi.view ? new Uint8Array(koffi.view(mem, size)) : null;

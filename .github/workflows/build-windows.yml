@@ -12,6 +12,11 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      # tanda tangan kode (opsional) — lihat docs/SIGNING.md. Tanpa secret ini, build tetap jalan tanpa tanda tangan.
+      WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+      WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+      ES_USERNAME: ${{ secrets.ES_USERNAME }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,7 +51,7 @@ jobs:
           Get-ChildItem native/vsthost/build/bin/Release | ForEach-Object { Write-Host ("{0}: {1:N0} KB" -f $_.Name, ($_.Length / 1KB)) }
           Get-ChildItem -Recurse native/vsthost/build/KLMTestGain.vst3 | ForEach-Object { Write-Host $_.FullName }
 
-      # Suara PC tanpa suara KLM Mix (WASAPI process loopback) untuk Miracast / tangkap layar
+      # Suara PC tanpa suara KLM (WASAPI process loopback) untuk Miracast / tangkap layar
       - name: Build helper suara PC (klm-procaudio)
         shell: pwsh
         run: |
@@ -110,7 +115,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { Write-Host "::error::klm-airplay.exe tidak bisa dijalankan (DLL kurang?)"; exit 1 }
           if ($v -notmatch 'libavcodec') { Write-Host "::error::klm-airplay tanpa dekoder suara"; exit 1 }
           $out = "$env:RUNNER_TEMP\ap-out.txt"
-          $p = Start-Process -FilePath $exe -ArgumentList "--name","KLM Mix CI","--port","8624","--token","abcdef0123456789","--mac","02:11:22:33:44:55","--keyfile","$env:RUNNER_TEMP\ap.key" -RedirectStandardOutput $out -RedirectStandardError "$env:RUNNER_TEMP\ap-err.txt" -PassThru -NoNewWindow
+          $p = Start-Process -FilePath $exe -ArgumentList "--name","KLM CI","--port","8624","--token","abcdef0123456789","--mac","02:11:22:33:44:55","--keyfile","$env:RUNNER_TEMP\ap.key" -RedirectStandardOutput $out -RedirectStandardError "$env:RUNNER_TEMP\ap-err.txt" -PassThru -NoNewWindow
           Start-Sleep -Seconds 4
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Get-Content $out; Get-Content "$env:RUNNER_TEMP\ap-err.txt" -ErrorAction SilentlyContinue | Select-Object -First 20
@@ -127,6 +132,11 @@ jobs:
           $env:KLM_VSTTEST = "$env:GITHUB_WORKSPACE\native\vsthost\build\KLMTestGain.vst3"
           $env:KLM_APTEST = "$env:GITHUB_WORKSPACE\native\airplay\test\uji.h264"
           $env:KLM_APTEST_AUDIO = "$env:GITHUB_WORKSPACE\native\airplay\test\uji.aac"
+          # lisensi khusus CI: hanya berlaku di mode pengembangan (electron.exe .) dengan Device ID uji di bawah;
+          # diabaikan oleh aplikasi .exe yang dipaketkan → aman ditaruh di sini
+          $env:KLM_DEVICE_RAW = "klm-ci-smoke"
+          $lic = "$env:APPDATA\KLM Mix\config"; New-Item -ItemType Directory -Force -Path $lic | Out-Null
+          Set-Content -Path "$lic\license.json" -Value ('{"key":"' + "KLM1.eyJ2IjoxLCJkIjoiS0xNLVA4MkMtR1I1UC1QNUdYLUZFQzYiLCJuIjoiQ0kgc21va2UgdGVzdCAoaGFueWEgbW9kZSBwZW5nZW1iYW5nYW4pIiwicCI6IkNJIiwiaSI6MTc5NDk5MTIzMzg4MywiZSI6MCwicyI6IktNTVdMVkZPN1YxM0ZBIn0.Z_L1fGXvsoB0LmFVswwKVQvOfOIBGzmLBabgFZnvd9Gw0g9PIbvAr3ZVFQXUKtR3TUDVQFI9CqEixZSEpJK9Qg" + '"}') -Encoding ascii
           $p = Start-Process -FilePath "node_modules\electron\dist\electron.exe" -ArgumentList "." -PassThru
           Write-Host "PID utama: $($p.Id)"
           $t = 0
@@ -142,14 +152,82 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: KLM-Mix-SmokeTest
+          name: KLM-SmokeTest
           path: ${{ runner.temp }}/smoke
           if-no-files-found: ignore
 
-      - name: Build installer + portable
-        run: npx electron-builder --win nsis portable --x64 --publish never
+      - name: Build aplikasi (folder, belum jadi installer)
+        run: npx electron-builder --win dir --x64 --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      # ---- tanda tangan kode (opsional) ----
+      # A) sertifikat .pfx: secret WIN_CSC_LINK (base64 .pfx) + WIN_CSC_KEY_PASSWORD
+      - name: Tanda tangan KLM.exe & helper (sertifikat .pfx)
+        if: env.WIN_CSC_LINK != ''
+        shell: pwsh
+        run: ./build/sign-windows.ps1 -Files "dist/win-unpacked/KLM.exe","dist/win-unpacked/resources/vsthost/klm-vsthost.exe","dist/win-unpacked/resources/procaudio/klm-procaudio.exe","dist/win-unpacked/resources/airplay/klm-airplay.exe"
+      # B) SSL.com eSigner (sertifikat di cloud/HSM) — hanya saat rilis tag v* agar kuota tanda tangan hemat
+      - name: Tanda tangan KLM.exe (SSL.com eSigner)
+        if: env.ES_USERNAME != '' && env.WIN_CSC_LINK == '' && startsWith(github.ref, 'refs/tags/v')
+        uses: sslcom/esigner-codesign@develop
+        with:
+          command: sign
+          username: ${{ secrets.ES_USERNAME }}
+          password: ${{ secrets.ES_PASSWORD }}
+          credential_id: ${{ secrets.ES_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.ES_TOTP_SECRET }}
+          file_path: ${{ github.workspace }}/dist/win-unpacked/KLM.exe
+          override: true
+          malware_block: false
+
+      - name: Build installer + portable (dari aplikasi yang sudah ditandatangani)
+        run: npx electron-builder --win nsis portable --x64 --publish never --prepackaged dist/win-unpacked
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Tanda tangan installer & portable (sertifikat .pfx)
+        if: env.WIN_CSC_LINK != ''
+        shell: pwsh
+        run: ./build/sign-windows.ps1 -Files (Get-ChildItem dist/*.exe | ForEach-Object { $_.FullName })
+      - name: Daftar installer untuk eSigner
+        if: env.ES_USERNAME != '' && env.WIN_CSC_LINK == '' && startsWith(github.ref, 'refs/tags/v')
+        id: inst
+        shell: pwsh
+        run: |
+          $s = Get-ChildItem dist/*Setup*.exe | Select-Object -First 1; $p = Get-ChildItem dist/*Portable*.exe | Select-Object -First 1
+          "setup=$($s.FullName)" >> $env:GITHUB_OUTPUT; "portable=$($p.FullName)" >> $env:GITHUB_OUTPUT
+      - name: Tanda tangan installer (SSL.com eSigner)
+        if: steps.inst.outputs.setup != ''
+        uses: sslcom/esigner-codesign@develop
+        with:
+          command: sign
+          username: ${{ secrets.ES_USERNAME }}
+          password: ${{ secrets.ES_PASSWORD }}
+          credential_id: ${{ secrets.ES_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.ES_TOTP_SECRET }}
+          file_path: ${{ steps.inst.outputs.setup }}
+          override: true
+          malware_block: false
+      - name: Tanda tangan portable (SSL.com eSigner)
+        if: steps.inst.outputs.portable != ''
+        uses: sslcom/esigner-codesign@develop
+        with:
+          command: sign
+          username: ${{ secrets.ES_USERNAME }}
+          password: ${{ secrets.ES_PASSWORD }}
+          credential_id: ${{ secrets.ES_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.ES_TOTP_SECRET }}
+          file_path: ${{ steps.inst.outputs.portable }}
+          override: true
+          malware_block: false
+      - name: Status tanda tangan
+        shell: pwsh
+        run: |
+          Get-ChildItem dist/*.exe, dist/win-unpacked/KLM.exe | ForEach-Object {
+            $sig = Get-AuthenticodeSignature $_.FullName
+            Write-Host ("{0}: {1} {2}" -f $_.Name, $sig.Status, ($sig.SignerCertificate.Subject -replace '^CN=([^,]+).*','$1'))
+          }
 
       - name: Ukuran aplikasi & isi paket (koffi x64, host VST)
         shell: pwsh
@@ -166,7 +244,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KLM-Mix-Windows
+          name: KLM-Windows
           path: |
             dist/*.exe
           if-no-files-found: error

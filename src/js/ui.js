@@ -1,4 +1,4 @@
-/* KLM Mix - UI utama: kartu input, panel transisi, T-bar, bottom bar, status, shortcut, menu konteks, proyek */
+/* KLM - UI utama: kartu input, panel transisi, T-bar, bottom bar, status, shortcut, menu konteks, proyek */
 'use strict';
 (function (KM) {
   const h = KM.h, $ = KM.$, $$ = KM.$$, S = KM.state;
@@ -79,14 +79,15 @@
     'ovl-off': () => KM.engine.overlayAllOff(),
     ndi: async () => { if (S.ndiOut) return KM.rec.stopNdi(); const r = await KM.rec.startNdi(); if (!r) KM.dialogs.settings('ndi'); },
     'utc-panel': () => UI.utcPanel(), 'utc-close': () => UI.utcPanel(false),
-    'utc-air': () => KM.utc.setOnAir(), 'utc-hideall': () => KM.utc.cmd('hideall'), 'utc-reload': () => { KM.utc.reload(); KM.toast('Renderer grafis UTC dimuat ulang'); },
+    'utc-air': () => { if (KM.license && KM.license.require('utc')) return; KM.utc.setOnAir(); }, 'utc-hideall': () => KM.utc.cmd('hideall'), 'utc-reload': () => { KM.utc.reload(); KM.toast('Renderer grafis UTC dimuat ulang'); },
     'utc-window': () => {
       const sc = UI.utcMode() === 'score';
+      if (KM.license && KM.license.require(sc ? 'score' : 'utc')) return;
       if (sc && !KM.score.port) return KM.toast('Scoreboard belum siap', 'warn');
       UI.utcPanel(false);
       const w = window.open(sc ? KM.score.url('/') : '/utc', sc ? 'klm_score_panel' : 'klm_utc_panel'); if (!w) KM.toast('Jendela diblokir', 'warn');
     },
-    'score-air': () => KM.score.setOnAir(),
+    'score-air': () => { if (KM.license && KM.license.require('score')) return; KM.score.setOnAir(); },
     'score-arena': () => { if (!KM.score.port) return KM.toast('Scoreboard belum siap', 'warn'); const w = window.open(KM.score.url('/arena'), 'klm_score_arena'); if (!w) KM.toast('Jendela diblokir', 'warn'); }
   };
 
@@ -119,6 +120,7 @@
       mode = pv && pv.type === 'score' ? 'score' : pv && pv.type === 'utc' ? 'acara' : (hasMode(UI.utcMode()) ? UI.utcMode() : KM.utc.has() ? 'acara' : KM.score.has() ? 'score' : '');
     }
     show = show == null ? (ws.hidden || ws.dataset.mode !== mode) : !!show;
+    if (show && KM.license && KM.license.require(mode === 'score' ? 'score' : 'utc')) return;
     if (show && (!mode || !hasMode(mode))) {
       ws.hidden = true; $('#app').classList.remove('utc-mode');
       KM.toast('Tambahkan input ' + (mode === 'score' ? 'UTC Score' : mode === 'acara' ? 'UTC Acara' : 'UTC Acara / UTC Score') + ' dulu (menu Input).', 'warn', 4500);
@@ -305,7 +307,10 @@
   };
 
   function emptyState() {
-    const q = (type, icon, name, sub) => h('button', { onclick: () => KM.dialogs.addInput(type) }, KI.el(icon), name, h('span', sub));
+    const q = (type, icon, name, sub) => {
+      const lock = KM.license && KM.license.locked(type);
+      return h('button' + (lock ? '.locked' : ''), { onclick: () => (lock ? KM.license.require(type) : KM.dialogs.addInput(type)), title: lock ? 'Memerlukan lisensi KLM' : '' }, KI.el(icon), name, h('span', sub), lock ? h('i.lic-lock', '🔒') : null);
+    };
     return h('div.empty',
       KI.el('logo'), h('h2', 'Mulai produksi Anda'),
       h('p', 'Tambahkan sumber gambar: kamera, kamera HP (KLMCAM), video, foto, layar, atau grafis acara. Klik sumber di Preview, lalu CUT atau transisi ke Program.'),
@@ -629,7 +634,7 @@
     };
   };
   UI.loadProject = async function (p) {
-    if (!p || p.app !== 'KLM Mix') { KM.toast('File preset tidak valid', 'err'); return; }
+    if (!p || (p.app !== 'KLM Mix' && p.app !== 'KLM')) { KM.toast('File preset tidak valid', 'err'); return; }
     S.inputs.slice().forEach((i) => KM.inputs.remove(i));
     S.previewId = S.programId = null;
     if (p.output) { Object.assign(KM.settings, p.output); KM.saveSettings(); KM.engine.resize(); }
@@ -639,7 +644,11 @@
     if (p.scripts && p.scripts.length) KM.settings.scripts = p.scripts;
     if (p.shortcuts && p.shortcuts.length) KM.settings.shortcuts = p.shortcuts;
     KM.saveSettings();
-    for (const d of p.inputs || []) { try { KM.inputs.create(d.type, d); } catch (e) { console.warn(e); } }
+    let skipped = 0;
+    if (KM.license) KM.license._quiet = true; // input terkunci dilewati tanpa dialog berulang
+    try { for (const d of p.inputs || []) { try { KM.inputs.create(d.type, d); } catch (e) { if (e && e.locked) skipped++; else console.warn(e); } } }
+    finally { if (KM.license) KM.license._quiet = false; }
+    if (skipped) setTimeout(() => KM.toast('🔒 ' + skipped + ' input (UTC / Mirroring / KLMCAM) dilewati karena belum ada lisensi KLM', 'warn', 7000), 400);
     S.previewId = p.previewId; S.programId = p.programId;
     (p.overlays || []).forEach((o, i) => { S.overlays[i].inputId = o.inputId; S.overlays[i].phase = 'off'; });
     if (p.playlist) Object.assign(KM.playlist, p.playlist, { running: false, idx: -1 });
@@ -652,7 +661,7 @@
   // ---- penanda "ada perubahan belum disimpan" (untuk dialog tutup) ----
   const sig = () => { try { const d = UI.projectData(); delete d.savedAt; return JSON.stringify(d); } catch (e) { return ''; } };
   let savedSig = null, sigT = 0;
-  const setTitle = () => { const n = UI.closeInfo().name; document.title = (n ? n + ' — ' : '') + 'KLM Mix'; };
+  const setTitle = () => { const n = UI.closeInfo().name; document.title = (n ? n + ' — ' : '') + 'KLM'; };
   function markSaved(afterLoad) { savedSig = sig(); clearTimeout(sigT); setTitle(); if (afterLoad) sigT = setTimeout(() => { savedSig = sig(); setTitle(); }, 2500); } // input media butuh waktu memuat metadata
   UI.isDirty = () => (savedSig == null ? S.inputs.length > 0 : sig() !== savedSig);
   UI.closeInfo = function () {
@@ -669,7 +678,7 @@
     return new Promise((res) => {
       let done = false; const fin = (v) => { if (done) return; done = true; res(v); m.close(); };
       const body = h('div.closedlg',
-        h('div.chead', LOGO(), h('div', h('b', 'Tutup KLM Mix?'), h('span', info.path ? 'Preset: ' + info.name : info.inputs ? 'Sesi ini belum disimpan sebagai preset' : 'Tidak ada input yang terbuka'))),
+        h('div.chead', LOGO(), h('div', h('b', 'Tutup KLM?'), h('span', info.path ? 'Preset: ' + info.name : info.inputs ? 'Sesi ini belum disimpan sebagai preset' : 'Tidak ada input yang terbuka'))),
         h('div.cinfo',
           h('div' + (info.dirty ? '.dirty' : '.clean'), h('i.dot'), info.dirty ? (info.path ? 'Ada perubahan yang belum disimpan ke preset.' : info.inputs + ' input belum pernah disimpan.') : 'Semua perubahan sudah tersimpan.'),
           ...info.busy.map((b) => h('div.busy', h('i.dot'), b + ' sedang berjalan — akan diakhiri dengan benar sebelum keluar.')),
@@ -698,7 +707,7 @@
     }, 3000]);
     const rows = steps.map(([t]) => h('div', h('i'), t));
     const st = h('div.st', 'Menutup studio…');
-    const ov = h('div#closing.stage', h('div.stg-mark', h('i.ring'), h('i.ring.b'), LOGO()), h('div.wm', 'KLM ', h('span', 'Mix')), h('div.sub', 'Sampai jumpa di siaran berikutnya'), st, h('div.steps', rows));
+    const ov = h('div#closing.stage', h('div.stg-mark', h('i.ring'), h('i.ring.b'), LOGO()), h('div.wm', 'KLM'), h('div.wm-sub', 'Kinetic Live Mixer'), h('div.sub', 'Sampai jumpa di siaran berikutnya'), st, h('div.steps', rows));
     document.body.appendChild(ov); requestAnimationFrame(() => ov.classList.add('in'));
     await new Promise((r) => setTimeout(r, 260));
     const log = [];
@@ -731,7 +740,7 @@
     const json = JSON.stringify(UI.projectData(), null, 1);
     if (KM.isElectron) {
       let path = !asNew && UI.projectPath;
-      if (!path) path = await window.klm.invoke('dialog:save', { title: 'Simpan Preset / Proyek KLM Mix', defaultPath: KM.joinPath(await KM.defaultFolder('doc'), 'Preset-' + KM.stamp() + '.klmmix'), filters: [{ name: 'Preset KLM Mix', extensions: ['klmmix'] }] });
+      if (!path) path = await window.klm.invoke('dialog:save', { title: 'Simpan Preset / Proyek KLM', defaultPath: KM.joinPath(await KM.defaultFolder('doc'), 'Preset-' + KM.stamp() + '.klmmix'), filters: [{ name: 'Preset KLM', extensions: ['klmmix'] }] });
       if (!path) return false;
       await window.klm.invoke('file:write-text', path, json);
       UI.projectPath = path; KM.toast('Preset tersimpan: ' + path, 'ok');
@@ -741,7 +750,7 @@
   };
   UI.openProject = async function () {
     if (KM.isElectron) {
-      const [p] = await window.klm.invoke('dialog:open', { title: 'Buka Preset KLM Mix', filters: [{ name: 'Preset KLM Mix', extensions: ['klmmix', 'json'] }] });
+      const [p] = await window.klm.invoke('dialog:open', { title: 'Buka Preset KLM', filters: [{ name: 'Preset KLM', extensions: ['klmmix', 'json'] }] });
       if (!p) return;
       try { await UI.loadProject(JSON.parse(await window.klm.invoke('file:read-text', p))); UI.projectPath = p; } catch (e) { KM.toast('Gagal membuka: ' + e.message, 'err'); }
     } else {

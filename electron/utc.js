@@ -1,9 +1,9 @@
-/* KLM Mix - server UTC KLM Acara (menyatu di dalam KLM Mix)
+/* KLM - server UTC KLM Acara (menyatu di dalam KLM)
  * API identik dengan UTC KLM Acara 9.0 (versi Go), hanya di bawah awalan /utc:
  *   /utc                 panel kontrol asli          /utc/overlay      overlay grafis (1920x1080, transparan)
  *   /utc/api/info|state|presets|upload|upload-video|oc/end|uploads/*  /utc/events (SSE)
- *   /utc/api/sw*         switcher: KLM Mix (bawaan) / OBS / vMix
- *   /utc/api/klm/cmd     perintah cepat dari KLM Mix (API, Stream Deck, remote HP, skrip)
+ *   /utc/api/sw*         switcher: KLM (bawaan) / OBS / vMix
+ *   /utc/api/klm/cmd     perintah cepat dari KLM (API, Stream Deck, remote HP, skrip)
  *   /utc/api/klm/import  impor preset/logo/video dari UTC KLM Acara lama
  *   /uploads/*           logo & video (alamat sama seperti versi lama → preset lama tetap jalan)
  */
@@ -131,7 +131,7 @@ module.exports = function createUtc(o) {
     return state.events[state.eventType];
   }
 
-  // ---------- perintah cepat dari KLM Mix ----------
+  // ---------- perintah cepat dari KLM ----------
   const KEYS = { lt: 'lt', lowerthird: 'lt', title: 'tt', tt: 'tt', judul: 'tt', ticker: 'tk', tk: 'tk', runningtext: 'tk', running: 'tk', logo: 'bug', bug: 'bug', loc: 'loc', lokasi: 'loc', soc: 'soc', sosmed: 'soc', social: 'soc' };
   const ITEMS = ['lt', 'tt', 'loc', 'soc'];
   function klmCmd(c) {
@@ -269,7 +269,7 @@ module.exports = function createUtc(o) {
           try { fs.copyFileSync(from, to); res.presets++; } catch (e) {}
         }
       } catch (e) {}
-      // pengaturan OBS/vMix lama ikut dibawa (switcher tetap KLM Mix sebagai bawaan)
+      // pengaturan OBS/vMix lama ikut dibawa (switcher tetap KLM sebagai bawaan)
       const swF = path.join(dataDir, 'switcher.json');
       if (!fs.existsSync(swF)) {
         try {
@@ -311,7 +311,7 @@ module.exports = function createUtc(o) {
       }
       const a = p.slice(4); // '/api/...' atau '/events'
       const M = req.method;
-      if (a === '/api/info') return send(res, 200, { app: 'UTC KLM Acara', host: 'KLM Mix', port: o.port(), ips: o.localIPs().map((x) => x.address), dataDir, imported: importedFrom(), klm: true });
+      if (a === '/api/info') return send(res, 200, { app: 'UTC KLM Acara', host: 'KLM', port: o.port(), ips: o.localIPs().map((x) => x.address), dataDir, imported: importedFrom(), klm: true });
       if (a === '/api/state' && M === 'GET') return send(res, 200, { rev, state });
       if (a === '/api/state' && M === 'POST') {
         const b = await readJSON(req, 25e6);
@@ -400,7 +400,7 @@ module.exports = function createUtc(o) {
         if (f) try { fs.unlinkSync(f); } catch (e) {}
         return send(res, 200, { ok: true });
       }
-      // ---- khusus KLM Mix ----
+      // ---- khusus KLM ----
       if (a === '/api/klm/cmd' && M === 'POST') return send(res, 200, klmCmd(await readJSON(req, 1e6)));
       if (a === '/api/klm/status') return send(res, 200, status());
       if (a === '/api/klm/import' && M === 'POST') {

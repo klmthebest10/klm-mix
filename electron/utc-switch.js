@@ -1,5 +1,5 @@
-/* KLM Mix - switcher untuk panel UTC KLM Acara
- *   klm  : KLM Mix sendiri (input, preview, program, transisi KLM Mix) — bawaan
+/* KLM - switcher untuk panel UTC KLM Acara
+ *   klm  : KLM sendiri (input, preview, program, transisi KLM) — bawaan
  *   obs  : OBS Studio lewat obs-websocket v5
  *   vmix : vMix lewat Web Controller (HTTP API port 8088)
  * Bentuk status sama dengan UTC KLM Acara 9.0 sehingga panel asli bekerja tanpa diubah.
@@ -44,15 +44,15 @@ module.exports = function createSwitch(o) {
     emit();
   }
 
-  // ===== KLM Mix =====
+  // ===== KLM =====
   function klmDriver() {
     const d = {
       stop() {},
       sync() {
         const st = o.mixer.getState();
         const s = st && st.state;
-        if (!o.mixer.connected() || !s) { S.connected = false; S.error = 'Jendela mixer KLM Mix belum terbuka'; S.inputs = []; return emit(); }
-        S.connected = true; S.error = ''; S.version = 'KLM Mix ' + o.mixer.version; S.snap = true;
+        if (!o.mixer.connected() || !s) { S.connected = false; S.error = 'Jendela mixer KLM belum terbuka'; S.inputs = []; return emit(); }
+        S.connected = true; S.error = ''; S.version = 'KLM ' + o.mixer.version; S.snap = true;
         S.inputs = (s.inputs || []).map((i) => ({ id: i.id, name: i.title, num: i.num }));
         S.preview = s.previewId || ''; S.program = s.programId || '';
         S.transitions = KLM_TRANS.map((t) => t[0]);
@@ -67,7 +67,7 @@ module.exports = function createSwitch(o) {
           case 'take': return trans();
           case 'cut': return fn('Cut');
           case 'ftb': return fn('FadeToBlack');
-          default: throw new Error('Tidak didukung di KLM Mix');
+          default: throw new Error('Tidak didukung di KLM');
         }
         function trans(id) {
           const t = KLM_TRANS.find((x) => x[0] === (c.trans || C.trans)) || KLM_TRANS[0];

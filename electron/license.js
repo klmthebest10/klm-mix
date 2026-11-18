@@ -1,10 +1,12 @@
-/* KLM Mix - lisensi per perangkat (offline)
+/* KLM - lisensi per perangkat, seumur hidup (offline)
  *
- * - Device ID diturunkan dari ID mesin (Windows: MachineGuid) → "KLM-XXXX-XXXX-XXXX-XXXX".
+ * - Device ID diturunkan dari ID PERANGKAT KERAS (UUID motherboard/SMBIOS), bukan dari instalasi Windows,
+ *   sehingga tetap sama setelah install ulang Windows → kunci lisensi lama langsung bisa dipakai lagi.
+ *   Format: "KLM-XXXX-XXXX-XXXX-XXXX".
  * - Kunci lisensi = "KLM1.<payload>.<tanda-tangan>", ditandatangani penjual dengan kunci privat ECDSA P-256.
  *   Aplikasi hanya menyimpan kunci PUBLIK, jadi lisensi tidak bisa dibuat dari aplikasi.
  * - Payload: { v:1, d:deviceId, n:nama pembeli, p:paket, i:tgl terbit (ms), e:kedaluwarsa (ms, 0 = selamanya), s:serial }
- * - Tanpa lisensi yang cocok → mode DEMO (semua fitur jalan, Program diberi watermark).
+ * - Tanpa lisensi: KLM berjalan normal (tanpa watermark), tetapi UTC Acara, UTC Score, Mirroring HP & KLMCAM terkunci.
  */
 'use strict';
 const crypto = require('crypto');
@@ -33,23 +35,66 @@ const unb64u = (s) => Buffer.from(String(s).replace(/-/g, '+').replace(/_/g, '/'
 function run(cmd, args) {
   try { return execFileSync(cmd, args, { encoding: 'utf8', timeout: 4000, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }); } catch (e) { return ''; }
 }
-/** ID mesin mentah (tidak ditampilkan) */
+/** UUID / serial dari tabel SMBIOS yang disalin Windows ke registry (cepat, tanpa PowerShell/WMIC) */
+const JUNK = /^(|0+|f+|none|default string|to be filled by o\.?e\.?m\.?|system serial number|base board serial number|not (applicable|specified)|o\.?e\.?m\.?|123456789|03000200-0400-0500-0006-000700080009)$/i;
+function smbiosIds() {
+  const sysRoot = process.env.SystemRoot || 'C:\\Windows';
+  const out = run(path.join(sysRoot, 'System32', 'reg.exe'), ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\mssmbios\\Data', '/v', 'SMBiosData']);
+  const m = out.match(/SMBiosData\s+REG_BINARY\s+([0-9A-F]+)/i);
+  if (!m) return {};
+  return parseSmbios(Buffer.from(m[1], 'hex'));
+}
+function parseSmbios(b) {
+  const ids = {};
+  let i = 8; // header RawSMBIOSData: 4 byte versi + 4 byte panjang
+  while (i + 4 <= b.length) {
+    const type = b[i], len = b[i + 1];
+    if (len < 4 || i + len > b.length) break;
+    // kumpulkan string sesudah area terformat (diakhiri 00 00)
+    let j = i + len; const strs = []; let cur = '';
+    while (j < b.length - 1 && !(b[j] === 0 && b[j + 1] === 0)) { if (b[j] === 0) { strs.push(cur); cur = ''; } else cur += String.fromCharCode(b[j]); j++; }
+    if (cur) strs.push(cur);
+    const str = (idx) => (idx > 0 && strs[idx - 1] ? strs[idx - 1].trim() : '');
+    if (type === 1 && len >= 0x19) {
+      const u = b.subarray(i + 8, i + 24);
+      const hex = [...u].map((x) => x.toString(16).padStart(2, '0')).join('');
+      // 4 field pertama little-endian (seperti tampilan Windows)
+      const le = (s4) => s4.match(/../g).reverse().join('');
+      ids.uuid = (le(hex.slice(0, 8)) + '-' + le(hex.slice(8, 12)) + '-' + le(hex.slice(12, 16)) + '-' + hex.slice(16, 20) + '-' + hex.slice(20)).toLowerCase();
+      ids.sysSerial = str(b[i + 7]);
+    } else if (type === 2 && len >= 8) ids.boardSerial = str(b[i + 7]);
+    else if (type === 127) break;
+    i = j + 2;
+  }
+  return ids;
+}
+const good = (v) => !!v && !JUNK.test(String(v).trim()) && !/^(0|f|-)+$/i.test(String(v).replace(/-/g, ''));
+/** ID mentah (tidak ditampilkan) — urutan: perangkat keras dulu, baru instalasi OS */
 function machineRaw() {
-  if (process.env.KLM_DEVICE_RAW) return process.env.KLM_DEVICE_RAW; // untuk pengujian
+  // untuk pengujian (CI / pengembangan) — diabaikan di aplikasi .exe yang sudah dipaketkan
+  if (process.env.KLM_DEVICE_RAW && (!process.versions.electron || process.defaultApp)) return process.env.KLM_DEVICE_RAW;
   try {
     if (process.platform === 'win32') {
+      const id = smbiosIds();
+      if (good(id.uuid)) return 'hw:' + id.uuid;
+      const ser = [id.boardSerial, id.sysSerial].filter(good);
+      if (ser.length) return 'hws:' + ser.join('|').toLowerCase();
+      // cadangan: UUID via CIM (PowerShell) bila registry SMBIOS tidak terbaca
+      const ps = run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '(Get-CimInstance Win32_ComputerSystemProduct).UUID; (Get-CimInstance Win32_BaseBoard).SerialNumber']).split(/\r?\n/).map((x) => x.trim());
+      if (good(ps[0])) return 'hw:' + ps[0].toLowerCase();
+      if (good(ps[1])) return 'hws:' + ps[1].toLowerCase();
       const sysRoot = process.env.SystemRoot || 'C:\\Windows';
       const out = run(path.join(sysRoot, 'System32', 'reg.exe'), ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid']);
-      const m = out.match(/MachineGuid\s+REG_\w+\s+([0-9a-f-]{20,})/i);
-      if (m) return 'win:' + m[1].toLowerCase();
+      const g = out.match(/MachineGuid\s+REG_\w+\s+([0-9a-f-]{20,})/i);
+      if (g) return 'win:' + g[1].toLowerCase(); // berubah bila Windows di-install ulang (hanya bila perangkat keras tidak punya ID)
     } else if (process.platform === 'darwin') {
       const m = run('ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice']).match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/);
-      if (m) return 'mac:' + m[1].toLowerCase();
+      if (m) return 'hw:' + m[1].toLowerCase();
     } else {
-      for (const f of ['/etc/machine-id', '/var/lib/dbus/machine-id']) { try { const v = fs.readFileSync(f, 'utf8').trim(); if (v) return 'lnx:' + v; } catch (e) {} }
+      for (const f of ['/sys/class/dmi/id/product_uuid', '/etc/machine-id', '/var/lib/dbus/machine-id']) { try { const v = fs.readFileSync(f, 'utf8').trim(); if (good(v)) return (f.includes('dmi') ? 'hw:' : 'lnx:') + v.toLowerCase(); } catch (e) {} }
     }
   } catch (e) {}
-  // cadangan: nama komputer + MAC kartu jaringan fisik
+  // cadangan terakhir: nama komputer + MAC kartu jaringan fisik
   const macs = [];
   for (const list of Object.values(os.networkInterfaces())) for (const a of list || []) if (!a.internal && a.mac && a.mac !== '00:00:00:00:00:00') macs.push(a.mac);
   return 'fb:' + os.hostname() + '|' + [...new Set(macs)].sort().join(',');
@@ -57,7 +102,7 @@ function machineRaw() {
 let cachedId = '';
 function deviceId() {
   if (cachedId) return cachedId;
-  const h = crypto.createHash('sha256').update('klm-mix-device-v1|' + machineRaw()).digest();
+  const h = crypto.createHash('sha256').update('klm-device-v2|' + machineRaw()).digest();
   const s = b32(h, 16);
   return (cachedId = 'KLM-' + s.match(/.{4}/g).join('-'));
 }
@@ -87,12 +132,19 @@ function create({ configDir }) {
     if (!r.ok) return r;
     const p = r.payload;
     if (normId(p.d) !== normId(deviceId())) return { ok: false, reason: 'Lisensi ini untuk perangkat lain (' + p.d + ')', payload: p };
-    if (seen && now < seen - 2 * DAY) return { ok: false, reason: 'Jam / tanggal komputer mundur. Setel tanggal yang benar lalu buka ulang KLM Mix.', payload: p };
+    if (p.e && seen && now < seen - 2 * DAY) return { ok: false, reason: 'Jam / tanggal komputer mundur. Setel tanggal yang benar lalu buka ulang KLM.', payload: p };
     if (p.e && now > p.e) return { ok: false, reason: 'Lisensi sudah kedaluwarsa (' + new Date(p.e).toLocaleDateString('id-ID') + ')', payload: p, expired: true };
     return { ok: true, payload: p };
   }
 
+  let cache = null, cacheAt = 0;
   function status() {
+    if (cache && Date.now() - cacheAt < 10000) return cache;
+    cache = computeStatus(); cacheAt = Date.now();
+    return cache;
+  }
+  const licensed = () => !!status().licensed;
+  function computeStatus() {
     const st = { licensed: false, demo: true, deviceId: deviceId(), name: '', plan: '', issued: 0, expires: 0, serial: '', reason: '' };
     const saved = read();
     if (!saved || !saved.key) { st.reason = 'Belum diaktifkan'; return st; }
@@ -106,15 +158,27 @@ function create({ configDir }) {
   }
 
   function activate(key) {
+    cache = null;
     const r = check(key);
     if (!r.ok) return { ok: false, reason: r.reason, status: status() };
     const prev = read() || {};
-    if (!write({ key: parse(key).key, activatedAt: Date.now(), seen: Math.max(Date.now(), prev.seen || 0) })) return { ok: false, reason: 'Gagal menyimpan lisensi', status: status() };
+    const ok = write({ key: parse(key).key, activatedAt: Date.now(), seen: Math.max(Date.now(), prev.seen || 0) });
+    cache = null;
+    if (!ok) return { ok: false, reason: 'Gagal menyimpan lisensi', status: status() };
     return { ok: true, status: status() };
   }
-  function remove() { try { fs.unlinkSync(file()); } catch (e) {} return { ok: true, status: status() }; }
+  function remove() { try { fs.unlinkSync(file()); } catch (e) {} cache = null; return { ok: true, status: status() }; }
 
-  return { status, activate, remove, deviceId, parse };
+  return { status, licensed, activate, remove, deviceId, parse };
 }
 
-module.exports = { create, deviceId, parse, PUBLIC_KEY, normId };
+/** halaman pengganti untuk fitur yang terkunci (dibuka dari browser / HP) */
+function lockedHtml(feature) {
+  const f = String(feature || 'Fitur ini').replace(/[<>&"]/g, '');
+  return '<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + f + ' terkunci — KLM</title>' +
+    '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d16;color:#e9ecf5;font:15px/1.6 "Segoe UI",system-ui,sans-serif;padding:20px;box-sizing:border-box}' +
+    '.b{max-width:440px;text-align:center;background:#141827;border:1px solid #262c44;border-radius:16px;padding:28px 24px}.i{font-size:42px}h1{font-size:20px;margin:6px 0 10px}p{color:#a3abc4;margin:6px 0}b{color:#fff}</style></head>' +
+    '<body><div class="b"><div class="i">🔒</div><h1>' + f + ' memerlukan lisensi KLM</h1><p>Aktifkan lisensi di komputer KLM: <b>Bantuan → 🔑 Lisensi</b>.</p><p>Lisensi dibeli sekali dan berlaku seumur hidup untuk komputer tersebut.</p></div></body></html>';
+}
+
+module.exports = { lockedHtml, create, deviceId, parse, PUBLIC_KEY, normId, parseSmbios };

@@ -1,4 +1,4 @@
-/* KLM Mix - API fungsi (nama kompatibel vMix) untuk HTTP /api, TCP, remote HP, shortcut & Stream Deck/Companion */
+/* KLM API (Kinetic Live Mixer) — fungsi untuk HTTP /api, TCP, remote HP, shortcut & Stream Deck/Companion */
 'use strict';
 (function (KM) {
   const S = KM.state;
@@ -209,10 +209,10 @@
     UTCEvent: (p) => utc('event', '', { name: p.Value }), UTCPreset: (p) => utc('preset', '', { name: p.Value }),
     UTCOnAir: () => { KM.utc.setOnAir(); return true; }, UTCOnAirOn: () => { KM.utc.setOnAir(true); return true; }, UTCOnAirOff: () => { KM.utc.setOnAir(false); return true; },
     UTCReload: () => { KM.utc.reload(); return true; },
-    UTCAddInput: () => { KM.utc.addInput(); return true; },
+    UTCAddInput: () => { if (!KM.utc.addInput()) throw new Error('UTC Acara memerlukan lisensi KLM'); return true; },
     // ---- UTC Score ----
     ScoreOnAir: () => { KM.score.setOnAir(); return true; }, ScoreOnAirOn: () => { KM.score.setOnAir(true); return true; }, ScoreOnAirOff: () => { KM.score.setOnAir(false); return true; },
-    ScoreAddInput: () => { KM.score.addInput(); return true; }
+    ScoreAddInput: () => { if (!KM.score.addInput()) throw new Error('UTC Score memerlukan lisensi KLM'); return true; }
   };
   async function utc(cmd, target, extra) {
     const r = await KM.utc.cmd(cmd, target, extra);
@@ -257,7 +257,7 @@
     xml() {
       const x = (s) => KM.esc(s);
       const TN = { utc: 'Browser', video: 'Video', image: 'Image', colour: 'Colour', camera: 'Capture', klmcam: 'Capture', screen: 'DesktopCapture', title: 'GT', audio: 'AudioFile', audiofile: 'AudioFile', list: 'VideoList', browser: 'Browser', replay: 'Replay', virtualset: 'VirtualSet', bars: 'Colour', urlvideo: 'Video', stream: 'Stream', call: 'VideoCall' };
-      let s = '<vmix><version>27.0.0.0</version><edition>KLM Mix ' + KM.version + '</edition><preset></preset><inputs>';
+      let s = '<klm><app>KLM</app><name>Kinetic Live Mixer</name><version>' + KM.version + '</version><edition>KLM</edition><preset></preset><inputs>';
       S.inputs.forEach((i, n) => {
         const m = KM.inputs.media(i);
         const st = KM.audio.strips.get(i.id); let mf = '';
@@ -277,7 +277,7 @@
       s += `</transitions><recording>${b(S.recording)}</recording><external>${b(S.externalOn)}</external><streaming>${b(S.streaming)}</streaming><playList>${b(KM.playlist.running)}</playList><multiCorder>${b(S.multicorder)}</multiCorder><fullscreen>${b(S.externalOn)}</fullscreen>`;
       const A = KM.audio;
       if (A.master) s += `<audio><master volume="${A.master.vol}" muted="${b(A.master.muted)}" headphonesVolume="100"/><busA volume="${A.busA.vol}" muted="${b(A.busA.muted)}"/><busB volume="${A.busB.vol}" muted="${b(A.busB.muted)}"/></audio>`;
-      return s + '</vmix>';
+      return s + '</klm>';
     }
   };
 })(window.KM);

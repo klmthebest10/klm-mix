@@ -1,4 +1,4 @@
-// KLM Mix VST host — plugin VST3 (memakai VST 3 SDK, lisensi MIT)
+// KLM VST host — plugin VST3 (memakai VST 3 SDK, lisensi MIT)
 #include "plug.h"
 
 #include "public.sdk/source/common/memorystream.h"
@@ -33,7 +33,7 @@ class KlmHostApp : public HostApplication
 public:
 	tresult PLUGIN_API getName (String128 name) override
 	{
-		return StringConvert::convert ("KLM Mix", name) ? kResultTrue : kInternalError;
+		return StringConvert::convert ("KLM", name) ? kResultTrue : kInternalError;
 	}
 };
 static KlmHostApp* gHostApp = nullptr;

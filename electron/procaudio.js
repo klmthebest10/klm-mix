@@ -1,6 +1,6 @@
-/* KLM Mix — suara PC tanpa suara KLM Mix sendiri (helper klm-procaudio.exe, WASAPI process loopback, Windows 10 2004+).
+/* KLM — suara PC tanpa suara KLM sendiri (helper klm-procaudio.exe, WASAPI process loopback, Windows 10 2004+).
  * Dipakai input Miracast (suara HP dari aplikasi Tampilan Nirkabel) & tangkap layar/jendela: tidak ada gema karena
- * keluaran KLM Mix (monitor, bus) dikecualikan. PCM dikirim ke port Mirroring dengan token input → renderer (AudioWorklet). */
+ * keluaran KLM (monitor, bus) dikecualikan. PCM dikirim ke port Mirroring dengan token input → renderer (AudioWorklet). */
 'use strict';
 const { app, ipcMain } = require('electron');
 const { spawn } = require('child_process');

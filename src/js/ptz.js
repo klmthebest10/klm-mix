@@ -1,4 +1,4 @@
-/* KLM Mix - PTZ: kamera fisik (VISCA over IP / HTTP-CGI lewat hub) + PTZ virtual (pan/zoom halus di input mana pun) */
+/* KLM - PTZ: kamera fisik (VISCA over IP / HTTP-CGI lewat hub) + PTZ virtual (pan/zoom halus di input mana pun) */
 'use strict';
 (function (KM) {
   const P = KM.ptz = {};

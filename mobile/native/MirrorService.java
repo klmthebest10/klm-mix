@@ -339,7 +339,7 @@ public class MirrorService extends Service {
         surface = c.createInputSurface();
         c.start();
         codec = c;
-        if (display == null) display = projection.createVirtualDisplay("KLM Mix Mirror", curW, curH, curDpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, surface, null, null);
+        if (display == null) display = projection.createVirtualDisplay("KLM Mirror", curW, curH, curDpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, surface, null, null);
         else { display.resize(curW, curH, curDpi); display.setSurface(surface); }
     }
 
@@ -372,7 +372,7 @@ public class MirrorService extends Service {
             if (nm != null && nm.getNotificationChannel(ch) == null) nm.createNotificationChannel(new NotificationChannel(ch, "Mirroring layar", NotificationManager.IMPORTANCE_LOW));
         }
         Notification.Builder b = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, ch) : new Notification.Builder(this);
-        return b.setContentTitle("KLM Mix — Mirroring layar").setContentText("Layar HP ini sedang dikirim ke KLM Mix di PC").setSmallIcon(getApplicationInfo().icon).setOngoing(true).build();
+        return b.setContentTitle("KLM — Mirroring layar").setContentText("Layar HP ini sedang dikirim ke KLM di PC").setSmallIcon(getApplicationInfo().icon).setOngoing(true).build();
     }
 
     private void stopForegroundCompat() {

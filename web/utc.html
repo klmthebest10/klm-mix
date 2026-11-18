@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b0d12">
-<title>UTC KLM Acara • KLM Mix HP</title>
+<title>UTC KLM Acara • KLM HP</title>
 <link rel="stylesheet" href="phone.css">
 <style>
   html, body { margin: 0; height: 100%; background: #0b0d12; color: #e6e9f2; font: 14px system-ui, sans-serif; overflow: hidden; }
@@ -15,7 +15,7 @@
 </style>
 </head>
 <body>
-<div id="msg">Menghubungkan ke KLM Mix di PC…</div>
+<div id="msg">Menghubungkan ke KLM di PC…</div>
 <iframe id="f" allow="camera; microphone; clipboard-write; fullscreen"></iframe>
 <button id="back" title="Kembali ke menu">⬅</button>
 <script src="icons.js"></script>
@@ -28,7 +28,7 @@
     f.style.visibility = 'hidden';
     f.onload = () => { f.style.visibility = 'visible'; msg.style.display = 'none'; };
     f.src = 'http://' + s.host + '/utc';
-    setTimeout(() => { if (f.style.visibility === 'hidden') msg.innerHTML = 'PC tidak menjawab. Pastikan HP & PC di Wi-Fi yang sama,<br>KLM Mix terbuka di PC, dan diizinkan di Firewall Windows.'; }, 6000);
+    setTimeout(() => { if (f.style.visibility === 'hidden') msg.innerHTML = 'PC tidak menjawab. Pastikan HP & PC di Wi-Fi yang sama,<br>KLM terbuka di PC, dan diizinkan di Firewall Windows.'; }, 6000);
   }
   document.getElementById('back').onclick = () => { location.href = KMP.page('hp'); };
 </script>

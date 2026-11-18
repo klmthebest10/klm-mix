@@ -1,4 +1,4 @@
-/* KLM Mix - Instant Replay (buffer berputar + event + slow motion) dan Playlist otomatis */
+/* KLM - Instant Replay (buffer berputar + event + slow motion) dan Playlist otomatis */
 'use strict';
 (function (KM) {
   const S = KM.state;

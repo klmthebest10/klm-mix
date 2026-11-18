@@ -1,4 +1,4 @@
-/* KLM Mix - boot
+/* KLM - boot
  * Setiap modul dinyalakan terpisah: bila satu bagian gagal (mis. perangkat audio bermasalah),
  * bagian lain tetap jalan, error dicatat & ditampilkan, dan layar pembuka selalu ditutup.
  */
@@ -38,13 +38,13 @@
     await stage(100, 'Siap', 'siap');
     hideSplash(KM.isElectron);
     if (KM.isElectron) { try { window.klm.invoke('app:ready'); } catch (e) {} }
-    if (KM.perf.autoPicked) { KM.saveSettings(); setTimeout(() => KM.toast('Perangkat ini terdeteksi ringan — KLM Mix memakai mode Hemat (720p 30fps). Bisa diubah di pojok kanan atas.', 'info', 8000), 1200); }
+    if (KM.perf.autoPicked) { KM.saveSettings(); setTimeout(() => KM.toast('Perangkat ini terdeteksi ringan — KLM memakai mode Hemat (720p 30fps). Bisa diubah di pojok kanan atas.', 'info', 8000), 1200); }
     const recovering = location.hash === '#pulih';
-    if (recovering) { history.replaceState(null, '', location.pathname); setTimeout(async () => { await KM.ui.restoreAutosave('silent'); KM.toast('KLM Mix dipulihkan otomatis setelah gangguan — sesi terakhir dimuat kembali', 'warn', 8000); }, 400); }
+    if (recovering) { history.replaceState(null, '', location.pathname); setTimeout(async () => { await KM.ui.restoreAutosave('silent'); KM.toast('KLM dipulihkan otomatis setelah gangguan — sesi terakhir dimuat kembali', 'warn', 8000); }, 400); }
     if (KM.bootErrors.length) setTimeout(() => KM.toast && KM.toast('Sebagian modul gagal dimuat: ' + KM.bootErrors.join(' • ') + ' — fitur lain tetap berjalan.', 'warn', 9000), 800);
     // popup 'pulihkan sesi terakhir' saat boot dihapus; pemulihan manual tetap lewat menu Preset → Pulihkan sesi terakhir
     window.addEventListener('beforeunload', () => { try { KM.ui.autosave(); } catch (e) {} });
     KM.readyAt = performance.timeOrigin + performance.now();
-    console.log('%cKLM Mix ' + KM.version + ' siap', 'color:#22c55e;font-weight:bold');
+    console.log('%cKLM ' + KM.version + ' siap', 'color:#22c55e;font-weight:bold');
   }
 })(window.KM);

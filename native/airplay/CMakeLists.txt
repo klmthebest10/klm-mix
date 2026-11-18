@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13)
-# klm-airplay — penerima AirPlay Mirroring untuk KLM Mix. Memakai pustaka AirPlay dari UxPlay (GPL-3.0) → program ini GPL-3.0.
+# klm-airplay — penerima AirPlay Mirroring untuk KLM. Memakai pustaka AirPlay dari UxPlay (GPL-3.0) → program ini GPL-3.0.
 #   git clone https://github.com/FDH2/UxPlay.git
 #   cmake -S native/airplay -B native/airplay/build -DUXPLAY_DIR=<path UxPlay> -G Ninja && cmake --build native/airplay/build
 # Butuh: OpenSSL (libcrypto) dan libplist-2.0. Di Windows dibangun dengan MSYS2 (UCRT64).
@@ -14,7 +14,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 # mDNS bawaan UxPlay (tidak perlu Bonjour), ditambal sedikit: alamat jaringan bisa dipilih lewat env KLM_MDNS_IFACE
-# sehingga KLM Mix bisa menjalankan satu penerima per jaringan (WiFi, LAN, Hotspot Seluler PC) — bukan hanya rute bawaan.
+# sehingga KLM bisa menjalankan satu penerima per jaringan (WiFi, LAN, Hotspot Seluler PC) — bukan hanya rute bawaan.
 file(READ ${UXPLAY_DIR}/lib/mdnsd/mdnsd.c MDNSD_SRC)
 set(MDNSD_OLD "static uint32_t mdns_get_default_ipv4(void)\n{\n    uint32_t addr = 0;")
 set(MDNSD_NEW "static uint32_t mdns_get_default_ipv4(void)\n{\n    uint32_t addr = 0;\n    { const char *ov = getenv(\"KLM_MDNS_IFACE\"); struct in_addr ova; if (ov && *ov && inet_pton(AF_INET, ov, &ova) == 1) return ova.s_addr; }")

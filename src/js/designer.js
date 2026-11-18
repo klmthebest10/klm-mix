@@ -1,4 +1,4 @@
-/* KLM Mix - Title Designer (pengganti GT Designer): rancang title bebas — teks, kotak, lingkaran, gambar, garis,
+/* KLM - Title Designer (pengganti GT Designer): rancang title bebas — teks, kotak, lingkaran, gambar, garis,
    animasi per elemen, field bernama (bisa diganti via HP/API SetText), pustaka template sendiri. */
 'use strict';
 (function (KM) {

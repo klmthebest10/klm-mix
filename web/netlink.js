@@ -1,4 +1,4 @@
-/* KLM Mix — NetLink: sinyal WebRTC lewat internet untuk KLMCAM di jaringan berbeda (WiFi lain / data seluler).
+/* KLM — NetLink: sinyal WebRTC lewat internet untuk KLMCAM di jaringan berbeda (WiFi lain / data seluler).
  * Hanya pesan sinyal (penawaran sambungan, kontrol, tally) yang lewat sini; gambar & suara tetap langsung HP ↔ PC (WebRTC).
  * Transport: MQTT 3.1.1 di atas WebSocket ke beberapa broker publik sekaligus (pesan ganda dibuang), isi pesan
  * dienkripsi AES-GCM dengan kunci dari kode ruang, sehingga broker tidak bisa membaca isinya. */

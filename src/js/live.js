@@ -1,4 +1,4 @@
-/* KLM Mix - Akun live streaming (YouTube, Facebook, TikTok, Instagram, RTMP lain) & live bersamaan.
+/* KLM - Akun live streaming (YouTube, Facebook, TikTok, Instagram, RTMP lain) & live bersamaan.
  * Akun bisa lebih dari satu per platform; centang akun mana yang ikut live. Judul, deskripsi & thumbnail
  * dipasang otomatis lewat API (YouTube: judul+deskripsi+thumbnail+privasi; Facebook: judul+deskripsi);
  * TikTok & Instagram tidak punya API publik → server + stream key, judul disalin ke halaman live mereka. */
@@ -148,7 +148,7 @@
                 draw();
               } }, KI.el('link'), authInfo ? 'Hubungkan ulang' : 'Masuk dengan Google')),
             h('details.guide', h('summary', 'Cara mendapatkan Client ID (sekali saja)'), h('ol',
-              h('li', 'Buka console.cloud.google.com → buat project (mis. "KLM Mix").'),
+              h('li', 'Buka console.cloud.google.com → buat project (mis. "KLM").'),
               h('li', 'APIs & Services → Library → aktifkan "YouTube Data API v3".'),
               h('li', 'OAuth consent screen → External → isi nama aplikasi → tambahkan email Anda di "Test users".'),
               h('li', 'Credentials → Create credentials → OAuth client ID → jenis "Desktop app" → salin Client ID & Client secret ke sini.'),
@@ -183,7 +183,7 @@
         a.mode !== 'api' ? h('div.krow', h('label', 'Server URL'), urlIn, p.session ? paste(urlIn, 'url') : null) : null,
         a.mode !== 'api' ? h('div.krow', h('label', 'Stream key'), keyIn, h('button.btn.sm', { title: 'Lihat / sembunyikan', onclick: () => { keyIn.type = keyIn.type === 'password' ? 'text' : 'password'; } }, KI.el('eye')), p.session ? paste(keyIn, 'key') : null) : null,
         ...apiBox,
-        h('p.muted.note', a.mode === 'api' ? (a.platform === 'youtube' ? 'Tiap kali live, KLM Mix membuat siaran baru di channel ini dengan judul, deskripsi, thumbnail & privasi dari panel Live, lalu mulai otomatis.' : 'Tiap kali live, KLM Mix membuat video live baru di Halaman ini dengan judul & deskripsi dari panel Live (thumbnail tidak didukung API Facebook).') : p.keyNote),
+        h('p.muted.note', a.mode === 'api' ? (a.platform === 'youtube' ? 'Tiap kali live, KLM membuat siaran baru di channel ini dengan judul, deskripsi, thumbnail & privasi dari panel Live, lalu mulai otomatis.' : 'Tiap kali live, KLM membuat video live baru di Halaman ini dengan judul & deskripsi dari panel Live (thumbnail tidak didukung API Facebook).') : p.keyNote),
         p.studio ? h('div.row', h('button.btn.sm', { onclick: () => openUrl(p.studio) }, KI.el('external'), 'Buka halaman live ' + p.name)) : null);
     };
     draw();

@@ -1,5 +1,5 @@
-/* Contoh plugin audio eksternal KLM Mix — "Bitcrusher / Lo-Fi"
- * Pasang: KLM Mix → mixer audio → FX → "Pasang plugin / IR…" → pilih file ini
+/* Contoh plugin audio eksternal KLM — "Bitcrusher / Lo-Fi"
+ * Pasang: KLM → mixer audio → FX → "Pasang plugin / IR…" → pilih file ini
  * (atau salin ke folder plugin lalu klik "Muat ulang").
  */
 const WORKLET = `
@@ -21,7 +21,7 @@ registerProcessor('contoh-crusher', Crusher);`;
 export default {
   id: 'contoh-bitcrusher',
   name: 'Bitcrusher / Lo-Fi',
-  author: 'Contoh KLM Mix',
+  author: 'Contoh KLM',
   desc: 'Suara retro 8-bit',
   worklet: WORKLET,               // opsional: kode AudioWorklet (didaftarkan otomatis sekali)
   params: [

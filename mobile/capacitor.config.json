@@ -1,6 +1,6 @@
 {
   "appId": "com.klm.mix.hp",
-  "appName": "KLM Mix",
+  "appName": "KLM",
   "webDir": "www",
   "server": {
     "androidScheme": "http",

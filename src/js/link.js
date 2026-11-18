@@ -1,4 +1,4 @@
-/* KLM Mix - koneksi ke server lokal: KLMCAM (WebRTC latensi rendah), tally, remote HP, relay API */
+/* KLM - koneksi ke server lokal: KLMCAM (WebRTC latensi rendah), tally, remote HP, relay API */
 'use strict';
 (function (KM) {
   const S = KM.state;
@@ -59,7 +59,7 @@
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(proto + '//' + location.host + '/ws');
     L.ws = ws;
-    ws.onopen = () => { L.connected = true; send({ t: 'hello', role: 'mixer', name: 'KLM Mix' }); setTimeout(() => pushState(true), 300); KM.changed('link'); };
+    ws.onopen = () => { L.connected = true; send({ t: 'hello', role: 'mixer', name: 'KLM' }); setTimeout(() => pushState(true), 300); KM.changed('link'); };
     ws.onclose = () => { L.connected = false; KM.changed('link'); setTimeout(L.connect, 1500); };
     ws.onerror = () => {};
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (_) { return; } onMsg(m); };
@@ -72,7 +72,9 @@
       case 'peer-join': {
         const p = { id: m.id, role: m.role, name: m.name, slot: m.slot, ip: m.ip, meta: m.meta || {} };
         L.peers.set(m.id, p);
-        if (m.role === 'camera') {
+        if (m.role === 'camera' && KM.license && KM.license.locked('klmcam')) { // tanpa lisensi: KLMCAM terkunci
+          if (!L._camLockNote) { L._camLockNote = true; KM.toast('🔒 KLMCAM dari HP ditolak: memerlukan lisensi KLM (Bantuan → Lisensi)', 'warn', 7000); }
+        } else if (m.role === 'camera') {
           KM.toast('📱 KLMCAM terhubung: ' + (m.name || 'HP') + ' (slot ' + m.slot + ')', 'ok');
           if (KM.settings.autoAddCam && !S.inputs.find((i) => i.type === 'klmcam' && +i.opts.slot === +m.slot)) {
             KM.inputs.create('klmcam', { title: 'KLMCAM ' + m.slot + ' - ' + (m.name || 'HP'), opts: { slot: +m.slot } });
@@ -268,7 +270,7 @@
   }
   L.snapState = snapState;
   function pushState(force, to) {
-    // selalu ke server: switcher panel UTC KLM Acara memakai daftar input & preview/program KLM Mix
+    // selalu ke server: switcher panel UTC KLM Acara memakai daftar input & preview/program KLM
     if (!force && !hasRemote() && Date.now() - (pushState.t || 0) < 250) { clearTimeout(pushState.tm); pushState.tm = setTimeout(() => pushState(false), 260); return; }
     pushState.t = Date.now();
     const msg = { t: 'state', state: snapState() };

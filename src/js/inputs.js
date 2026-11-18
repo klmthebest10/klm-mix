@@ -1,4 +1,4 @@
-/* KLM Mix - jenis-jenis input (video, gambar, kamera, KLMCAM, layar, title, browser, dll) */
+/* KLM - jenis-jenis input (video, gambar, kamera, KLMCAM, layar, title, browser, dll) */
 'use strict';
 (function (KM) {
   const h = KM.h;
@@ -93,7 +93,7 @@
       mid.forEach((col, i) => { c.fillStyle = col; c.fillRect(i * bw, 480, bw + 1, 60); });
       ['#00214c', '#ffffff', '#32006a', '#131313'].forEach((col, i) => { c.fillStyle = col; c.fillRect(i * 1280 / 6 * 1.25, 540, 1280 / 6 * 1.25 + 1, 180); });
       c.fillStyle = '#131313'; c.fillRect(1280 / 6 * 5, 540, 1280 / 6, 180);
-      c.fillStyle = '#fff'; c.font = 'bold 28px Segoe UI, Arial'; c.fillText('KLM Mix', 1100, 700);
+      c.fillStyle = '#fff'; c.font = 'bold 28px Segoe UI, Arial'; c.fillText('KLM', 1100, 700);
       inp.rt.canvas = cv; inp.rt.ready = true;
       if (inp.opts.tone) KM.audio && KM.audio.attachTone(inp);
     },
@@ -257,7 +257,7 @@
         if (st.getAudioTracks().length) KM.audio && KM.audio.attach(inp);
         KM.changed('input');
       } catch (e) { inp.rt.err = 'Capture gagal: ' + e.name; KM.changed('input'); }
-      // suara PC tanpa suara KLM Mix sendiri (Miracast: suara HP) — helper Windows, tanpa gema
+      // suara PC tanpa suara KLM sendiri (Miracast: suara HP) — helper Windows, tanpa gema
       if (inp.opts.pcAudio && KM.mirror && KM.mirror.pcAudioStart) KM.mirror.pcAudioStart(inp);
     },
     destroy(inp) { if (inp.opts.pcAudio && KM.mirror) KM.mirror.pcAudioStop(inp); },
@@ -547,6 +547,10 @@
     defaults,
     create(type, data) {
       const t = T[type]; if (!t) throw new Error('Jenis input tidak dikenal: ' + type);
+      if (KM.license && KM.license.locked(type)) { // fitur premium tanpa lisensi (UTC Acara, UTC Score, Mirroring HP, KLMCAM)
+        if (!KM.license._quiet) KM.license.require(type);
+        const e = new Error((KM.license.FEAT[type] || type) + ' memerlukan lisensi KLM'); e.locked = true; throw e;
+      }
       const d = defaults(type);
       const inp = Object.assign(d, KM.deepClone(data || {}), { rt: {} });
       inp.pos = Object.assign(defaults(type).pos, (data && data.pos) || {});

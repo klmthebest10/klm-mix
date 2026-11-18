@@ -1,4 +1,4 @@
-// KLM Mix — broker host VST (berjalan di utilityProcess Electron, terpisah dari proses utama & renderer).
+// KLM — broker host VST (berjalan di utilityProcess Electron, terpisah dari proses utama & renderer).
 // Satu proses klm-vsthost per instance plugin. Audio mengalir langsung: AudioWorklet (renderer) <-MessagePort-> broker <-pipe-> helper.
 'use strict';
 const { spawn } = require('child_process');

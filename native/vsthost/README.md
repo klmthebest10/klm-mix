@@ -1,6 +1,6 @@
-# klm-vsthost — host plugin VST asli untuk KLM Mix
+# klm-vsthost — host plugin VST asli untuk KLM
 
-Proses helper kecil (C++17) yang memuat **satu** plugin VST3 atau VST2 (64-bit) dan memprosesnya untuk KLM Mix.
+Proses helper kecil (C++17) yang memuat **satu** plugin VST3 atau VST2 (64-bit) dan memprosesnya untuk KLM.
 Electron menjalankan satu proses per instance plugin lewat broker (`electron/vst-broker.js`, utilityProcess), sehingga
 plugin yang crash tidak menjatuhkan aplikasi.
 

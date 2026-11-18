@@ -1,5 +1,5 @@
-/* KLM Mix — jembatan untuk panel UTC Acara & UTC Score
- * Menampilkan fitur KLM Mix langsung di dalam aplikasi UTC (di KLM Mix, jendela terpisah, atau HP):
+/* KLM — jembatan untuk panel UTC Acara & UTC Score
+ * Menampilkan fitur KLM langsung di dalam aplikasi UTC (di KLM, jendela terpisah, atau HP):
  *   status Program / Preview, ON AIR grafis ini di Program, CUT / AUTO, REC / LIVE / SRT,
  *   monitor Program mini (di jendela terpisah / HP), tambah input bila belum ada.
  * Dipasang oleh: src/utc/control.html (UTC Acara) & electron/score.js (UTC Score, port sendiri).
@@ -22,7 +22,7 @@
   #klmb *{box-sizing:border-box}
   #klmb .pill{display:flex;align-items:center;gap:8px;height:34px;padding:0 12px 0 10px;border-radius:999px;background:rgba(15,17,21,.94);border:1px solid #323946;box-shadow:0 8px 28px rgba(0,0,0,.45);cursor:pointer;user-select:none;backdrop-filter:blur(8px)}
   #klmb .pill:hover{border-color:#4a5466}
-  #klmb .lg{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#ff4b3e,#ffb11f);display:grid;place-items:center;font-size:10px;font-weight:900;color:#fff;flex:none}
+  #klmb .lg{width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,#0f4a54,#03151a);box-shadow:inset 0 0 0 1px rgba(63,240,208,.25);display:grid;place-items:center;font-size:10px;font-weight:900;color:#fff;flex:none}
   #klmb .dot{width:8px;height:8px;border-radius:50%;background:#59606d;flex:none}
   #klmb .dot.on{background:#f2453d;box-shadow:0 0 8px #f2453d}
   #klmb .dot.ok{background:#1ec26b}
@@ -58,8 +58,8 @@
     if (document.getElementById('klmb')) return;
     document.head.append(el('style', {}, css));
     const root = el('div', { id: 'klmb', class: open ? 'open' : '' });
-    root.append(el('div', { class: 'card' }), el('div', { class: 'pill', title: 'Fitur KLM Mix untuk ' + NAME, onclick: () => { open = !open; root.classList.toggle('open', open); try { localStorage.setItem(KEY, open ? '1' : '0'); } catch (e) {} draw(); poll(); } },
-      el('span', { class: 'lg' }, 'K'), el('span', { class: 'dot', id: 'klmbDot' }), el('span', { id: 'klmbTxt' }, 'KLM Mix')));
+    root.append(el('div', { class: 'card' }), el('div', { class: 'pill', title: 'Fitur KLM untuk ' + NAME, onclick: () => { open = !open; root.classList.toggle('open', open); try { localStorage.setItem(KEY, open ? '1' : '0'); } catch (e) {} draw(); poll(); } },
+      el('span', { class: 'lg' }, 'K'), el('span', { class: 'dot', id: 'klmbDot' }), el('span', { id: 'klmbTxt' }, 'KLM')));
     document.body.append(root);
     draw(); poll();
   }
@@ -78,15 +78,15 @@
     const has = !!(me && me.has), onAir = !!(me && me.onAir);
     const dot = document.getElementById('klmbDot'), txt = document.getElementById('klmbTxt');
     dot.className = 'dot' + (!ok ? '' : has && onAir ? ' on' : ' ok');
-    txt.textContent = !ok ? 'KLM Mix — tidak terhubung' : !has ? 'KLM Mix — ' + NAME + ' belum jadi input' : 'KLM Mix — ' + (onAir ? 'ON AIR' : 'tidak tayang') + (st.rec ? ' • REC' : '') + (st.stream ? ' • LIVE' : '');
+    txt.textContent = !ok ? 'KLM — tidak terhubung' : !has ? 'KLM — ' + NAME + ' belum jadi input' : 'KLM — ' + (onAir ? 'ON AIR' : 'tidak tayang') + (st.rec ? ' • REC' : '') + (st.stream ? ' • LIVE' : '');
     const card = root.querySelector('.card');
     if (!open) { card.replaceChildren(); stopFrame(); return; }
-    if (!ok) { card.replaceChildren(el('h5', {}, 'KLM Mix'), el('p', { class: 'muted' }, 'Tidak terhubung ke KLM Mix. Pastikan aplikasi KLM Mix terbuka di PC.')); stopFrame(); return; }
-    const kids = [el('h5', {}, 'KLM Mix', el('span', { style: 'margin-left:auto' }, (st.res || '') + (st.fps ? ' • ' + st.fps + ' fps' : '')))];
+    if (!ok) { card.replaceChildren(el('h5', {}, 'KLM'), el('p', { class: 'muted' }, 'Tidak terhubung ke KLM. Pastikan aplikasi KLM terbuka di PC.')); stopFrame(); return; }
+    const kids = [el('h5', {}, 'KLM', el('span', { style: 'margin-left:auto' }, (st.res || '') + (st.fps ? ' • ' + st.fps + ' fps' : '')))];
     if (!embedded) { kids.push(el('div', { class: 'mon' }, el('img', { id: 'klmbImg', alt: '' }), el('span', {}, 'PROGRAM'))); }
     kids.push(el('div', { class: 'kv' }, el('span', {}, 'Program'), el('b', { class: 'p' }, nameOf(st.programId)), el('span', {}, 'Preview'), el('b', { class: 'v' }, nameOf(st.previewId))));
-    if (has) kids.push(el('div', { class: 'row' }, el('button', { class: 'air' + (onAir ? ' on' : ''), title: 'Tampilkan / sembunyikan ' + NAME + ' di atas Program KLM Mix', onclick: () => act(APP === 'score' ? 'ScoreOnAir' : 'UTCOnAir') }, (onAir ? '● ' : '○ ') + NAME + (onAir ? ' ON AIR' : ' — tayangkan'))));
-    else kids.push(el('div', { class: 'row' }, el('button', { class: 'air', onclick: () => act(APP === 'score' ? 'ScoreAddInput' : 'UTCAddInput') }, '+ Jadikan input KLM Mix')), el('p', { class: 'muted' }, NAME + ' baru tayang di KLM Mix setelah ditambahkan sebagai input.'));
+    if (has) kids.push(el('div', { class: 'row' }, el('button', { class: 'air' + (onAir ? ' on' : ''), title: 'Tampilkan / sembunyikan ' + NAME + ' di atas Program KLM', onclick: () => act(APP === 'score' ? 'ScoreOnAir' : 'UTCOnAir') }, (onAir ? '● ' : '○ ') + NAME + (onAir ? ' ON AIR' : ' — tayangkan'))));
+    else kids.push(el('div', { class: 'row' }, el('button', { class: 'air', onclick: () => act(APP === 'score' ? 'ScoreAddInput' : 'UTCAddInput') }, '+ Jadikan input KLM')), el('p', { class: 'muted' }, NAME + ' baru tayang di KLM setelah ditambahkan sebagai input.'));
     kids.push(el('div', { class: 'row' },
       el('button', { class: 'cut', title: 'Cut Preview ↔ Program', onclick: () => act('Cut') }, 'CUT'),
       el('button', { class: 'auto', title: 'Transisi 1 (AUTO)', onclick: () => act('Transition1') }, 'AUTO'),

@@ -301,7 +301,7 @@ img,video,iframe{max-width:100%}
 </head>
 <body>
 <header>
-  <div class="brand"><i>KLM</i><div>UTC KLM ACARA<small>KLM MIX • LOWER THIRD • TITLE • RUNNING TEXT</small></div></div>
+  <div class="brand"><i>KLM</i><div>UTC KLM ACARA<small>KLM • LOWER THIRD • TITLE • RUNNING TEXT</small></div></div>
   <select class="evsel" id="evsel" title="Jenis acara"></select>
   <div class="hsp"></div>
   <div class="conn" id="conn"><b></b><span>Menghubungkan…</span></div>
@@ -344,10 +344,10 @@ img,video,iframe{max-width:100%}
 const K = window.KLM, esc = K.esc;
 const CID = 'c' + K.uid();
 const klmHost = () => { for (const w of [window.parent !== window ? window.parent : null, window.opener]) { try { if (w && w.KM && w.KM.engine) return w.KM; } catch(e) {} } return null; };
-// tampilan menyatu: di dalam KLM Mix (iframe) monitor Program & switcher memakai milik KLM Mix di atasnya
+// tampilan menyatu: di dalam KLM (iframe) monitor Program & switcher memakai milik KLM di atasnya
 document.documentElement.classList.add('klmui');
 try { if (window.parent !== window && klmHost()) document.documentElement.classList.add('klm-embed'); } catch(e) {}
-// di dalam KLM Mix monitor Program panel tidak dipakai (Program milik mixer) → overlay tersembunyinya tidak dijalankan (lebih ringan)
+// di dalam KLM monitor Program panel tidak dipakai (Program milik mixer) → overlay tersembunyinya tidak dijalankan (lebih ringan)
 try { if (document.documentElement.classList.contains('klm-embed')) { const f = document.getElementById('pgm'); if (f) f.src = 'about:blank'; } } catch(e) {}
 const $ = s => document.querySelector(s);
 let S = null, INFO = { port: location.port, ips: [] };
@@ -996,18 +996,18 @@ function pOut(){
   const live = KH && KH.utc ? KH.utc.liveInfo() : '';
   return `
   <div class="box">
-    <h3>Tayang di KLM Mix</h3>
-    <div class="hint" style="font-size:13px;color:var(--tx)">Semua grafis UTC KLM Acara (lower third, title, running text, logo, lokasi, sosial media, opening/closing) <b>otomatis tampil di Program KLM Mix</b> — ikut terekam, distreaming, keluar ke monitor/proyektor & NDI. Tidak perlu Browser Source.</div>
+    <h3>Tayang di KLM</h3>
+    <div class="hint" style="font-size:13px;color:var(--tx)">Semua grafis UTC KLM Acara (lower third, title, running text, logo, lokasi, sosial media, opening/closing) <b>otomatis tampil di Program KLM</b> — ikut terekam, distreaming, keluar ke monitor/proyektor & NDI. Tidak perlu Browser Source.</div>
     ${KH ? `<div class="bar" style="margin-top:12px">
       <button class="${onAir ? 'installbtn' : ''}" data-act="klmAir" style="padding:10px 16px">${onAir ? '● UTC ON AIR di Program' : '○ UTC tidak tampil di Program — klik untuk menayangkan'}</button>
-      <button data-act="klmInput">＋ Jadikan input KLM Mix (untuk Overlay 1–4 / Multiview)</button></div>
-      <div class="hint" style="margin-top:8px">${live}</div>` : `<div class="hint" style="margin-top:8px">Panel ini dibuka dari HP/peramban — grafis tetap tampil di Program KLM Mix di PC.</div>`}
+      <button data-act="klmInput">＋ Jadikan input KLM (untuk Overlay 1–4 / Multiview)</button></div>
+      <div class="hint" style="margin-top:8px">${live}</div>` : `<div class="hint" style="margin-top:8px">Panel ini dibuka dari HP/peramban — grafis tetap tampil di Program KLM di PC.</div>`}
   </div>
   <div class="box">
     <h3>Buka panel dari HP / tablet</h3>
     <ol class="steps hint" style="color:var(--tx);font-size:13px">
       <li>HP & PC di <b>Wi-Fi / router yang sama</b> (tidak perlu internet).</li>
-      <li>Aplikasi <b>KLM Mix (APK)</b> → menu <b>🎬 UTC KLM Acara</b>, atau pindai QR di bawah dengan kamera HP.</li>
+      <li>Aplikasi <b>KLM (APK)</b> → menu <b>🎬 UTC KLM Acara</b>, atau pindai QR di bawah dengan kamera HP.</li>
       <li>iPhone/iPad: buka di Safari → Bagikan → <b>Tambahkan ke Layar Utama</b>.</li>
     </ol>
     <div class="qrs">${ips.length ? ips.map(ip=>`<div class="q"><div class="qr" data-qr="http://${ip}:${port}/utc"></div><b>Panel UTC</b><code>http://${ip}:${port}/utc</code></div>`).join('') : '<div class="hint">Alamat jaringan PC belum terdeteksi.</div>'}</div>
@@ -1266,7 +1266,7 @@ document.addEventListener('click', async e=>{
       if (deferredPrompt){ deferredPrompt.prompt(); deferredPrompt.userChoice.finally(()=>{ deferredPrompt=null; renderAll(); }); }
       break;
     case 'klmAir': { const KH = klmHost(); if (KH && KH.utc) KH.utc.setOnAir(!KH.utc.onAir()); renderAll(); break; }
-    case 'klmInput': { const KH = klmHost(); if (KH && KH.utc) { KH.utc.addInput(); toast('Input "Grafis UTC KLM Acara" ditambahkan di KLM Mix'); } break; }
+    case 'klmInput': { const KH = klmHost(); if (KH && KH.utc) { KH.utc.addInput(); toast('Input "Grafis UTC KLM Acara" ditambahkan di KLM'); } break; }
     case 'klmImport': { try { const r = await (await fetch('/utc/api/klm/import', { method:'POST' })).json(); toast(r.msg || 'Selesai'); INFO = await (await fetch('/utc/api/info')).json(); loadPresets(); renderAll(); } catch(err) { toast('Impor gagal'); } break; }
     case 'copy': try{ await navigator.clipboard.writeText(a.dataset.v); toast('URL disalin'); }catch(err){ prompt('Salin URL ini:', a.dataset.v); } break;
   }
@@ -1371,13 +1371,13 @@ let deferredPrompt = null;
 function isStandalone(){ return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; if (ui.tab==='out') renderAll(); });
 addEventListener('appinstalled', () => { deferredPrompt = null; toast('Aplikasi terpasang ✓'); });
-if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(()=>{});   // KLM Mix: tanpa service worker
+if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(()=>{});   // KLM: tanpa service worker
 
 // ---------- Switcher OBS / vMix ----------
 let SWS = { type:'none', connected:false, error:'', inputs:[], transitions:[], trans:'Fade', dur:500 }, SWC = { type:'none', obs:{}, vmix:{}, fps:6 };
 const MON = Object.assign({ pvw:'auto', pgm:'auto', stack:false, cam:{ pvw:'', pgm:'' } }, (()=>{ try{ return JSON.parse(localStorage.getItem('klmMon')||'{}'); }catch(e){ return {}; } })());
 MON.pvw = 'gfx'; MON.pgm = 'gfx';      // saat aplikasi dibuka, monitor selalu mulai dari "Grafis saja"
-if (klmHost()) { MON.pvw = 'auto'; MON.pgm = 'auto'; }   // di dalam KLM Mix: langsung tampilkan Preview/Program asli KLM Mix
+if (klmHost()) { MON.pvw = 'auto'; MON.pgm = 'auto'; }   // di dalam KLM: langsung tampilkan Preview/Program asli KLM
 const saveMon = () => { try{ localStorage.setItem('klmMon', JSON.stringify(MON)); }catch(e){} };
 const canCap = !!(window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 const media = { pvw:null, pgm:null };
@@ -1404,7 +1404,7 @@ const inById = id => SWS.inputs.find(x=>x.id===id);
 
 // ----- monitor -----
 function srcOpts(ch){
-  const o = [['auto', SWS.type==='klm' ? '🎥 Video asli KLM Mix' : '🎥 Video asli OBS/vMix'],['gfx','✨ Grafis saja']];
+  const o = [['auto', SWS.type==='klm' ? '🎥 Video asli KLM' : '🎥 Video asli OBS/vMix'],['gfx','✨ Grafis saja']];
   if (canCap){
     if (camList.length) camList.forEach((d,i)=>o.push(['cam:'+d.deviceId, '📷 '+(d.label||'Kamera '+(i+1))]));
     else o.push(['cam','📷 Kamera / capture card…']);
@@ -1557,8 +1557,8 @@ function pSW(){
   const c = SWC || { type:'none', obs:{}, vmix:{} }, t = c.type;
   const stat = t==='none' ? 'Tidak memakai switcher' : SWS.connected ? `<span class="dot ok"></span> Terhubung • ${esc(SWS.version)} • ${SWS.inputs.length} ${t==='obs'?'scene':'input'}${t==='vmix' && !SWS.snap ? ' • gambar monitor: vMix di PC lain' : ''}` : `<span class="dot"></span> ${esc(SWS.error || 'Belum terhubung')}`;
   const conn = `<div class="box"><h3>Koneksi Switcher</h3>
-    <div class="chips" style="margin-bottom:12px">${[['klm','KLM Mix (aplikasi ini)'],['obs','OBS Studio'],['vmix','vMix'],['none','Tidak dipakai']].map(x=>`<button class="chip ${t===x[0]?'act':''}" data-act="swType" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>
-    ${t==='klm' ? `<div class="hint" style="font-size:13px;color:var(--tx)">Switcher memakai <b>KLM Mix</b> langsung: daftar input, Preview, Program, transisi & durasi KLM Mix. Grafis UTC KLM Acara otomatis tampil di Program KLM Mix (lapisan <b>UTC ON AIR</b>) — tidak perlu Browser Source.</div>` : ''}
+    <div class="chips" style="margin-bottom:12px">${[['klm','KLM (aplikasi ini)'],['obs','OBS Studio'],['vmix','vMix'],['none','Tidak dipakai']].map(x=>`<button class="chip ${t===x[0]?'act':''}" data-act="swType" data-v="${x[0]}">${x[1]}</button>`).join('')}</div>
+    ${t==='klm' ? `<div class="hint" style="font-size:13px;color:var(--tx)">Switcher memakai <b>KLM</b> langsung: daftar input, Preview, Program, transisi & durasi KLM. Grafis UTC KLM Acara otomatis tampil di Program KLM (lapisan <b>UTC ON AIR</b>) — tidak perlu Browser Source.</div>` : ''}
     ${t==='obs' ? `<div class="grid3">
         <label class="fld">IP / host PC OBS<input id="obsHost" value="${esc(c.obs.host||'127.0.0.1')}"></label>
         <label class="fld">Port<input id="obsPort" type="number" value="${c.obs.port||4455}"></label>

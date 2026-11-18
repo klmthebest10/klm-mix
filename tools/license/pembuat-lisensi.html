@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pembuat Lisensi KLM Mix</title>
+<title>Pembuat Lisensi KLM</title>
 <style>
   :root { --bg: #0b0d11; --bg2: #14171d; --card: #1a1e26; --line: #2a303b; --tx: #eceff4; --mut: #8b94a5; --acc: #f08a24; --ok: #2ecc71; --err: #ff6b6b; }
   * { box-sizing: border-box; }
@@ -33,7 +33,7 @@
 </head>
 <body>
 <main>
-  <h1>Pembuat Lisensi <b>KLM Mix</b></h1>
+  <h1>Pembuat Lisensi <b>KLM</b> <span style="font-weight:500;color:var(--mut);font-size:15px">Kinetic Live Mixer</span></h1>
   <div class="muted">Berjalan 100% offline di browser ini. Kunci privat hanya dibaca ke memori, tidak disimpan dan tidak dikirim ke mana pun.</div>
 
   <div class="card warn">
@@ -47,17 +47,13 @@
 
   <div class="card">
     <h2>2 · Data pembeli</h2>
-    <label for="dev">Device ID (dari menu Lisensi di KLM Mix pembeli)</label>
+    <label for="dev">Device ID (dari menu Lisensi di KLM pembeli)</label>
     <input id="dev" placeholder="KLM-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
     <div class="row">
       <div><label for="name">Nama pembeli / instansi</label><input id="name" placeholder="mis. Masjid Agung Al-Ikhlas"></div>
       <div><label for="plan">Paket</label><input id="plan" value="Pro"></div>
     </div>
-    <div class="row">
-      <div><label for="dur">Masa berlaku</label>
-        <select id="dur"><option value="0">Selamanya</option><option value="30">30 hari</option><option value="90">90 hari</option><option value="180">6 bulan</option><option value="365">1 tahun</option><option value="custom">Hari kustom…</option></select></div>
-      <div><label for="days">Jumlah hari (kustom)</label><input id="days" type="number" min="1" placeholder="mis. 14" disabled></div>
-    </div>
+    <div class="muted" style="margin-top:10px">Lisensi berlaku <b>seumur hidup</b> untuk komputer tersebut, termasuk setelah Windows di-install ulang (Device ID diambil dari perangkat keras).</div>
     <div class="acts"><button class="pri" id="issue" disabled>Buat lisensi</button><span id="issueMsg" class="msg"></span></div>
   </div>
 
@@ -65,7 +61,7 @@
     <h2>3 · Kunci lisensi</h2>
     <textarea id="out" rows="5" readonly></textarea>
     <div class="acts"><button id="copy">Salin kunci</button><button id="dl">Unduh file .klmlic</button></div>
-    <div class="muted" style="margin-top:8px">Kirim kunci atau file .klmlic ke pembeli. Di KLM Mix: <b>Bantuan → 🔑 Lisensi</b> (atau Pengaturan → Lisensi) → tempel kunci → <b>Aktifkan</b>.</div>
+    <div class="muted" style="margin-top:8px">Kirim kunci atau file .klmlic ke pembeli. Di KLM: <b>Bantuan → 🔑 Lisensi</b>, Pengaturan → Lisensi, atau tombol <b>🔒 Aktifkan</b> di bar atas → tempel kunci → <b>Aktifkan</b>.</div>
   </div>
 
   <div class="card">
@@ -104,14 +100,12 @@ $('#keyFile').onchange = async (e) => {
     setMsg($('#keyMsg'), '✓ Kunci privat dimuat', true); $('#issue').disabled = false;
   } catch (err) { privKey = null; $('#issue').disabled = true; setMsg($('#keyMsg'), 'Gagal membaca kunci: ' + err.message, false); }
 };
-$('#dur').onchange = () => { $('#days').disabled = $('#dur').value !== 'custom'; };
 $('#issue').onclick = async () => {
   const msg = $('#issueMsg');
   const dev = normDev($('#dev').value);
   if (!dev) return setMsg(msg, 'Device ID tidak valid (contoh: KLM-AB12-CD34-EF56-GH78)', false);
   const name = $('#name').value.trim(); if (!name) return setMsg(msg, 'Isi nama pembeli', false);
-  let days = $('#dur').value === 'custom' ? +$('#days').value : +$('#dur').value;
-  if ($('#dur').value === 'custom' && !(days > 0)) return setMsg(msg, 'Isi jumlah hari', false);
+  const days = 0; // seumur hidup
   const now = Date.now();
   const rnd = Array.from(crypto.getRandomValues(new Uint8Array(2)), (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
   const payload = { v: 1, d: dev, n: name, p: $('#plan').value.trim() || 'Pro', i: now, e: days > 0 ? now + days * 86400000 : 0, s: 'KM' + now.toString(36).toUpperCase() + rnd };
@@ -127,7 +121,7 @@ $('#issue').onclick = async () => {
 $('#copy').onclick = () => { navigator.clipboard.writeText(lastKey).then(() => setMsg($('#issueMsg'), '✓ Kunci disalin', true)); };
 $('#dl').onclick = () => download('lisensi-' + lastDev + '.klmlic', lastKey + '\n', 'text/plain');
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
-const fmt = (ms) => (ms ? new Date(ms).toLocaleDateString('id-ID') : 'Selamanya');
+const fmt = (ms) => (ms ? new Date(ms).toLocaleDateString('id-ID') : 'Seumur hidup');
 function renderHist() {
   const tb = $('#hist'); tb.replaceChildren();
   for (const r of hist()) {
@@ -139,7 +133,7 @@ function renderHist() {
 $('#csv').onclick = () => {
   const q = (v) => '"' + String(v).replace(/"/g, '""') + '"';
   const rows = [['tanggal', 'pembeli', 'device_id', 'paket', 'berlaku_sampai', 'serial', 'kunci']].concat(hist().map((r) => [new Date(r.t).toISOString(), r.n, r.d, r.p, r.e ? new Date(r.e).toISOString().slice(0, 10) : 'selamanya', r.s, r.k]));
-  download('lisensi-klm-mix.csv', rows.map((r) => r.map(q).join(',')).join('\n'), 'text/csv');
+  download('lisensi-klm.csv', rows.map((r) => r.map(q).join(',')).join('\n'), 'text/csv');
 };
 $('#clr').onclick = () => { if (confirm('Hapus semua riwayat lisensi di browser ini? (Ekspor CSV dulu bila perlu)')) { localStorage.removeItem(HKEY); renderHist(); } };
 renderHist();

@@ -16,7 +16,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Jembatan JS ↔ layanan Mirroring layar (MediaProjection + encoder H.264 hardware → TCP ke KLM Mix di PC). */
+/** Jembatan JS ↔ layanan Mirroring layar (MediaProjection + encoder H.264 hardware → TCP ke KLM di PC). */
 @CapacitorPlugin(name = "KlmMirror")
 public class MirrorPlugin extends Plugin {
     static volatile MirrorPlugin instance;
