@@ -1,7 +1,7 @@
 {
   "name": "klm-mix",
   "productName": "KLM",
-  "version": "1.17.0",
+  "version": "1.17.1",
   "description": "KLM - Studio produksi live dengan KLMCAM & UTC KLM Acara terintegrasi",
   "author": "KLM",
   "license": "UNLICENSED",
@@ -27,7 +27,12 @@
   "build": {
     "appId": "com.klm.mix",
     "publish": [
-      { "provider": "github", "owner": "klmthebest10", "repo": "klm-releases", "releaseType": "release" }
+      {
+        "provider": "github",
+        "owner": "klmthebest10",
+        "repo": "klm-releases",
+        "releaseType": "release"
+      }
     ],
     "productName": "KLM",
     "copyright": "KLM",
@@ -46,11 +51,20 @@
       "!node_modules/koffi/build/koffi/win32_{ia32,arm64}/**"
     ],
     "extraResources": [
-   { "from": "native/vsthost/build/bin/Release/klm-vsthost.exe", "to": "vsthost/klm-vsthost.exe" },
-   { "from": "native/airplay/dist", "to": "airplay" },
-   { "from": "native/procaudio/build/Release/klm-procaudio.exe", "to": "procaudio/klm-procaudio.exe" }
-  ],
-  "asarUnpack": [
+      {
+        "from": "native/vsthost/build/bin/Release/klm-vsthost.exe",
+        "to": "vsthost/klm-vsthost.exe"
+      },
+      {
+        "from": "native/airplay/dist",
+        "to": "airplay"
+      },
+      {
+        "from": "native/procaudio/build/Release/klm-procaudio.exe",
+        "to": "procaudio/klm-procaudio.exe"
+      }
+    ],
+    "asarUnpack": [
       "node_modules/ffmpeg-static/**",
       "node_modules/koffi/**"
     ],

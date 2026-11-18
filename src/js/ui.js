@@ -105,11 +105,32 @@
     f.allow = 'camera; microphone; display-capture; clipboard-write; fullscreen';
     f.addEventListener('load', () => {
       try { f.contentWindow.addEventListener('keydown', (e) => { if (e.key === 'F9') { e.preventDefault(); UI.utcPanel(false); } }); } catch (e) {}
+      // pengaman panel kosong: halaman "terkunci" (dimuat sebelum lisensi aktif) / gagal dimuat → status lisensi disegarkan lalu dimuat ulang
+      setTimeout(() => checkFrame(f, mode), 2500);
     });
     ws.querySelector('.utc-body').appendChild(f); ws._frames[mode] = f; // dibiarkan hidup: state panel tidak hilang saat ditutup / ganti
     if (mode === 'acara') ws._frame = f;
     return f;
   }
+  function frameState(f) {
+    try {
+      const d = f.contentDocument; if (!d || !d.body) return 'kosong';
+      if (/terkunci/i.test(d.title || '')) return 'terkunci';
+      return (d.body.innerText || '').trim().length > 20 || d.querySelector('main *, #err') ? 'ok' : 'kosong';
+    } catch (e) { return 'ok'; } // lintas origin (Score di port lain) → tidak bisa diperiksa, anggap normal
+  }
+  async function checkFrame(f, mode) {
+    if (!f.isConnected) return;
+    const st = frameState(f);
+    if (st === 'ok') { f._retry = 0; return; }
+    f._retry = (f._retry || 0) + 1;
+    console.warn('[KLM] panel ' + mode + ' ' + st + ' — memuat ulang (' + f._retry + ')');
+    if (KM.license && KM.license.refresh) { try { await KM.license.refresh(); } catch (e) {} }
+    if (f._retry <= 3) { const src = mode === 'score' ? KM.score.url('/') : '/utc'; f.src = src + (src.includes('?') ? '&' : '?') + 'r=' + Date.now(); }
+    else KM.toast('Panel ' + (mode === 'score' ? 'UTC Score' : 'UTC Acara') + ' gagal dimuat (' + st + '). Tekan ⟳ di panel atau buka ulang KLM.', 'warn', 8000);
+  }
+  // lisensi baru diaktifkan → panel yang sempat dimuat dalam keadaan terkunci dimuat ulang
+  UI.reloadUtcFrames = () => { Object.entries(($('#utcWs')._frames) || {}).forEach(([m, f]) => { if (frameState(f) !== 'ok') { f._retry = 0; checkFrame(f, m); } }); };
   UI.utcFrameReady = (mode) => !!(($('#utcWs')._frames || {})[mode]);
   // panel scoreboard disiapkan diam-diam di belakang saat input UTC Score ada → tombol cepat langsung jalan
   UI.prepScorePanel = () => { if (KM.score.has() && KM.score.port) utcFrame($('#utcWs'), 'score'); };
@@ -355,6 +376,64 @@
     if (v.style.transform !== tf) v.style.transform = tf;
   }
   UI.syncLiveThumbs = () => KM.$$('#inputs .card[data-id]').forEach(syncLiveThumb);
+
+  // ---------- monitor Preview / Program: sumber live tampil langsung dari stream-nya ----------
+  // Kamera, KLMCAM, capture, layar, tamu, video yang diputar: bila tampil "murni" (tanpa efek, crop, zoom, layer, transisi,
+  // overlay, grafis UTC), monitor menampilkan stream-nya langsung (dipresentasikan peramban per frame kamera = semulus aslinya).
+  // Kanvas Preview/Program tetap digambar di bawahnya (rekam, stream, NDI, thumbnail tetap memakai kanvas).
+  // tanpa akselerasi GPU (render perangkat lunak) video tambahan justru memberatkan → monitor tetap memakai kanvas
+  const softGpu = (() => {
+    try {
+      const c = document.createElement('canvas'), gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+      if (!gl) return true;
+      const ext = gl.getExtension('WEBGL_debug_renderer_info'), r = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+      const lose = gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext();
+      return /swiftshader|llvmpipe|softpipe|software|basic render/i.test(r);
+    } catch (e) { return false; }
+  })();
+  let monOff = softGpu, monSlow = 0;
+  function pureLiveTrack(inp) {
+    if (!inp || monOff || KM.settings.monLive === false) return null;
+    const T = KM.inputTypes[inp.type]; if (!T || T.noVideo || inp.type === 'virtualset') return null;
+    if (KM.fx && KM.fx.needs(inp)) return null;
+    if ((inp.layers || []).some((l) => l && l.on && l.inputId)) return null;
+    const p = inp.pos || {};
+    if ((p.zoom || 1) !== 1 || p.x || p.y || p.rot || p.cropL || p.cropR || p.cropT || p.cropB) return null;
+    const st = KM.engine.liveStream(inp);
+    return (st && st.getVideoTracks().find((t) => t.readyState === 'live')) || null;
+  }
+  const FIT = { fill: 'cover', stretch: 'fill' };
+  function monLive(canvasSel, inp, want) {
+    const cv = $(canvasSel); if (!cv || !cv.parentElement) return;
+    let v = cv._live;
+    const trk = want ? pureLiveTrack(inp) : null;
+    if (!trk) { if (v && v._trk) { v.classList.remove('on'); v._trk = null; v.srcObject = null; } return; }
+    if (!v) {
+      v = cv._live = document.createElement('video'); v.className = 'monlive'; v.muted = true; v.playsInline = true; v.autoplay = true; v.disablePictureInPicture = true;
+      cv.insertAdjacentElement('afterend', v);
+    }
+    const fit = FIT[(inp.pos || {}).fit] || 'contain';
+    if (v.style.objectFit !== fit) v.style.objectFit = fit;
+    if (v._trk !== trk) { v._trk = trk; v.classList.remove('on'); v.srcObject = new MediaStream([trk]); showOnFrame(v); v.play().catch(() => {}); }
+    else if (v.paused) v.play().catch(() => {});
+  }
+  function syncMonitors() {
+    const E = KM.engine; if (!E || !E.prog) return;
+    const busy = !!(S.trans || (S.ftb && S.ftb.v > 0));
+    monLive('#pvw', KM.getInput(S.previewId), !E.gridActive() && !(S.previewId && S.previewId === S.programId && busy));
+    monLive('#pgm', KM.getInput(S.programId), !busy && E.progClean());
+  }
+  UI.syncMonitors = syncMonitors;
+  UI.monLiveInfo = () => ({ softGpu, off: monOff });
+  // pengaman: bila fps output turun selama monitor video langsung aktif → kembali ke kanvas untuk sesi ini
+  KM.on('fps', (f) => {
+    const on = ['#pvw', '#pgm'].some((q) => { const c = $(q); return c && c._live && c._live._trk; });
+    if (!on || monOff) { monSlow = 0; return; }
+    if (f < KM.settings.fps * 0.8) { if (++monSlow >= 4) { monOff = true; syncMonitors(); console.warn('[KLM] monitor video langsung dimatikan: fps turun'); } }
+    else monSlow = 0;
+  });
+  // dicek tiap frame (murah: hanya membandingkan), agar transisi / overlay / UTC langsung kembali ke kanvas tanpa jeda
+  KM.on('frame', () => { try { syncMonitors(); } catch (e) {} });
 
   UI.updateCards = function () {
     KM.$$('#inputs .card[data-id]').forEach((card) => {

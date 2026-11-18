@@ -212,9 +212,9 @@
         badge: h('span.pill' + (peer ? '.ok' : '.warn'), peer ? 'Terhubung' : 'Slot ' + o.slot + ' menunggu'),
         tools: [tool('PVW', 'Ke Preview', () => KM.engine.setPreview(inp.id), tl === 'preview' ? '.pri' : ''), tool('CUT', 'Cut ke Program', () => KM.engine.cut(inp.id), tl === 'program' ? '.red' : '')]
       },
-        peer ? h('p.muted.cinfo', (peer.net ? '🌐 ' : '') + (peer.name || peer.ip) + (peer.info ? ` • ${peer.info.w}×${peer.info.h} @${peer.info.fps}fps` + (peer.info.rtt ? ' • ' + peer.info.rtt + ' ms' : '') + (peer.info.loss ? ' • hilang ' + peer.info.loss + '%' : '') : '') + (peer.info && peer.info.battery != null ? ' • 🔋 ' + peer.info.battery + '%' : '')) : h('p.muted.cinfo', 'Buka KLMCAM di HP lalu pilih slot ' + o.slot + '.'),
+        peer ? h('p.muted.cinfo', (peer.net ? '🌐 ' : '') + (peer.name || peer.ip) + (peer.info ? ` • ${peer.info.w}×${peer.info.h} @${peer.info.fps}fps` + (peer.info.facing ? ' • ' + (peer.info.facing === 'user' ? 'kamera depan' : 'kamera belakang') : '') + (peer.info.rtt ? ' • ' + peer.info.rtt + ' ms' : '') + (peer.info.loss ? ' • hilang ' + peer.info.loss + '%' : '') : '') + (peer.info && peer.info.battery != null ? ' • 🔋 ' + peer.info.battery + '%' : '')) : h('p.muted.cinfo', 'Buka KLMCAM di HP lalu pilih slot ' + o.slot + '.'),
         h('div.bgrid',
-          h('button.btn.sm', { onclick: () => L.camControl(inp, 'switch', 1), title: 'Ganti kamera depan/belakang' }, '🔄 Balik'),
+          h('button.btn.sm', { onclick: () => L.camControl(inp, 'switch'), title: 'Ganti kamera depan/belakang' + (L.camFacing(inp) ? ' (sekarang: ' + (L.camFacing(inp) === 'user' ? 'depan' : 'belakang') + ')' : '') }, '🔄 ' + (L.camFacing(inp) === 'user' ? 'Ke belakang' : L.camFacing(inp) === 'environment' ? 'Ke depan' : 'Balik')),
           h('button.btn.sm' + (inp.rt.torch ? '.pri' : ''), { onclick: () => { inp.rt.torch = !inp.rt.torch; L.camControl(inp, 'torch', inp.rt.torch); renderPhone(); }, title: 'Senter' }, '🔦 Senter'),
           h('button.btn.sm', { onclick: () => L.camControl(inp, 'focus', 'auto'), title: 'Fokus otomatis' }, '🎯 Fokus'),
           h('button.btn.sm', { onclick: () => L.restartCam(inp), title: 'Sambung ulang' }, '↻ Ulang'),

@@ -417,12 +417,13 @@
     }
     return false;
   }
+  E.progClean = () => progClean();
   E.animThumbs = 0; // jumlah kartu yang harus digambar terus (input gabungan berisi sumber bergerak)
   /** Program bersih = hanya input itu (tanpa transisi, overlay, grafis UTC, FTB) → kartunya cukup menyalin kanvas Program */
   function progClean() {
     if (S.trans || S.ftb.v > 0) return false;
     if ((S.overlays || []).some((o) => o && o.phase !== 'off')) return false;
-    if (KM.utc && KM.utc.onAir && KM.utc.onAir()) return false;
+    if (KM.utc && (KM.utc.drawsDSK ? KM.utc.drawsDSK() : KM.utc.onAir && KM.utc.onAir())) return false; // grafis UTC benar-benar tampil
     return true;
   }
   function drawThumb(inp, cv, now) {
@@ -461,7 +462,7 @@
       const inp = S.inputs[(thumbCursor + k) % n];
       const cv = inp.rt.thumb; if (!cv || !cv.isConnected || inp.rt.comp || E.liveThumb(inp)) continue;
       const moving = KM.inputs.isPlaying(inp) || inp.type === 'list' || inp.type === 'browser' || inp.type === 'utc' || inp.type === 'score' || inp.type === 'title' || inp.type === 'mirror' || inp.rt.anim;
-      if (now - (inp.rt.thumbAt || 0) < (cv._vis === false ? 3000 : moving ? fast : slow)) continue;
+      if (now - (inp.rt.thumbAt || 0) < (cv._vis === false ? 3000 : moving ? fast - 8 : slow)) continue;
       drawThumb(inp, cv, now);
       if (performance.now() - t0 > budget) { thumbCursor = (thumbCursor + k + 1) % n; return; }
     }
@@ -520,9 +521,9 @@
 
     // PREVIEW (dilewati saat jendela diminimize / mode hemat)
     const idle = document.hidden && KM.settings.pauseHidden !== false;
-    // Monitor Preview digambar SETIAP frame (output 50/60 fps → ±30 fps, kecuali mode Kualitas) agar gerakan mulus.
+    // Monitor Preview digambar SETIAP frame, sama dengan Program (mode Hemat: output 50/60 fps → ±30 fps) agar gerakan mulus.
     // Beban diturunkan dengan cara lain: Preview = Program → cukup salin kanvas Program; resolusi Preview mengikuti ukuran tampil.
-    const pvEvery = KM.settings.fps > 30 && KM.settings.perf !== 'kualitas' ? Math.round(KM.settings.fps / 30) : 1;
+    const pvEvery = KM.settings.fps > 30 && (KM.settings.perfLite || KM.settings.perf === 'hemat') ? Math.round(KM.settings.fps / 30) : 1;
     if (!idle && E.frame % pvEvery === 0 && (outOn || !E.prevAt || now - E.dirtyAt < DIRTY_MS || now - (E.prevDrawAt || 0) > 1000 || previewMoving())) {
       const v = E.vctx, pw = E.prev.width, ph = E.prev.height;
       v.globalAlpha = 1;
@@ -533,7 +534,7 @@
     } else if (!idle) E.prevAt = now; // isi Preview masih sama (diam): salinan thumbnail tetap bisa dipakai
 
     if (!idle) updateThumbs(now);
-    if (E.mvOn && (++mvTick % 2 === 0)) drawMultiview();
+    if (E.mvOn && (++mvTick % (KM.settings.fps > 30 ? 2 : 1) === 0)) drawMultiview(); // ≤30 fps: tiap frame; 50/60 fps: ±30 fps
     KM.replay && KM.replay.capture();
     KM.emit('frame', E.frame);
 

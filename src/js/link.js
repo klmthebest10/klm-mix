@@ -101,6 +101,15 @@
       }
       case 'signal': await onSignal(m); break;
       case 'cam-info': { const p = L.peers.get(m.from); if (p) { p.info = m.info; KM.changed('peers'); } break; }
+      case 'cam-quality': { // kualitas diubah di HP → input KLMCAM di PC ikut, lalu HP menerima balik bitrate milik PC
+        const inp = S.inputs.find((i) => i.rt.camId === m.from);
+        if (inp && QUALITIES.includes(m.quality)) {
+          L.camControl(inp, 'quality', m.quality);
+          KM.toast('📱 Kualitas KLMCAM ' + inp.opts.slot + ' diubah dari HP: ' + m.quality.replace('p', 'p '), 'ok', 2500);
+          KM.changed('input'); KM.changed('peers');
+        }
+        break;
+      }
       case 'cam-zoom': { // zoom digital dari HP (kamera tanpa zoom hardware, mis. aplikasi Android) → dipotong di PC
         const inp = S.inputs.find((i) => i.rt.camId === m.from);
         if (inp) { inp.rt.dzoom = Math.max(1, Math.min(8, +m.z || 1)); inp.rt.zoom = inp.rt.dzoom; KM.changed('input'); }
@@ -142,6 +151,8 @@
       if (peer) startCam(inp, peer);
     }
   };
+  const QUALITIES = ['720p30', '720p60', '1080p30', '1080p60'];
+  L.QUALITIES = QUALITIES;
   function qualityOf(inp) {
     const q = inp.opts.quality || '1080p30';
     const m = /(\d+)p(\d+)/.exec(q) || [0, 1080, 30];
@@ -151,6 +162,8 @@
     inp.rt.camId = peer.id;
     if (peer.pc) { try { peer.pc.close(); } catch (e) {} }
     const ice = peer.net && window.KLMNet ? KLMNet.ice(netCfg().turn) : []; // LAN: langsung; internet: STUN (+TURN bila diisi)
+    // kualitas yang baru dipilih di HP (dikirim saat HP menyambung ulang) dipakai, bukan ditimpa
+    if (peer.meta && QUALITIES.includes(peer.meta.quality)) { inp.opts.quality = peer.meta.quality; peer.meta.quality = ''; KM.changed('input'); }
     const pc = new RTCPeerConnection({ iceServers: ice, bundlePolicy: 'max-bundle' });
     peer.pc = pc; peer.inputId = inp.id; clearTimeout(peer.discT);
     pc.onicecandidate = (e) => { if (e.candidate) send({ t: 'signal', to: peer.id, data: { ice: e.candidate } }); };
@@ -224,10 +237,17 @@
 
   /** kirim perintah kontrol kamera ke HP (zoom, torch, ganti kamera, kualitas, fokus) */
   L.camControl = function (inp, cmd, value) {
-    inp = KM.getInput(inp); if (!inp || !inp.rt.camId) return false;
-    if (cmd === 'quality') { inp.opts.quality = value; send({ t: 'cam-ctl', to: inp.rt.camId, cmd: 'settings', value: qualityOf(inp) }); return true; }
+    inp = KM.getInput(inp); if (!inp) return false;
+    // kualitas tetap disimpan walau HP belum tersambung → dikirim saat HP menyambung (cam-start)
+    if (cmd === 'quality') { if (QUALITIES.includes(value)) inp.opts.quality = value; if (!inp.rt.camId) return false; send({ t: 'cam-ctl', to: inp.rt.camId, cmd: 'settings', value: qualityOf(inp) }); return true; }
+    if (!inp.rt.camId) return false;
+    if (cmd === 'switch') { // arah tujuan dikirim (bukan sekadar "balik") agar tombol tidak berlawanan dengan HP
+      const p = L.peers.get(inp.rt.camId), cur = p && p.info && p.info.facing;
+      if (value !== 'user' && value !== 'environment') value = cur === 'user' ? 'environment' : cur === 'environment' ? 'user' : 1;
+    }
     send({ t: 'cam-ctl', to: inp.rt.camId, cmd, value }); return true;
   };
+  L.camFacing = (inp) => { const p = inp && inp.rt.camId && L.peers.get(inp.rt.camId); return (p && p.info && p.info.facing) || ''; };
 
   // ---------- tally ke HP & TCP ----------
   let lastTally = '';

@@ -585,11 +585,11 @@
         row('Kualitas', sel([['720p30', '720p 30'], ['720p60', '720p 60'], ['1080p30', '1080p 30'], ['1080p60', '1080p 60']], o.quality, (v) => L.camControl(inp, 'quality', v)),
           h('label', 'Bitrate'), sel([[2500, '2.5 Mbps'], [4000, '4 Mbps'], [6000, '6 Mbps'], [8000, '8 Mbps'], [12000, '12 Mbps']], o.bitrate, (v) => { o.bitrate = +v; L.camControl(inp, 'quality', o.quality); })),
         row('Zoom', z),
-        h('div.row', h('button.btn', { onclick: () => L.camControl(inp, 'switch', 1) }, '🔄 Ganti kamera depan/belakang'),
+        h('div.row', h('button.btn', { onclick: () => L.camControl(inp, 'switch') }, '🔄 Ganti kamera depan/belakang'),
           h('button.btn', { onclick: () => { inp.rt.torch = !inp.rt.torch; L.camControl(inp, 'torch', inp.rt.torch); } }, '🔦 Senter'),
           h('button.btn', { onclick: () => L.camControl(inp, 'focus', 'auto') }, '🎯 Fokus otomatis'),
           h('button.btn', { onclick: () => L.restartCam(inp) }, '↻ Sambung ulang')),
-        peer && peer.info ? h('p.muted', `HP: ${peer.info.w}×${peer.info.h} @${peer.info.fps}fps • baterai ${peer.info.battery != null ? peer.info.battery + '%' : '?'}`) : null,
+        peer && peer.info ? h('p.muted', `HP: ${peer.info.w}×${peer.info.h} @${peer.info.fps}fps` + (peer.info.facing ? ' • kamera ' + (peer.info.facing === 'user' ? 'depan' : 'belakang') : '') + ` • baterai ${peer.info.battery != null ? peer.info.battery + '%' : '?'}`) : null,
         h('p.muted', 'Tips latensi rendah: gunakan Wi-Fi 5 GHz / router dekat, 720p60 atau 1080p30, dan atur Delay audio jika perlu.'));
     },
     title(inp) { return h('div.sec', h('h4', 'Title Cepat (kanvas)'), KM.dock.titleEditor(inp)); },

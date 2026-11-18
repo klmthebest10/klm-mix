@@ -14,7 +14,7 @@
   const myId = KMP.get('camid', '') || (() => { const v = Math.random().toString(36).slice(2, 12); KMP.set('camid', v); return v; })();
   let iceCfg = [], netRate = 1, discT = 0;
   let settings = parseQ(cfg.quality);
-  let vTrack = null, aTrack = null, pc = null, conn = null, started = false, tally = 'off';
+  let vTrack = null, aTrack = null, pc = null, conn = null, started = false, tally = 'off', qPending = false;
   let lastBytes = 0, lastT = 0, kbps = 0, battery = null, torchOn = false;
 
   function parseQ(q) { const m = /(\d+)p(\d+)/.exec(q || '1080p30') || [0, 1080, 30]; const hh = +m[1]; return { height: hh, width: Math.round(hh * 16 / 9), fps: +m[2], bitrate: hh >= 1080 ? 6000 : 4000, audio: true }; }
@@ -35,18 +35,65 @@
   }
 
   // ---------- media ----------
-  async function openVideo() {
+  // kamera depan/belakang dikenali dari label perangkat (dipakai bila facingMode tidak dipatuhi HP)
+  const FRONT = /front|user|selfie|depan|face|前|전면/i, BACK = /back|rear|environment|belakang|world|后|후면/i;
+  async function camByFacing(facing) {
+    try {
+      const ds = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput' && d.label);
+      const want = facing === 'user' ? FRONT : BACK, not = facing === 'user' ? BACK : FRONT;
+      return (ds.find((d) => want.test(d.label) && !not.test(d.label)) || {}).deviceId || '';
+    } catch (e) { return ''; }
+  }
+  function facingOf(t) {
+    try { const f = t.getSettings().facingMode; if (f === 'user' || f === 'environment') return f; } catch (e) {}
+    const l = (t && t.label) || ''; return FRONT.test(l) ? 'user' : BACK.test(l) ? 'environment' : '';
+  }
+  async function openVideo(facing) {
+    facing = facing || cfg.facing;
     const s = settings;
-    const vc = { facingMode: { ideal: cfg.facing }, width: { ideal: s.width }, height: { ideal: s.height }, frameRate: { ideal: s.fps, max: s.fps } };
+    const base = { width: { ideal: s.width }, height: { ideal: s.height }, frameRate: { ideal: s.fps, max: s.fps } };
     // minta izin zoom optik/hardware (Chrome); di aplikasi Android (WebView) biasanya tidak tersedia → zoom digital di bawah
     let sup = {}; try { sup = navigator.mediaDevices.getSupportedConstraints() || {}; } catch (e) {}
-    if (sup.zoom) vc.zoom = true;
-    let st;
-    try { st = await navigator.mediaDevices.getUserMedia({ video: vc, audio: false }); }
-    catch (e) { if (!vc.zoom) throw e; delete vc.zoom; st = await navigator.mediaDevices.getUserMedia({ video: vc, audio: false }); }
+    const gum = async (vc) => {
+      if (sup.zoom) { try { return await navigator.mediaDevices.getUserMedia({ video: Object.assign({ zoom: true }, vc), audio: false }); } catch (e) { if (e && e.name === 'NotAllowedError') throw e; } }
+      return navigator.mediaDevices.getUserMedia({ video: vc, audio: false });
+    };
+    // 1) facingMode wajib (exact) → 2) kamera dipilih dari daftar perangkat → 3) facingMode "ideal" (laptop/peramban lama)
+    let st = null, err = null;
+    try { st = await gum(Object.assign({ facingMode: { exact: facing } }, base)); } catch (e) { err = e; if (e && e.name === 'NotAllowedError') throw e; }
+    if (st && facingOf(st.getVideoTracks()[0]) && facingOf(st.getVideoTracks()[0]) !== facing) { st.getTracks().forEach((t) => t.stop()); st = null; }
+    if (!st) { const id = await camByFacing(facing); if (id) { try { st = await gum(Object.assign({ deviceId: { exact: id } }, base)); } catch (e) { err = e; } } }
+    if (!st) { try { st = await gum(Object.assign({ facingMode: { ideal: facing } }, base)); } catch (e) { throw err || e; } }
     const t = st.getVideoTracks()[0];
     try { t.contentHint = 'motion'; } catch (e) {}
     return t;
+  }
+  /** ganti trek kamera (depan/belakang atau resolusi baru) tanpa memutus sambungan ke PC.
+   *  Kamera lama DILEPAS dulu: banyak HP Android tidak bisa membuka kamera kedua selagi yang pertama menyala. */
+  let reopening = null;
+  function reopenVideo(facing) {
+    if (reopening) return reopening;
+    reopening = (async () => {
+      const prevFacing = cfg.facing, want = facing || cfg.facing;
+      const old = vTrack;
+      if (old) { try { old.stop(); } catch (e) {} }
+      torchOn = false; $('torch').classList.remove('on');
+      let t = null;
+      try { t = await openVideo(want); cfg.facing = want; }
+      catch (e) {
+        try { t = await openVideo(prevFacing); cfg.facing = prevFacing; } catch (e2) {}
+        KMP.toast(want !== prevFacing ? 'Kamera ' + (want === 'user' ? 'depan' : 'belakang') + ' tidak bisa dibuka (' + (e.name || e.message) + ')' : 'Kamera gagal dibuka ulang: ' + (e.name || e.message), 4000);
+        if (!t) throw e;
+      }
+      KMP.set('facing', cfg.facing);
+      vTrack = t;
+      if (!document.body.classList.contains('dim')) { video.srcObject = new MediaStream([vTrack]); video.play().catch(() => {}); }
+      const snd = pc && pc.getSenders().find((x) => x.track && x.track.kind === 'video');
+      if (snd) { try { await snd.replaceTrack(vTrack); } catch (e) { console.warn(e); } }
+      await tuneSender();
+      updateCaps(); labels(); sendInfo();
+    })().finally(() => { reopening = null; });
+    return reopening;
   }
   async function openAudio() {
     if (!settings.audio) return null;
@@ -110,23 +157,28 @@
   })();
   async function setTorch(on) { torchOn = on; try { await vTrack.applyConstraints({ advanced: [{ torch: on }] }); } catch (e) { KMP.toast('Senter tidak didukung'); } $('torch').classList.toggle('on', on); }
   async function focusAuto() { try { await vTrack.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); KMP.toast('Fokus otomatis'); } catch (e) {} }
-  async function flip() {
-    cfg.facing = cfg.facing === 'user' ? 'environment' : 'user'; KMP.set('facing', cfg.facing);
-    const old = vTrack; vTrack = await openVideo();
-    if (!document.body.classList.contains('dim')) video.srcObject = new MediaStream([vTrack]);
-    const snd = pc && pc.getSenders().find((s) => s.track && s.track.kind === 'video');
-    if (snd) await snd.replaceTrack(vTrack);
-    if (old) old.stop();
-    updateCaps(); labels();
+  async function flip(to) {
+    if (reopening) return reopening; // ketukan beruntun diabaikan sampai kamera siap
+    const want = to === 'user' || to === 'environment' ? to : (cfg.facing === 'user' ? 'environment' : 'user');
+    if (!vTrack) { cfg.facing = want; KMP.set('facing', want); labels(); return; }
+    $('flip').disabled = true;
+    try { await reopenVideo(want); } catch (e) {} finally { $('flip').disabled = false; }
   }
-  async function applySettings(s) {
+  // kualitas dari PC → disimpan juga sebagai pengaturan HP (pengaturan HP & PC selalu sama)
+  const qName = (s) => (s && s.height ? s.height + 'p' + (s.fps || 30) : '');
+  function adoptSettings(s) {
     const changed = !settings || s.width !== settings.width || s.height !== settings.height || s.fps !== settings.fps;
     settings = Object.assign({}, settings, s);
-    if (changed && vTrack) {
-      try { await vTrack.applyConstraints({ width: { ideal: s.width }, height: { ideal: s.height }, frameRate: { ideal: s.fps, max: s.fps } }); }
-      catch (e) { const old = vTrack; vTrack = await openVideo(); video.srcObject = new MediaStream([vTrack]); const snd = pc && pc.getSenders().find((x) => x.track && x.track.kind === 'video'); if (snd) await snd.replaceTrack(vTrack); old.stop(); }
-    }
-    await tuneSender();
+    const q = qName(settings);
+    if (/^(720|1080)p(30|60)$/.test(q) && q !== cfg.quality) { cfg.quality = q; KMP.set('quality', q); }
+    if ($('panel').classList.contains('show')) $('sQual').value = cfg.quality;
+    return changed;
+  }
+  async function applySettings(s) {
+    // resolusi/fps baru: kamera dibuka ulang (applyConstraints sering diabaikan HP Android → kualitas tidak berubah)
+    if (adoptSettings(s) && vTrack) { try { await reopenVideo(); } catch (e) {} }
+    else await tuneSender();
+    sendInfo();
   }
   async function tuneSender() {
     if (!pc) return;
@@ -178,7 +230,12 @@
       case 'locked': if (conn) conn.closed = true; setStatus('closed'); KMP.toast('🔒 ' + (m.msg || 'KLMCAM memerlukan lisensi KLM'), 15000); break;
       case 'welcome': setStatus(m.mixer ? 'open' : 'nomixer'); break;
       case 'mixer-gone': setStatus('nomixer'); setTally('off'); if (pc) { pc.close(); pc = null; } break;
-      case 'cam-start': iceCfg = Array.isArray(m.ice) ? m.ice : []; if (!vTrack) await startMedia(); if (m.settings) await applySettings(m.settings); await startPeer(); break;
+      case 'cam-start': {
+        iceCfg = Array.isArray(m.ice) ? m.ice : [];
+        const ch = m.settings ? adoptSettings(m.settings) : false;
+        if (!vTrack) await startMedia(); else if (ch) { try { await reopenVideo(); } catch (e) {} }
+        await startPeer(); qPending = false; break;
+      }
       case 'signal':
         if (!pc) return;
         try { if (m.data.sdp) await pc.setRemoteDescription(m.data.sdp); else if (m.data.ice) await pc.addIceCandidate(m.data.ice); } catch (e) { console.warn(e); }
@@ -186,7 +243,7 @@
       case 'cam-ctl':
         if (m.cmd === 'zoom') applyZoom(+m.value);
         else if (m.cmd === 'torch') setTorch(!!m.value);
-        else if (m.cmd === 'switch') flip();
+        else if (m.cmd === 'switch') flip(m.value);
         else if (m.cmd === 'focus') focusAuto();
         else if (m.cmd === 'settings') applySettings(m.value);
         break;
@@ -197,7 +254,7 @@
   /** sambungan sinyal lewat internet (NetLink) dengan antarmuka yang sama seperti sambungan WiFi lokal */
   function netConnect() {
     const st = { open: false, closed: false, room: null, hello: 0, gotMixer: false };
-    const info = () => ({ t: 'hello', role: 'camera', name: cfg.name, slot: +cfg.slot, meta: { ua: navigator.userAgent, net: true } });
+    const info = () => ({ t: 'hello', role: 'camera', name: cfg.name, slot: +cfg.slot, meta: { ua: navigator.userAgent, net: true, quality: qPending ? cfg.quality : '' } });
     st.send = (o) => { if (st.room) st.room.publish('m', Object.assign({ id: myId }, o)); };
     st.reconnect = () => { clearInterval(st.hello); if (st.room) { try { st.room.publish('m', { id: myId, t: 'bye' }); } catch (e) {} const r = st.room; setTimeout(() => r.close(), 300); st.room = null; } };
     setStatus('connecting');
@@ -212,7 +269,7 @@
   function connect() {
     if (conn) { conn.closed = true; conn.reconnect(); }
     if (cfg.room && window.KLMNet) { conn = netConnect(); return; }
-    conn = KMP.connect('camera', () => ({ name: cfg.name, slot: +cfg.slot, meta: { ua: navigator.userAgent } }), { status: setStatus, message: onMsg });
+    conn = KMP.connect('camera', () => ({ name: cfg.name, slot: +cfg.slot, meta: { ua: navigator.userAgent, quality: qPending ? cfg.quality : '' } }), { status: setStatus, message: onMsg });
   }
 
   // ---------- statistik ----------
@@ -238,13 +295,16 @@
       } catch (e) {}
     }
     $('stats').innerHTML = (s.width || '?') + '×' + (s.height || '?') + ' • ' + fps + 'fps<br>' + (pc ? kbps + ' kbps' + (rtt ? ' • ' + rtt + ' ms' : '') + (netRate < 0.99 ? ' • hemat ' + Math.round(netRate * 100) + '%' : '') : '') + (battery != null ? '<br>🔋 ' + battery + '%' : '');
-    if (conn && conn.open) conn.send({ t: 'cam-info', info: { w: s.width, h: s.height, fps, kbps, battery, rtt, loss: Math.round(loss * 100), net: !!cfg.room } });
+    lastInfo = { w: s.width, h: s.height, fps, kbps, battery, rtt, loss: Math.round(loss * 100), net: !!cfg.room };
+    sendInfo();
   }, 2000);
+  let lastInfo = {};
+  function sendInfo() { if (conn && conn.open) conn.send({ t: 'cam-info', info: Object.assign({}, lastInfo, { facing: cfg.facing, quality: cfg.quality }) }); }
   if (navigator.getBattery) navigator.getBattery().then((b) => { const u = () => { battery = Math.round(b.level * 100); }; u(); b.addEventListener('levelchange', u); }).catch(() => {});
 
   // ---------- tombol ----------
   $('home').onclick = () => { location.href = KMP.page('hp'); };
-  $('flip').onclick = flip;
+  $('flip').onclick = () => flip();
   $('torch').onclick = () => setTorch(!torchOn);
   $('mic').onclick = () => { cfg.mic = !cfg.mic; if (aTrack) aTrack.enabled = cfg.mic; $('mic').textContent = cfg.mic ? '🎤' : '🔇'; KMP.toast(cfg.mic ? 'Mic aktif' : 'Mic dimatikan'); };
   $('focus').onclick = focusAuto;
@@ -268,14 +328,25 @@
   $('openSet').onclick = openPanel; $('startSet').onclick = openPanel;
   $('sCancel').onclick = () => $('panel').classList.remove('show');
   $('sSave').onclick = async () => {
+    const before = { srv: KMP.get('server', ''), room: cfg.room, name: cfg.name, slot: cfg.slot, facing: cfg.facing, quality: cfg.quality, ns: cfg.ns };
     if (!KMP.servedByPc) KMP.set('server', $('sSrv').value.trim());
     cfg.room = $('sRoom').value.toUpperCase().replace(/[^A-Z0-9]/g, ''); KMP.set('room', cfg.room);
-    cfg.name = $('sName').value.trim() || KMP.deviceName(); cfg.slot = +slotSel.value; cfg.facing = $('sFacing').value; cfg.quality = $('sQual').value; cfg.ns = $('sNs').checked; cfg.mirror = $('sMirror').checked;
-    KMP.set('camname', cfg.name); KMP.set('slot', cfg.slot); KMP.set('facing', cfg.facing); KMP.set('quality', cfg.quality); KMP.set('ns', cfg.ns); KMP.set('mirror', cfg.mirror);
-    settings = parseQ(cfg.quality);
+    cfg.name = $('sName').value.trim() || KMP.deviceName(); cfg.slot = +slotSel.value; cfg.ns = $('sNs').checked; cfg.mirror = $('sMirror').checked;
+    const facing = $('sFacing').value, quality = $('sQual').value;
+    KMP.set('camname', cfg.name); KMP.set('slot', cfg.slot); KMP.set('ns', cfg.ns); KMP.set('mirror', cfg.mirror);
     $('panel').classList.remove('show');
+    const qChanged = quality !== before.quality;
+    if (qChanged) { cfg.quality = quality; KMP.set('quality', quality); settings = Object.assign({}, settings, parseQ(quality)); qPending = true; }
     labels();
-    if (started) { await startMedia(); connect(); }
+    if (!started) { if (facing !== cfg.facing) { cfg.facing = facing; KMP.set('facing', facing); labels(); } return; }
+    const reconnect = KMP.get('server', '') !== before.srv || cfg.room !== before.room || cfg.name !== before.name || cfg.slot !== before.slot;
+    try {
+      if (cfg.ns !== before.ns) { if (aTrack) aTrack.stop(); aTrack = await openAudio(); if (aTrack) aTrack.enabled = cfg.mic; const as = pc && pc.getSenders().find((x) => x.track && x.track.kind === 'audio'); if (as && aTrack) await as.replaceTrack(aTrack); }
+      if (facing !== cfg.facing || qChanged) await reopenVideo(facing);
+    } catch (e) {}
+    // kualitas dipilih di HP → PC ikut (input KLMCAM di PC diperbarui, PC membalas dengan bitrate miliknya)
+    if (qChanged && conn && conn.open && !reconnect) conn.send({ t: 'cam-quality', quality });
+    if (reconnect) connect();
   };
 
   $('startBtn').onclick = async () => {

@@ -125,6 +125,8 @@ code { font: 12px var(--mono); color: #9cc3ff; }
 .cwrap::after { content: ''; position: absolute; inset: 0; pointer-events: none; display: none; align-items: center; justify-content: center; color: var(--tx3); font-weight: 800; font-size: 11px; letter-spacing: 2px; background: repeating-linear-gradient(135deg, rgba(255, 255, 255, .015) 0 12px, transparent 12px 24px); }
 .screen.nosig .cwrap::after { content: 'TIDAK ADA SUMBER'; display: flex; }
 .cwrap canvas { display: block; width: 100%; height: auto; aspect-ratio: var(--ar, 1.77778); background: #000; } /* bingkai = rasio output: kanvas mengisi penuh, tanpa ruang hitam */
+.cwrap video.monlive { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; pointer-events: none; visibility: hidden; z-index: 1; }
+.cwrap video.monlive.on { visibility: visible; }
 .screen.pvw { border-color: rgba(30, 194, 107, .35); } .screen.pgm { border-color: rgba(242, 69, 61, .45); }
 .screen.pvw .screen-head { background: linear-gradient(90deg, var(--pvw-a), transparent 55%); }
 .screen.pgm .screen-head { background: linear-gradient(90deg, var(--pgm-a), transparent 55%); }

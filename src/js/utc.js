@@ -182,6 +182,13 @@
       drawLayer(ctx, L, W, H);
     }
   };
+  /** apakah lapisan ON AIR sedang menggambar sesuatu di Program (ON AIR tetapi tanpa grafis tampil = tidak) */
+  U.drawsDSK = function () {
+    const ui = U.input(), si = SC.input();
+    const acara = !!ui && U.onAir() && !viaInput(ui), score = !!si && KM.settings.scoreOnAir && !viaInput(si);
+    if (!acara && !score) return false;
+    return ORDER.some((id) => (id === 'score' ? score : acara) && layerVisible(LY[id]));
+  };
   U.animating = () => ACARA.some((id) => LY[id].native) || (KM.settings.scoreOnAir && LY.score.has && SC.has());
   U.canvas = () => composite(ACARA);
   let compCv = null;

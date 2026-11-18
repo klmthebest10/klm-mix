@@ -140,6 +140,14 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.17.1
+- **Tampilan input lebih mulus.** Kamera, KLMCAM, capture, dan video yang tampil apa adanya (tanpa efek/crop/layer) di Preview dan Program kini ditampilkan langsung dari stream-nya, sehingga semulus kamera aslinya. Saat ada transisi, overlay, atau grafis UTC, monitor otomatis kembali ke gambar mixer.
+- Preview digambar setiap frame (dulu hanya 30 fps saat output 50/60 fps). Thumbnail yang bergerak (title, UTC, video) kembali 30 fps (dulu sering turun ke ±15–20 fps). Multiview digambar tiap frame sampai 30 fps. Monitor di panel UTC mengikuti fps KLM.
+- Pengaman: di PC tanpa akselerasi GPU, atau bila fps turun, monitor otomatis memakai gambar mixer.
+- **KLMCAM: kualitas PC & HP selalu sama.** Kualitas yang diubah di PC tersimpan juga di HP. Kualitas yang diubah di HP ikut mengubah input KLMCAM di PC. Kualitas yang diatur di PC saat HP belum tersambung dipakai begitu HP tersambung. Pergantian resolusi kini membuka ulang kamera agar benar-benar berubah.
+- **KLMCAM: kamera depan/belakang andal.** Kamera lama dilepas dulu sebelum kamera lain dibuka (banyak HP Android tidak bisa membuka dua kamera sekaligus). Kamera dipilih dengan pasti (bukan sekadar "disarankan"). Ketukan beruntun diabaikan sampai kamera siap. Bila gagal, kembali ke kamera semula dengan pesan. Panel PC menampilkan kamera yang sedang aktif (tombol "Ke depan / Ke belakang").
+- **UTC Acara: panel lengkap & jendela tidak lagi kosong tanpa keterangan.** Panel yang sempat dimuat dalam keadaan terkunci atau gagal dimuat kini dimuat ulang otomatis (juga setelah lisensi diaktifkan). Bila halaman panel mengalami galat, pesan galat ditampilkan dengan tombol Muat ulang. Gangguan sesaat saat memeriksa lisensi tidak lagi mengunci fitur.
+
 ### Baru di v1.17.0
 - **Update di dalam aplikasi.** KLM memeriksa versi baru sendiri (saat dibuka dan tiap 6 jam). Bila ada, muncul popup **Update KLM tersedia** dengan catatan rilis dan tombol **Update sekarang** / **Nanti**.
 - **Update sekarang** mengunduh di latar belakang (KLM tetap bisa dipakai), lalu **Pasang & buka ulang** menutup KLM dengan aman (simpan preset, rekaman/streaming diakhiri dengan benar), memasang tanpa jendela installer, dan membuka KLM kembali. Tidak perlu lagi mengunduh dan menjalankan installer sendiri.

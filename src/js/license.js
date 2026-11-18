@@ -9,6 +9,7 @@
   const fmtDate = (ms) => (ms ? new Date(ms).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
 
   L.set = function (st) {
+    const wasDemo = L.demo;
     L.status = st || null;
     L.demo = !(st && st.licensed);
     L.checked = true;
@@ -16,10 +17,13 @@
     document.body && document.body.classList.toggle('lic-locked', L.demo);
     try { if (KM.state && !KM.state.inputs.length && KM.changed) KM.changed('inputs'); } catch (e) {}
     KM.changed && KM.changed('license');
+    if (wasDemo && !L.demo && KM.ui && KM.ui.reloadUtcFrames) setTimeout(() => { try { KM.ui.reloadUtcFrames(); } catch (e) {} }, 300);
   };
   L.refresh = async function () {
     try { const r = await fetch('/api/license', { cache: 'no-store' }); if (!r.ok) throw new Error('HTTP ' + r.status); L.set(await r.json()); }
-    catch (e) { L.set({ licensed: false, demo: true, deviceId: '', reason: 'Server lisensi tidak tersedia (jalankan versi PC KLM)' }); }
+    catch (e) { // gangguan sesaat tidak mengunci fitur yang sudah berlisensi
+      if (!(L.status && L.status.licensed)) L.set({ licensed: false, demo: true, deviceId: '', reason: 'Server lisensi tidak tersedia (jalankan versi PC KLM)' });
+    }
     return L.status;
   };
   async function post(path, body) {
