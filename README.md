@@ -140,6 +140,12 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.17.0
+- **Update di dalam aplikasi.** KLM memeriksa versi baru sendiri (saat dibuka dan tiap 6 jam). Bila ada, muncul popup **Update KLM tersedia** dengan catatan rilis dan tombol **Update sekarang** / **Nanti**.
+- **Update sekarang** mengunduh di latar belakang (KLM tetap bisa dipakai), lalu **Pasang & buka ulang** menutup KLM dengan aman (simpan preset, rekaman/streaming diakhiri dengan benar), memasang tanpa jendela installer, dan membuka KLM kembali. Tidak perlu lagi mengunduh dan menjalankan installer sendiri.
+- Periksa manual: **Bantuan → ⬆ Periksa update** atau **Pengaturan → Tentang** (ada pilihan mematikan pemeriksaan otomatis). Versi portable diarahkan ke unduhan versi portable terbaru.
+- Panduan merilis versi baru: [docs/UPDATE.md](docs/UPDATE.md).
+
 ### Baru di v1.16.0
 - **Nama baru: KLM — Kinetic Live Mixer**, dengan **logo antena siaran** baru (menara pemancar, lampu suar koral, gelombang sinyal hijau limau→tosca di latar teal tinta). Ikon Windows (.ico multi-ukuran), Android, PWA HP, dan logo di dalam aplikasi ikut diganti. Pengaturan, preset, dan lisensi dari versi sebelumnya tetap terbaca (folder data lama tetap dipakai).
 - **KLM API**: API milik KLM tidak lagi memakai nama/format merek lain. Status XML kini `<klm>…</klm>`; nama fungsi (Cut, Fade, OverlayInput1In, …) tetap sama sehingga tombol Stream Deck/Companion berbasis HTTP tetap jalan.

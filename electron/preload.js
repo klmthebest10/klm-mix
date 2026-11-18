@@ -8,9 +8,10 @@ const INVOKE = ['app:info', 'desktop:sources', 'dialog:open', 'dialog:save', 'di
   'vst:available', 'vst:create', 'vst:editor', 'vst:bypass', 'vst:get-state', 'vst:set-state', 'vst:params', 'vst:set-param', 'vst:destroy', 'vst:stats',
   'app:boot', 'app:ready', 'live:auth-list', 'live:yt-connect', 'live:fb-connect', 'live:forget', 'live:prepare', 'live:end',
   'airplay:start', 'airplay:stop', 'airplay:status', 'airplay:firewall', 'airplay:hotspot', 'sys:open-settings',
-  'procaudio:start', 'procaudio:stop', 'procaudio:available'];
+  'procaudio:start', 'procaudio:stop', 'procaudio:available',
+  'update:info', 'update:check', 'update:download', 'update:install'];
 const SEND = ['file:write-chunk', 'utc:start', 'utc:stop', 'utc:ack', 'utc:reload', 'utc:full', 'utc:pause', 'utc:resume'];
-const ON = ['utc:frame', 'utc:tk', 'vst:event', 'airplay:status', 'procaudio:status'];
+const ON = ['utc:frame', 'utc:tk', 'vst:event', 'airplay:status', 'procaudio:status', 'update:status'];
 
 // port audio plugin VST (MessagePort ke broker) diteruskan ke dunia halaman → AudioWorklet
 ipcRenderer.on('vst:port', (e, d) => { window.postMessage({ klmVstPort: d && d.id }, '*', e.ports); });

@@ -168,7 +168,7 @@ function createMain() {
   // atau membuat preset baru bila belum ada.
   let asking = false;
   mainWin.on('close', (e) => {
-    if (quitting) return;
+    if (quitting || updatingQuit) return;
     e.preventDefault();
     if (asking) return;
     asking = true;
@@ -207,6 +207,10 @@ process.on('unhandledRejection', (e) => { console.warn('[KLM] unhandledRejection
 const vstMgr = require('./vst').setup({ win: () => mainWin });
 const airplay = require('./airplay').setup({ win: () => mainWin, server, configDir: server.configDir });
 const procAudio = require('./procaudio').setup({ win: () => mainWin, server });
+// update di dalam aplikasi (GitHub Releases). Saat memasang, jendela ditutup tanpa dialog konfirmasi lagi
+// (penyimpanan preset & penutupan rekaman sudah dikerjakan halaman sebelum memanggil update:install).
+let updatingQuit = false;
+const updater = require('./updater').create({ getWin: () => mainWin, beforeInstall: async () => { updatingQuit = true; }, log: (m) => console.log(m) });
 // buka halaman Pengaturan Windows tertentu (Proyeksikan ke PC ini / Fitur opsional) untuk Miracast bawaan
 ipcMain.handle('sys:open-settings', (e, page) => {
   const ok = { project: 'ms-settings:project', features: 'ms-settings:optionalfeatures', firewall: 'ms-settings:windowsdefender' };
@@ -433,6 +437,7 @@ function smokeTest() {
         const slow = r.slice().sort((a, b) => b.duration - a.duration).slice(0, 8).map((x) => (() => { try { return new URL(x.name).pathname; } catch (e) { return x.name; } })() + ' @' + Math.round(x.startTime) + ' +' + Math.round(x.duration));
         return JSON.stringify({ origin: Math.round(performance.timeOrigin - ${T0}), req: Math.round(n.requestStart), resp: Math.round(n.responseStart), dom: Math.round(n.domInteractive), dcl: Math.round(n.domContentLoadedEventEnd), load: Math.round(n.loadEventEnd), fcp: Math.round(fcp || 0), n: r.length, slow }); })()`));
       if (idle0.osr.length) { fail++; log('GAGAL: renderer UTC menyala padahal belum ada input'); }
+      log('update (cek rilis): ' + JSON.stringify(await updater.check()));
       // UTC Acara hadir lewat input
       await js('KM.inputs.create("colour", { title: "Latar" }); KM.engine.cut(KM.state.inputs[0].id); KM.utc.addInput({ onAir: true }); KM.ui.openSide("utc")');
       await wait(800);

@@ -772,3 +772,13 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
 /* lisensi: fitur premium terkunci */
 .tile.locked, .qadd button.locked { position: relative; opacity: .72; }
 .tile.locked .lic-lock, .qadd button.locked .lic-lock { position: absolute; top: 6px; right: 7px; font-style: normal; font-size: 12px; }
+
+/* update di dalam aplikasi */
+.upd { display: grid; gap: 12px; min-width: min(520px, 80vw); }
+.upd-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.upd-ver { font-size: 18px; font-weight: 800; letter-spacing: -.2px; } .upd-ver b { color: #16e0c6; }
+.upd-notes { white-space: pre-wrap; max-height: 220px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+.upd-prog { display: grid; gap: 6px; }
+.upd-bar { height: 8px; border-radius: 6px; background: rgba(255,255,255,.08); overflow: hidden; }
+.upd-bar i { display: block; height: 100%; background: linear-gradient(90deg, #d4ff3f, #16e0c6); border-radius: 6px; transition: width .3s; }
+.upd-err { color: #ff9f43; font-weight: 700; }

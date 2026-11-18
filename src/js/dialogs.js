@@ -837,6 +837,7 @@
         return h('div', h('div.sec', h('h4', 'KLM — Kinetic Live Mixer ' + KM.version),
           h('p', 'Studio produksi live all-in-one: switcher, transisi, overlay, grafis UTC Acara, scoreboard UTC Score, kamera HP KLMCAM, mixer audio, rekam, streaming multi-platform, instant replay, playlist, multiview & KLM API.'),
           h('p.muted', 'Berjalan 100% offline. Versi PC (.exe) & aplikasi HP (.apk).')),
+          KM.update ? KM.update.panel() : null,
           h('div.sec', h('h4', 'Browser engine'), h('div.muted', navigator.userAgent)));
       }
     };
@@ -870,6 +871,6 @@
       h('div.sec', h('h4', 'Alur kerja cepat'),
         h('ol', h('li', 'Tambah input (kamera, KLMCAM HP, video, gambar, title).'), h('li', 'Klik thumbnail → masuk Preview (hijau).'), h('li', 'Tekan Cut / transisi → masuk Program (merah).'), h('li', 'Pakai tombol 1–4 di kartu untuk overlay (lower third, logo, running text).'), h('li', 'Rekam / Stream dari bar bawah.'))),
       h('div.sec', h('h4', 'Fungsi API (' + KM.api.list().length + ')'), h('p.muted', 'Contoh: /api/?Function=SetText&Input=3&SelectedName=nama&Value=Ustadz%20Ahmad'), h('div.fnlist', KM.api.list().map((f) => h('div', f))))),
-      [{ label: '🔑 Lisensi', fn: () => { setTimeout(() => KM.license && KM.license.dialog(), 0); } }, { label: 'Tutup', cls: 'pri' }], 'wide');
+      [{ label: '⬆ Periksa update', fn: () => { setTimeout(() => KM.update && KM.update.check(true), 0); } }, { label: '🔑 Lisensi', fn: () => { setTimeout(() => KM.license && KM.license.dialog(), 0); } }, { label: 'Tutup', cls: 'pri' }], 'wide');
   };
 })(window.KM);
