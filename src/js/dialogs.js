@@ -622,7 +622,7 @@
   // =================== PENGATURAN APLIKASI ===================
   D.settings = function (tab) {
     const st = KM.settings;
-    const tabs = [['perf', 'Performa'], ['output', 'Output'], ['trans', 'Transisi & Overlay'], ['rec', 'Rekam'], ['stream', 'Streaming'], ['srt', 'SRT / TV'], ['ndi', 'NDI & VCam'], ['audio', 'Audio'], ['replay', 'Replay'], ['keys', 'Shortcut'], ['net', 'Jaringan & HP'], ['about', 'Tentang']];
+    const tabs = [['perf', 'Performa'], ['output', 'Output'], ['trans', 'Transisi & Overlay'], ['rec', 'Rekam'], ['stream', 'Streaming'], ['srt', 'SRT / TV'], ['ndi', 'NDI & VCam'], ['audio', 'Audio'], ['replay', 'Replay'], ['keys', 'Shortcut'], ['net', 'Jaringan & HP'], ['lisensi', 'Lisensi'], ['about', 'Tentang']];
     const content = h('div');
     const tabBar = h('div.tabs', tabs.map(([k, l]) => h('button', { 'data-k': k, onclick: () => show(k) }, l)));
     const save = () => KM.saveSettings();
@@ -830,6 +830,7 @@
         }
         return box;
       },
+      lisensi() { if (KM.license) { KM.license.refresh().then(() => KM.license._render && KM.license._render()); return KM.license.panel(); } return h('p', 'Modul lisensi tidak tersedia'); },
       about() {
         return h('div', h('div.sec', h('h4', 'KLM Mix ' + KM.version),
           h('p', 'Studio produksi live all-in-one: switcher, transisi, overlay, grafis UTC Acara, scoreboard UTC Score, kamera HP KLMCAM, mixer audio, rekam, streaming multi-platform, instant replay, playlist, multiview & API vMix.'),
@@ -867,6 +868,6 @@
       h('div.sec', h('h4', 'Alur kerja cepat'),
         h('ol', h('li', 'Tambah input (kamera, KLMCAM HP, video, gambar, title).'), h('li', 'Klik thumbnail → masuk Preview (hijau).'), h('li', 'Tekan Cut / transisi → masuk Program (merah).'), h('li', 'Pakai tombol 1–4 di kartu untuk overlay (lower third, logo, running text).'), h('li', 'Rekam / Stream dari bar bawah.'))),
       h('div.sec', h('h4', 'Fungsi API (' + KM.api.list().length + ')'), h('p.muted', 'Contoh: /api/?Function=SetText&Input=3&SelectedName=nama&Value=Ustadz%20Ahmad'), h('div.fnlist', KM.api.list().map((f) => h('div', f))))),
-      [{ label: 'Tutup', cls: 'pri' }], 'wide');
+      [{ label: '🔑 Lisensi', fn: () => { setTimeout(() => KM.license && KM.license.dialog(), 0); } }, { label: 'Tutup', cls: 'pri' }], 'wide');
   };
 })(window.KM);

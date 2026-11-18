@@ -19,6 +19,7 @@
     return KM.getInput(key);
   }
   const need = (i) => { if (!i) throw new Error('Input tidak ditemukan'); return i; };
+  const needTitle = (i) => { need(i); if (i.type !== 'title') throw new Error('Input bukan Title (countdown hanya untuk input Title)'); return i; };
   const bool = (v) => /^(1|true|on|ya|yes)$/i.test(String(v));
 
   const trFn = (type) => (p) => E().transition(type, num(p.Duration, defDur(type)), p.Input || undefined);
@@ -75,9 +76,9 @@
     SelectTitlePreset: (p) => { KM.titles.applyList(need(inp(p)), num(p.Value, 0)); return true; },
     SetTitleTheme: (p) => { const i = need(inp(p)); if (KM.titles.THEMES[p.Value]) i.opts.theme = p.Value; KM.changed('title'); return true; },
     SetTitleTemplate: (p) => { const i = need(inp(p)); if (KM.titles.TPL[p.Value]) i.opts.template = p.Value; KM.changed('title'); return true; },
-    StartCountdown: (p) => { KM.titles.countdown(need(inp(p)), 'start'); return true; },
-    PauseCountdown: (p) => { KM.titles.countdown(need(inp(p)), 'pause'); return true; },
-    StopCountdown: (p) => { KM.titles.countdown(need(inp(p)), 'reset'); return true; },
+    StartCountdown: (p) => { KM.titles.countdown(needTitle(inp(p)), 'start'); return true; },
+    PauseCountdown: (p) => { KM.titles.countdown(needTitle(inp(p)), 'pause'); return true; },
+    StopCountdown: (p) => { KM.titles.countdown(needTitle(inp(p)), 'reset'); return true; },
 
     // ---- audio ----
     SetVolume: (p) => KM.audio.set(need(inp(p, 'program')), 'vol', rel(need(inp(p, 'program')).audio.vol, p.Value, 0, 100)),

@@ -8,3 +8,9 @@ mobile/android/
 native/vsthost/build/
 native/airplay/build/
 native/procaudio/build/
+
+# kunci lisensi penjual — JANGAN di-commit
+*.pem
+*private-key*
+*.klmlic
+lisensi-terbit.csv

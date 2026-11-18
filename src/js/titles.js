@@ -535,6 +535,7 @@
     next(inp) { KM.titles.applyList(inp, inp.opts.listIdx + 1); },
     prev(inp) { KM.titles.applyList(inp, inp.opts.listIdx - 1); },
     countdown(inp, cmd) {
+      if (!inp || inp.type !== 'title') return;
       const o = inp.opts, f = KM.titles.fields(inp), total = (parseFloat(f.menit) || 0) * 60;
       if (cmd === 'start') { if (o.cdPausedLeft != null) { o.cdEnd = Date.now() + o.cdPausedLeft * 1000; o.cdPausedLeft = null; } else if (!o.cdEnd) o.cdEnd = Date.now() + total * 1000; }
       else if (cmd === 'pause') { if (o.cdEnd) { o.cdPausedLeft = Math.max(0, (o.cdEnd - Date.now()) / 1000); } }

@@ -515,6 +515,7 @@
       drawOverlays(c);
       if (KM.utc) KM.utc.drawDSK(c, E.W, E.H); // lapisan UTC ON AIR (grafis UTC KLM Acara asli)
       if (f.v > 0) { c.fillStyle = 'rgba(0,0,0,' + f.v + ')'; c.fillRect(0, 0, E.W, E.H); }
+      if (KM.license && KM.license.demo) KM.license.watermark(c, E.W, E.H); // mode DEMO (belum ada lisensi)
       E.progAt = E.progDrawAt = now;
     } else E.progAt = now; // isi kanvas Program masih sama dengan keadaan sekarang
 

@@ -140,6 +140,10 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.15.0
+- **Lisensi per perangkat (offline).** Tiap komputer punya Device ID (`KLM-XXXX-XXXX-XXXX-XXXX`); penjual membuat kunci lisensi bertanda tangan (ECDSA P-256) untuk Device ID itu. Tanpa lisensi KLM Mix berjalan dalam **mode DEMO** (semua fitur jalan, Program diberi watermark). Aktivasi di **Bantuan → 🔑 Lisensi**, **Pengaturan → Lisensi**, atau klik tanda **DEMO** di bar atas. Alat penjual: `tools/license/pembuat-lisensi.html` (offline) dan `tools/license/klm-license.js`. Panduan: [docs/LISENSI.md](docs/LISENSI.md).
+- Perbaikan: fungsi API `StartCountdown` / `PauseCountdown` / `StopCountdown` tidak lagi error bila diarahkan ke input yang bukan Title.
+
 ### Baru di v1.14.13
 - **Panel lengkap UTC Acara tampil normal lagi.** Sejak v1.14.6 panel terjepit di bawah monitor (di PC sebagian isi terpotong, di HP/APK hanya ±50 px sehingga panel seolah hilang). Kini panel selalu mendapat tinggi cukup dan monitor Preview/Program tetap ukuran penuh; bila layar kurang tinggi halaman cukup digulir.
 - **Jendela sendiri UTC Acara dikembalikan seperti semula**: tombol mengambang KLM Mix kembali ada, tombol tambahan "UTC ON AIR" di header dihapus, daftar input kembali "INPUT n + nama".

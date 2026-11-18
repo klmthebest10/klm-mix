@@ -111,6 +111,7 @@
         send({ t: 'fn-res', to: m.from, reqId: m.reqId, ok, msg });
         break;
       }
+      case 'license': KM.license && KM.license.set(m.status); break;
       case 'xml': send({ t: 'xml-res', to: m.from, reqId: m.reqId, ok: true, xml: KM.api.xml() }); break;
       case 'get-state': pushState(true, m.from); break;
       case 'sub': { const p = L.peers.get(m.from); if (p) p.sub = { mon: !!m.mon, inputs: !!m.inputs, rate: m.rate || 400 }; break; }

@@ -17,6 +17,7 @@ const { WebSocketServer } = require('ws');
 const hub = require('./hub');
 const createUtc = require('./utc');
 const createScore = require('./score');
+const license = require('./license').create({ configDir });
 
 const ROOT = path.join(__dirname, '..');
 const DEFAULTS = { httpPort: 8620, httpsPort: 8621, tcpPort: 8622, mirrorPort: 8624 };
@@ -227,6 +228,26 @@ const ROUTES = {
   '/hp': 'web/index.html', '/call': 'web/call.html', '/favicon.ico': 'build/icon-256.png', '/mirror': 'web/mirror.html', '/cam': 'web/camera.html', '/camera': 'web/camera.html', '/remote': 'web/remote.html'
 };
 
+// ---------- lisensi per perangkat ----------
+function readJsonBody(req, limit = 16384) {
+  return new Promise((resolve) => {
+    let b = ''; req.on('data', (d) => { b += d; if (b.length > limit) req.destroy(); });
+    req.on('end', () => { try { resolve(JSON.parse(b || '{}')); } catch (e) { resolve({}); } });
+    req.on('error', () => resolve({}));
+  });
+}
+async function handleLicense(req, res, p) {
+  const send = (code, o) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(o)); };
+  if (p === '/api/license' && req.method === 'GET') return send(200, license.status());
+  // aktivasi / hapus hanya dari komputer ini sendiri (bukan dari perangkat lain di jaringan)
+  if (!isLoopback(req)) return send(403, { ok: false, reason: 'Aktivasi lisensi hanya bisa dari komputer KLM Mix itu sendiri' });
+  if (req.method !== 'POST') return send(405, { ok: false });
+  if (p === '/api/license/activate') { const b = await readJsonBody(req); const r = license.activate(b.key); notifyLicense(); return send(r.ok ? 200 : 400, r); }
+  if (p === '/api/license/remove') { const r = license.remove(); notifyLicense(); return send(200, r); }
+  return send(404, { ok: false });
+}
+function notifyLicense() { const m = mixer(); if (m) send(m, { t: 'license', status: license.status() }); }
+
 async function handleHttp(req, res, ports) {
   const u = new URL(req.url, 'http://x');
   let p = decodeURIComponent(u.pathname);
@@ -250,6 +271,7 @@ async function handleHttp(req, res, ports) {
     res.writeHead(r.ok ? 200 : 500, { 'Content-Type': 'text/plain; charset=utf-8' });
     return res.end(r.ok ? 'Function completed successfully.' : ('Error: ' + (r.msg || 'gagal')));
   }
+  if (p === '/api/license' || p.startsWith('/api/license/')) return handleLicense(req, res, p);
   if (p === '/api/state') {
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     return res.end(JSON.stringify(lastState || {}));
@@ -402,7 +424,7 @@ async function start(opts) {
   return { ports, ips: localIPs() };
 }
 
-module.exports = { start, localIPs, loadConfig, saveConfig, configDir, hub, mirror, utc: () => utc, score: () => score };
+module.exports = { start, localIPs, loadConfig, saveConfig, configDir, hub, mirror, license, utc: () => utc, score: () => score };
 
 function cleanup() { try { hub.shutdown(); } catch (e) {} try { if (utc) utc.shutdown(); } catch (e) {} try { if (score) score.shutdown(); } catch (e) {} }
 process.on('exit', cleanup);
