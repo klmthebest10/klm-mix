@@ -156,15 +156,13 @@ jobs:
           path: ${{ runner.temp }}/smoke
           if-no-files-found: ignore
 
-      - name: Uji Device ID lisensi (harus dari perangkat keras, stabil)
+      - name: Uji Device ID lisensi (harus dari UUID perangkat keras, stabil)
         shell: pwsh
         run: |
-          $r = node -e "const L=require('./electron/license.js'); const a=L.deviceId(); delete require.cache[require.resolve('./electron/license.js')]; const b=require('./electron/license.js').deviceId(); console.log(JSON.stringify({id:a, sama:a===b, sumber:L.deviceSource()}))"
+          $env:CIM_UUID = (Get-CimInstance Win32_ComputerSystemProduct).UUID
+          $r = node -e "const L=require('./electron/license.js'); const a=L.deviceId(); delete require.cache[require.resolve('./electron/license.js')]; const b=require('./electron/license.js').deviceId(); const c=require('crypto').createHash('sha256').update('klm-device-v2|hw:'+String(process.env.CIM_UUID).toLowerCase()).digest(); const B='0123456789ABCDEFGHJKMNPQRSTVWXYZ'; let bits=0,v=0,o=''; for (const x of c){v=(v<<8)|x;bits+=8;while(bits>=5&&o.length<16){o+=B[(v>>>(bits-5))&31];bits-=5}} const exp='KLM-'+o.match(/.{4}/g).join('-'); console.log(JSON.stringify({id:a, sama:a===b, sumber:L.deviceSource(), cocokUUID:a===exp}))"
           Write-Host "Device ID: $r"
-          if ($r -notmatch '"sumber":"hw') { Write-Host "::warning::Device ID tidak diambil dari perangkat keras" }
-          node -e "const L=require('./electron/license.js'); const i=L.smbiosIds(); console.log('smbios:', JSON.stringify({uuid:i.uuid, sys:!!i.sysSerial, board:!!i.boardSerial}))"
-          Write-Host ("CIM UUID: " + (Get-CimInstance Win32_ComputerSystemProduct).UUID)
-          $o = reg query "HKLM\SYSTEM\CurrentControlSet\Services\mssmbios\Data" /v SMBiosData; Write-Host ("reg lines: " + $o.Count + " len: " + ($o -join '').Length); $o | Select-Object -First 3 | ForEach-Object { Write-Host $_.Substring(0, [Math]::Min(120, $_.Length)) }
+          if ($r -notmatch '"cocokUUID":true') { Write-Host "::warning::Device ID tidak sama dengan UUID perangkat keras (CIM)" }
 
       - name: Build aplikasi (folder, belum jadi installer)
         run: npx electron-builder --win dir --x64 --publish never

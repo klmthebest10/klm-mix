@@ -75,15 +75,19 @@ function machineRaw() {
   if (process.env.KLM_DEVICE_RAW && (!process.versions.electron || process.defaultApp)) return process.env.KLM_DEVICE_RAW;
   try {
     if (process.platform === 'win32') {
+      // 1) UUID sistem dari tabel SMBIOS di registry (di sebagian PC field UUID di salinan ini berisi nol)
       const id = smbiosIds();
       if (good(id.uuid)) return 'hw:' + id.uuid;
-      const ser = [id.boardSerial, id.sysSerial].filter(good);
-      if (ser.length) return 'hws:' + ser.join('|').toLowerCase();
-      // cadangan: UUID via CIM (PowerShell) bila registry SMBIOS tidak terbaca
+      // 2) UUID yang sama yang dicatat Windows di HardwareConfig (cepat, tanpa PowerShell)
+      const sysRoot = process.env.SystemRoot || 'C:\\Windows';
+      const hc = run(path.join(sysRoot, 'System32', 'reg.exe'), ['query', 'HKLM\\SYSTEM\\HardwareConfig', '/v', 'LastConfig']).match(/LastConfig\s+REG_SZ\s+\{?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\}?/i);
+      if (hc && good(hc[1])) return 'hw:' + hc[1].toLowerCase();
+      // 3) UUID via CIM (PowerShell, lebih lambat)
       const ps = run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', '(Get-CimInstance Win32_ComputerSystemProduct).UUID; (Get-CimInstance Win32_BaseBoard).SerialNumber']).split(/\r?\n/).map((x) => x.trim());
       if (good(ps[0])) return 'hw:' + ps[0].toLowerCase();
-      if (good(ps[1])) return 'hws:' + ps[1].toLowerCase();
-      const sysRoot = process.env.SystemRoot || 'C:\\Windows';
+      // 4) serial motherboard / sistem
+      const ser = [id.boardSerial, id.sysSerial, ps[1]].filter(good);
+      if (ser.length) return 'hws:' + [...new Set(ser.map((x) => x.toLowerCase()))].join('|');
       const out = run(path.join(sysRoot, 'System32', 'reg.exe'), ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid']);
       const g = out.match(/MachineGuid\s+REG_\w+\s+([0-9a-f-]{20,})/i);
       if (g) return 'win:' + g[1].toLowerCase(); // berubah bila Windows di-install ulang (hanya bila perangkat keras tidak punya ID)
