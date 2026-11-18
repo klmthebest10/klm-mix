@@ -15,11 +15,12 @@ Sejak v1.17.0, KLM (versi installer) memeriksa versi baru sendiri dari **GitHub 
 
 1. Naikkan versi di `package.json` (`"version"`) dan `src/js/core.js` (`KM.version`), misalnya `1.17.1`.
 2. Tulis catatan di `README.md` dengan judul **`### Baru di v1.17.1`**. Isi bagian ini otomatis menjadi catatan rilis yang tampil di popup update.
-3. Commit, lalu buat dan kirim tag:
+3. Commit ke `main` dengan pesan yang memuat **`[rilis]`**, lalu push:
    ```
-   git tag v1.17.1
-   git push origin v1.17.1
+   git commit -am "KLM v1.17.1 [rilis]"
+   git push origin main
    ```
+   (Cara lama tetap bisa: push tag `v1.17.1`.) Tag `v1.17.1` dibuat otomatis di repo rilis.
 4. GitHub Actions membangun installer, menandatanganinya bila sertifikat sudah dipasang (lihat `docs/SIGNING.md`), lalu menerbitkan Release di `klm-releases` berisi `KLM-Setup-1.17.1.exe`, `KLM-Portable-1.17.1.exe`, `latest.yml`, dan `KLM-HP.apk`.
 5. KLM di PC yang sedang menyala mendapat popup update dalam beberapa jam (atau saat dibuka). Aplikasi HP memeriksa saat dibuka.
 
@@ -27,7 +28,7 @@ Sejak v1.17.0, KLM (versi installer) memeriksa versi baru sendiri dari **GitHub 
 
 KLM HP memeriksa rilis terbaru saat dibuka (paling sering tiap 6 jam). Bila ada APK lebih baru muncul popup **Update KLM HP tersedia** dengan **Update sekarang / Nanti**. *Update sekarang* mengunduh APK di dalam aplikasi (dengan progres) lalu membuka penginstal Android; Android meminta izin "Pasang aplikasi tak dikenal" sekali untuk KLM HP. Pemasangan tetap dikonfirmasi pengguna (aturan Android untuk aplikasi di luar Play Store).
 
-Push ke `main` tanpa tag hanya membangun installer uji (artifact Actions), **tidak** memicu update ke pengguna.
+Push ke `main` tanpa `[rilis]` di pesan commit hanya membangun installer uji (artifact Actions), **tidak** memicu update ke pengguna.
 
 ## Repo rilis publik: `klmthebest10/klm-releases`
 

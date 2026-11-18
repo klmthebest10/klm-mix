@@ -24,6 +24,16 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      # rilis = push tag v*  ATAU  commit ke main yang pesannya memuat [rilis] (tag dibuat di repo rilis)
+      - name: Mode rilis?
+        shell: bash
+        env:
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] || { [[ "$GITHUB_REF" == refs/heads/main ]] && [[ "$MSG" == *"[rilis]"* ]]; }; then echo "RELEASE=1" >> "$GITHUB_ENV"; echo "RILIS v$V"; else echo "RELEASE=0" >> "$GITHUB_ENV"; echo "bukan rilis"; fi
+
       # Android SDK sudah tersedia di runner GitHub (ANDROID_HOME)
       - name: Cek Android SDK
         run: echo "ANDROID_HOME=$ANDROID_HOME" && ls "$ANDROID_HOME/platforms" | tail -3
@@ -64,9 +74,11 @@ jobs:
           if-no-files-found: error
 
       - name: Publish release (tag v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE == '1'
         uses: softprops/action-gh-release@v2
         with:
           repository: ${{ vars.RELEASE_REPO || 'klmthebest10/klm-releases' }}
           token: ${{ secrets.RELEASE_TOKEN }}
+          tag_name: v${{ env.VERSION }}
+          name: KLM v${{ env.VERSION }}
           files: KLM-HP.apk

@@ -24,6 +24,16 @@ jobs:
         with:
           node-version: 20
 
+      # rilis = push tag v*  ATAU  commit ke main yang pesannya memuat [rilis] (tag dibuat di repo rilis)
+      - name: Mode rilis?
+        shell: bash
+        env:
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] || { [[ "$GITHUB_REF" == refs/heads/main ]] && [[ "$MSG" == *"[rilis]"* ]]; }; then echo "RELEASE=1" >> "$GITHUB_ENV"; echo "RILIS v$V"; else echo "RELEASE=0" >> "$GITHUB_ENV"; echo "bukan rilis"; fi
+
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
@@ -184,7 +194,7 @@ jobs:
         run: ./build/sign-windows.ps1 -Files "dist/win-unpacked/KLM.exe","dist/win-unpacked/resources/vsthost/klm-vsthost.exe","dist/win-unpacked/resources/procaudio/klm-procaudio.exe","dist/win-unpacked/resources/airplay/klm-airplay.exe"
       # B) SSL.com eSigner (sertifikat di cloud/HSM) — hanya saat rilis tag v* agar kuota tanda tangan hemat
       - name: Tanda tangan KLM.exe (SSL.com eSigner)
-        if: env.ES_USERNAME != '' && env.WIN_CSC_LINK == '' && startsWith(github.ref, 'refs/tags/v')
+        if: env.ES_USERNAME != '' && env.WIN_CSC_LINK == '' && env.RELEASE == '1'
         uses: sslcom/esigner-codesign@develop
         with:
           command: sign
@@ -206,7 +216,7 @@ jobs:
         shell: pwsh
         run: ./build/sign-windows.ps1 -Files (Get-ChildItem dist/*.exe | ForEach-Object { $_.FullName })
       - name: Daftar installer untuk eSigner
-        if: env.ES_USERNAME != '' && env.WIN_CSC_LINK == '' && startsWith(github.ref, 'refs/tags/v')
+        if: env.ES_USERNAME != '' && env.WIN_CSC_LINK == '' && env.RELEASE == '1'
         id: inst
         shell: pwsh
         run: |
@@ -274,16 +284,18 @@ jobs:
           if-no-files-found: error
 
       - name: Catatan rilis (dari README "Baru di vX")
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: node build/release-tools.js notes ${{ github.ref_name }}
+        if: env.RELEASE == '1'
+        run: node build/release-tools.js notes ${{ env.VERSION }}
 
       # latest.yml + installer (+ blockmap) = sumber update di dalam aplikasi
       - name: Publish release (tag v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE == '1'
         uses: softprops/action-gh-release@v2
         with:
           repository: ${{ vars.RELEASE_REPO || 'klmthebest10/klm-releases' }}
           token: ${{ secrets.RELEASE_TOKEN }}
+          tag_name: v${{ env.VERSION }}
+          name: KLM v${{ env.VERSION }}
           body_path: dist/release-notes.md
           files: |
             dist/*.exe
