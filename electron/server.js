@@ -223,7 +223,7 @@ function sendShell(req, res, buf, type, etag) {
 
 function isLoopback(req) {
   const a = (req.socket.remoteAddress || '').replace('::ffff:', '');
-  return a === '127.0.0.1' || a === '::1';
+  return /^127\./.test(a) || a === '::1'; // seluruh 127.0.0.0/8 = komputer ini (lapisan UTC memakai 127.0.0.2…)
 }
 
 function esc(s) { return String(s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c])); }

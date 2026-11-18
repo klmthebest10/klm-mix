@@ -140,6 +140,10 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.17.2
+- **UTC Acara tidak lagi macet / diam saat diklik.** Penyebabnya: tiap grafis (lower third, running text, logo, lokasi, sosmed, …) memegang satu sambungan ke alamat KLM yang sama, sedangkan Chromium hanya membuka 6 sambungan sekaligus per alamat. Saat ±5 grafis tampil, klik di panel lengkap, jendela panel, dan tombol UTC di KLM mengantre tanpa batas (awal bisa, lalu diam; panel setengah kosong). Kini tiap grafis memakai alamat lokal sendiri (klm-lt.localhost, dst.) sehingga panel selalu merespons.
+- **Preview setajam Program.** Resolusi Preview kini mengikuti ukuran tampil × skala layar Windows (125/150%), sampai resolusi output. Dulu Preview hanya setengah resolusi lalu diperbesar sehingga tampak buram.
+
 ### Baru di v1.17.1
 - **Tampilan input lebih mulus.** Kamera, KLMCAM, capture, dan video yang tampil apa adanya (tanpa efek/crop/layer) di Preview dan Program kini ditampilkan langsung dari stream-nya, sehingga semulus kamera aslinya. Saat ada transisi, overlay, atau grafis UTC, monitor otomatis kembali ke gambar mixer.
 - Preview digambar setiap frame (dulu hanya 30 fps saat output 50/60 fps). Thumbnail yang bergerak (title, UTC, video) kembali 30 fps (dulu sering turun ke ±15–20 fps). Multiview digambar tiap frame sampai 30 fps. Monitor di panel UTC mengikuti fps KLM.

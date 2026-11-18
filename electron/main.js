@@ -510,6 +510,13 @@ function smokeTest() {
       await js('KM.ui.utcPanel(true, "acara")'); await wait(4000);
       const ok = await js('(() => { try { const f = document.querySelector("#utcFrame"); return !!(f && f.contentDocument && f.contentDocument.querySelector("#panel, .tabs, header")); } catch (e) { return "err " + e.message; } })()');
       log('panel UTC dimuat: ' + ok); if (ok !== true) fail++;
+      // panel harus tetap merespons saat banyak lapisan grafis aktif (batas 6 sambungan per host di Chromium)
+      await post('/utc/api/klm/cmd', { cmd: 'show', target: 'lt' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'logo' });
+      await post('/utc/api/klm/cmd', { cmd: 'show', target: 'ticker' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'loc' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'soc' });
+      await wait(2500);
+      const resp = await js('(async () => { const f = document.querySelector("#utcFrame"); const c = new AbortController(); const t = performance.now(); setTimeout(() => c.abort(), 4000); try { for (let i = 0; i < 5; i++) await f.contentWindow.fetch("/utc/api/info?i=" + i, { cache: "no-store", signal: c.signal }); return Math.round(performance.now() - t) + " ms"; } catch (e) { return "MACET"; } })()');
+      log('panel UTC merespons dengan banyak grafis aktif: ' + resp + ' • host lapisan: ' + JSON.stringify(utcOsr && utcOsr.hosts ? utcOsr.hosts() : '?'));
+      if (resp === 'MACET') { fail++; log('GAGAL: panel UTC tidak merespons saat banyak grafis tampil'); }
       fs.writeFileSync(path.join(out, 'panel.png'), (await mainWin.webContents.capturePage()).toPNG());
       await js('KM.ui.utcPanel(false)');
       await post('/utc/api/klm/cmd', { cmd: 'hideall' });

@@ -18,8 +18,15 @@ module.exports = function setupUtcOsr(o) {
   const layers = new Map(); // id → layer
   let target = null; // webContents mixer
 
+  // Tiap lapisan dimuat dari nama host SENDIRI (klm-lt.localhost, klm-tt.localhost, …; *.localhost selalu = komputer ini).
+  // Chromium hanya membuka 6 sambungan HTTP sekaligus per host; tiap lapisan memegang 1 sambungan event (SSE). Dulu semua
+  // lapisan memakai 127.0.0.1 sehingga saat ±5 grafis tampil, permintaan panel UTC (klik, simpan) mengantre selamanya
+  // → panel kosong / tidak merespons.
+  const HOST_N = { lt: 'lt', tt: 'tt', loc: 'loc', soc: 'soc', oc: 'oc', tk: 'tk', logo: 'logo', main: 'main', all: 'main' };
+  let altHosts = true;
+  const hostFor = (id) => (altHosts && HOST_N[id] ? 'klm-' + HOST_N[id] + '.localhost' : '127.0.0.1');
   function urlFor(id, t) {
-    const base = 'http://127.0.0.1:' + o.port() + '/utc/overlay?klm=1';
+    const base = 'http://' + hostFor(id) + ':' + o.port() + '/utc/overlay?klm=1';
     if (id === 'main') return base + '&only=lt,title,loc,soc,oc';   // (lama, gabungan)
     if (id === 'lt' || id === 'loc' || id === 'soc' || id === 'oc') return base + '&only=' + id;
     if (id === 'tt') return base + '&only=title';
@@ -64,7 +71,12 @@ module.exports = function setupUtcOsr(o) {
       pump(L);
     });
     wc.on('render-process-gone', () => { setTimeout(() => { if (L.t && !wc.isDestroyed()) { L.sentFull = false; tell(L, { k: 'reset' }); wc.loadURL(L.t.url).catch(() => {}); } }, 1000); });
-    wc.on('did-fail-load', (e, code, desc, url) => { if (url === 'about:blank' || code === -3) return; setTimeout(() => { if (L.t && !wc.isDestroyed()) wc.loadURL(L.t.url).catch(() => {}); }, 1500); });
+    wc.on('did-fail-load', (e, code, desc, url) => {
+      if (url === 'about:blank' || code === -3) return;
+      // nama klm-*.localhost tidak bisa dibuka di PC ini → semua lapisan kembali ke 127.0.0.1
+      if (altHosts && /^http:\/\/klm-[a-z]+\.localhost:/.test(url)) { altHosts = false; console.warn('[UTC] host klm-*.localhost gagal (' + desc + '), kembali ke 127.0.0.1'); }
+      setTimeout(() => { if (L.t && !wc.isDestroyed()) { const u2 = urlFor(L.id, L.t); if (u2) L.t.url = u2; wc.loadURL(L.t.url).catch(() => {}); } }, altHosts ? 1500 : 300);
+    });
     wc.on('did-start-navigation', (e, url, inPage, isMain) => { const mf = e && e.isMainFrame != null ? e.isMainFrame : isMain, same = e && e.isSameDocument != null ? e.isSameDocument : inPage; if (mf && !same) tell(L, { k: 'reset' }); });
   }
   function layer(id) {
@@ -142,5 +154,5 @@ module.exports = function setupUtcOsr(o) {
   ipcMain.on('osr:msg', (e, msg) => {
     for (const L of layers.values()) if (L.wc && !L.wc.isDestroyed() && L.wc.id === e.sender.id) { if (L.t && msg && typeof msg === 'object') tell(L, msg); return; }
   });
-  return { stop: () => stop(), active: () => [...layers.values()].some((L) => !!L.t) };
+  return { stop: () => stop(), active: () => [...layers.values()].some((L) => !!L.t), hosts: () => [...layers.values()].filter((L) => L.t).map((L) => L.id + '@' + (String(L.t.url).match(/\/\/([^/:]+)/) || [])[1]) };
 };

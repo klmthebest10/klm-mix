@@ -349,6 +349,9 @@ document.documentElement.classList.add('klmui');
 try { if (window.parent !== window && klmHost()) document.documentElement.classList.add('klm-embed'); } catch(e) {}
 // di dalam KLM monitor Program panel tidak dipakai (Program milik mixer) → overlay tersembunyinya tidak dijalankan (lebih ringan)
 try { if (document.documentElement.classList.contains('klm-embed')) { const f = document.getElementById('pgm'); if (f) f.src = 'about:blank'; } } catch(e) {}
+// jendela panel di PC: monitor Program dimuat dari alamat loopback lain agar sambungan event-nya tidak memakan jatah
+// 6 sambungan per alamat milik KLM (dulu: panel diam/tidak merespons saat banyak grafis tampil)
+try { const f = document.getElementById('pgm'); if (f && !document.documentElement.classList.contains('klm-embed') && location.hostname === '127.0.0.1') f.src = 'http://klm-panel.localhost:' + location.port + '/utc/overlay?bg=1'; } catch(e) {}
 const $ = s => document.querySelector(s);
 let S = null, INFO = { port: location.port, ips: [] };
 const ui = { tab: 'lt', sel: { lt: '', tt: '', loc: '', soc: '' }, ocKind: 'opening', n: 0, pending: false, bulk: false, presets: [] };
