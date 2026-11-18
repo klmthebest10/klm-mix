@@ -14,3 +14,6 @@ native/procaudio/build/
 *private-key*
 *.klmlic
 lisensi-terbit.csv
+
+# salinan pembuat lisensi berisi kunci privat — JANGAN di-commit
+*PRIBADI*

@@ -5,138 +5,312 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pembuat Lisensi KLM</title>
 <style>
-  :root { --bg: #0b0d11; --bg2: #14171d; --card: #1a1e26; --line: #2a303b; --tx: #eceff4; --mut: #8b94a5; --acc: #f08a24; --ok: #2ecc71; --err: #ff6b6b; }
+  :root { --bg: #0a0e14; --bg2: #111722; --card: #151c28; --line: #263042; --tx: #e9edf5; --mut: #8f9bb0; --acc: #16e0c6; --acc2: #d4ff3f; --ok: #2ee59d; --err: #ff6b6b; --wa: #25d366; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--tx); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; }
-  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; }
-  h1 { font-size: 22px; margin: 0 0 4px; } h1 b { color: var(--acc); }
-  h2 { font-size: 15px; margin: 0 0 12px; color: var(--mut); text-transform: uppercase; letter-spacing: 1px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-top: 16px; }
-  label { display: block; font-weight: 600; margin: 10px 0 4px; color: var(--mut); font-size: 12.5px; }
-  input, select, textarea { width: 100%; background: var(--bg2); color: var(--tx); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font: inherit; }
-  textarea { font-family: Consolas, monospace; font-size: 12px; }
-  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  @media (max-width: 600px) { .row { grid-template-columns: 1fr; } }
-  button { background: var(--bg2); color: var(--tx); border: 1px solid var(--line); border-radius: 8px; padding: 9px 14px; font: inherit; font-weight: 700; cursor: pointer; }
-  button.pri { background: linear-gradient(180deg, #f39a3e, #d0700f); border: 0; color: #fff; }
-  button:disabled { opacity: .5; cursor: not-allowed; }
+  main { max-width: 760px; margin: 0 auto; padding: 22px 16px 60px; }
+  h1 { font-size: 21px; margin: 0; } h1 b { background: linear-gradient(90deg, var(--acc2), var(--acc)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { color: var(--mut); font-size: 12.5px; margin-top: 2px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-top: 14px; }
+  .keybar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; }
+  .keybar .st { flex: 1; min-width: 200px; font-weight: 600; }
+  .keybar .st.ok { color: var(--ok); } .keybar .st.err { color: var(--err); }
+  label { display: block; font-weight: 600; margin: 0 0 6px; color: var(--mut); font-size: 12.5px; }
+  textarea, input { width: 100%; background: var(--bg2); color: var(--tx); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; }
+  textarea:focus, input:focus { outline: 2px solid rgba(22, 224, 198, .45); border-color: transparent; }
+  #paste { min-height: 92px; resize: vertical; font-size: 15px; }
+  .det { margin-top: 8px; font-size: 13.5px; min-height: 21px; }
+  .det code { font-size: 14px; color: var(--acc); font-weight: 700; }
+  .det.err { color: var(--err); }
+  .row { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin-top: 12px; align-items: end; }
+  button { background: var(--bg2); color: var(--tx); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  button:hover { border-color: #3a475e; }
+  button.pri { background: linear-gradient(180deg, #22c7ad, #119d88); border: 0; color: #fff; padding: 11px 22px; }
+  button.wa { background: var(--wa); border: 0; color: #062b14; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
   .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
-  .muted { color: var(--mut); font-size: 12.5px; }
-  .msg { font-weight: 700; } .msg.ok { color: var(--ok); } .msg.err { color: var(--err); }
+  .msg { font-weight: 700; font-size: 13px; } .msg.ok { color: var(--ok); } .msg.err { color: var(--err); }
+  .note { border: 1px solid rgba(212, 255, 63, .35); background: rgba(212, 255, 63, .06); border-radius: 10px; padding: 9px 12px; font-size: 13px; margin-top: 12px; }
+  #out { font-family: Consolas, monospace; font-size: 12.5px; min-height: 210px; }
+  details { margin-top: 10px; } summary { cursor: pointer; color: var(--mut); font-size: 12.5px; }
+  details .in { margin-top: 8px; display: grid; gap: 10px; }
   table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   th { color: var(--mut); font-weight: 600; }
   td code { font-size: 11.5px; }
-  .warn { border-color: rgba(240, 138, 36, .5); background: rgba(240, 138, 36, .07); }
-  .tablewrap { overflow-x: auto; }
+  .tablewrap { overflow-x: auto; margin-top: 8px; }
+  .hhead { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .hhead h2 { flex: 1; margin: 0; font-size: 14px; color: var(--mut); font-weight: 700; }
+  .hhead input { max-width: 240px; padding: 7px 10px; }
+  .muted { color: var(--mut); font-size: 12.5px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Pembuat Lisensi <b>KLM</b> <span style="font-weight:500;color:var(--mut);font-size:15px">Kinetic Live Mixer</span></h1>
-  <div class="muted">Berjalan 100% offline di browser ini. Kunci privat hanya dibaca ke memori, tidak disimpan dan tidak dikirim ke mana pun.</div>
+  <h1>Pembuat Lisensi <b>KLM</b></h1>
+  <div class="sub">Kinetic Live Mixer · berjalan offline di browser ini, tidak ada data yang dikirim ke internet</div>
 
-  <div class="card warn">
-    <h2>1 · Kunci privat penjual</h2>
-    <div class="muted">Pilih file <code>klm-mix-private-key.jwk.json</code> atau <code>klm-mix-private-key.pem</code>. Jangan pernah membagikan file ini.</div>
-    <div class="acts">
-      <input type="file" id="keyFile" accept=".json,.pem,.txt" style="max-width:340px">
-      <span id="keyMsg" class="msg"></span>
-    </div>
+  <!-- kunci penjual: cukup sekali -->
+  <div class="card keybar">
+    <span class="st" id="keySt">Memuat kunci penjual…</span>
+    <input type="file" id="keyFile" accept=".json,.pem,.txt" hidden>
+    <button class="sm" id="pick" hidden>Pilih file kunci privat…</button>
+    <button class="sm" id="forget" hidden>Lupakan kunci</button>
   </div>
 
   <div class="card">
-    <h2>2 · Data pembeli</h2>
-    <label for="dev">Device ID (dari menu Lisensi di KLM pembeli)</label>
-    <input id="dev" placeholder="KLM-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+    <label for="paste">Tempel pesan dari pembeli (atau Device ID-nya saja)</label>
+    <textarea id="paste" placeholder="Contoh: &quot;Halo, saya Budi dari Masjid Al-Ikhlas, Device ID saya KLM-8VCZ-GHXH-EV49-F6ZC&quot;" spellcheck="false" autofocus></textarea>
+    <div class="det" id="det"></div>
     <div class="row">
-      <div><label for="name">Nama pembeli / instansi</label><input id="name" placeholder="mis. Masjid Agung Al-Ikhlas"></div>
-      <div><label for="plan">Paket</label><input id="plan" value="Pro"></div>
+      <div><label for="name">Nama pembeli (boleh dikosongkan)</label><input id="name" placeholder="mis. Masjid Agung Al-Ikhlas" autocomplete="off"></div>
+      <button class="pri" id="issue" disabled>Buat lisensi</button>
     </div>
-    <div class="muted" style="margin-top:10px">Lisensi berlaku <b>seumur hidup</b> untuk komputer tersebut, termasuk setelah Windows di-install ulang (Device ID diambil dari perangkat keras).</div>
-    <div class="acts"><button class="pri" id="issue" disabled>Buat lisensi</button><span id="issueMsg" class="msg"></span></div>
+    <details>
+      <summary>Lanjutan</summary>
+      <div class="in"><div><label for="plan">Paket</label><input id="plan" value="Pro"></div></div>
+    </details>
+    <div class="muted" style="margin-top:10px">Lisensi selalu <b>seumur hidup</b> untuk komputer itu, termasuk setelah Windows di-install ulang. Tekan <b>Ctrl+Enter</b> untuk membuat lisensi.</div>
   </div>
 
   <div class="card" id="outCard" hidden>
-    <h2>3 · Kunci lisensi</h2>
-    <textarea id="out" rows="5" readonly></textarea>
-    <div class="acts"><button id="copy">Salin kunci</button><button id="dl">Unduh file .klmlic</button></div>
-    <div class="muted" style="margin-top:8px">Kirim kunci atau file .klmlic ke pembeli. Di KLM: <b>Bantuan → 🔑 Lisensi</b>, Pengaturan → Lisensi, atau tombol <b>🔒 Aktifkan</b> di bar atas → tempel kunci → <b>Aktifkan</b>.</div>
+    <label for="out">Pesan untuk pembeli (sudah berisi kunci lisensi dan cara aktivasi)</label>
+    <textarea id="out" readonly></textarea>
+    <div class="acts">
+      <button class="wa" id="wa">Kirim lewat WhatsApp</button>
+      <button id="copyMsg">Salin pesan</button>
+      <button id="copyKey">Salin kunci saja</button>
+      <button id="dl">Unduh file .klmlic</button>
+      <span class="msg" id="outMsg"></span>
+    </div>
   </div>
 
   <div class="card">
-    <h2>Riwayat lisensi yang dibuat (tersimpan di browser ini)</h2>
-    <div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Pembeli</th><th>Device ID</th><th>Paket</th><th>Berlaku</th><th>Serial</th></tr></thead><tbody id="hist"></tbody></table></div>
-    <div class="acts"><button id="csv">Ekspor CSV</button><button id="clr">Hapus riwayat</button></div>
+    <div class="hhead">
+      <h2>Riwayat lisensi (tersimpan di browser ini)</h2>
+      <input id="q" placeholder="Cari nama / Device ID…" autocomplete="off">
+    </div>
+    <div class="tablewrap"><table><thead><tr><th>Tanggal</th><th>Pembeli</th><th>Device ID</th><th>Paket</th><th></th></tr></thead><tbody id="hist"></tbody></table></div>
+    <div class="acts"><button class="sm" id="csv">Ekspor CSV</button><button class="sm" id="imp">Impor CSV</button><input type="file" id="impFile" accept=".csv" hidden><button class="sm" id="clr">Hapus riwayat</button></div>
   </div>
 </main>
 <script>
 'use strict';
+/* Kunci privat tertanam (hanya di salinan pribadi buatan tools/license/buat-pembuat-pribadi.js — file itu RAHASIA). */
+const EMBED_JWK = null; /*__KLM_EMBED_JWK__*/
+/* Kunci publik yang tertanam di aplikasi KLM (electron/license.js). Dipakai untuk memastikan kunci privat cocok. */
+const PUBLIC_PEM = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwWDhCA9YZuiehW09+R5jx7Y9mXzT
+G3okZuNedwp9Aps7GaHrfnbAxtMe3maHRzph7qjjaEB8s/ltEq630JVXjg==
+-----END PUBLIC KEY-----`;
+
 const $ = (s) => document.querySelector(s);
-const B32 = /^[0-9A-HJKMNP-TV-Z]{16}$/;
+const ALG = { name: 'ECDSA', namedCurve: 'P-256' }, SIG = { name: 'ECDSA', hash: 'SHA-256' };
 const b64u = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const b64uStr = (s) => b64u(new TextEncoder().encode(s));
-let privKey = null, lastKey = '', lastDev = '';
 const HKEY = 'klmlic.history';
-const hist = () => { try { return JSON.parse(localStorage.getItem(HKEY) || '[]'); } catch (e) { return []; } };
-const setMsg = (el, t, ok) => { el.textContent = t; el.className = 'msg ' + (ok ? 'ok' : 'err'); };
+let privKey = null, pubKey = null, cur = null; // cur = {dev, name, key}
 
-function normDev(s) {
-  const raw = String(s || '').toUpperCase().replace(/[^0-9A-Z]/g, '').replace(/^KLM/, '');
-  return B32.test(raw) ? 'KLM-' + raw.match(/.{4}/g).join('-') : '';
+/* ---------- riwayat ---------- */
+const hist = () => { try { return JSON.parse(localStorage.getItem(HKEY) || '[]'); } catch (e) { return []; } };
+const saveHist = (h) => { try { localStorage.setItem(HKEY, JSON.stringify(h.slice(0, 5000))); } catch (e) {} };
+const setMsg = (el, t, ok) => { el.textContent = t; el.className = (el.classList.contains('st') ? 'st ' : 'msg ') + (ok ? 'ok' : 'err'); };
+
+/* ---------- Device ID: dikenali dari teks apa pun ---------- */
+// Crockford base32 (tanpa I L O U). Huruf yang sering salah ketik dibetulkan: O→0, I/L→1.
+function fixChars(s) { return s.toUpperCase().replace(/O/g, '0').replace(/[IL]/g, '1'); }
+function findDevice(text) {
+  const t = String(text || '');
+  const re = /K\s*L\s*M[\s:_\-–.]*([0-9A-Z]{4})[\s_\-–.]*([0-9A-Z]{4})[\s_\-–.]*([0-9A-Z]{4})[\s_\-–.]*([0-9A-Z]{4})(?![0-9A-Z])/gi;
+  const found = [];
+  let m;
+  while ((m = re.exec(t))) {
+    const raw = fixChars(m.slice(1).join(''));
+    if (/^[0-9A-HJKMNP-TV-Z]{16}$/.test(raw)) { const id = 'KLM-' + raw.match(/.{4}/g).join('-'); if (!found.includes(id)) found.push(id); }
+  }
+  if (!found.length) { // tanpa awalan KLM: 16 karakter saja
+    const only = fixChars(t.replace(/[\s\-–_.]/g, ''));
+    if (/^[0-9A-HJKMNP-TV-Z]{16}$/.test(only)) found.push('KLM-' + only.match(/.{4}/g).join('-'));
+  }
+  return found;
 }
-function pemToDer(pem) {
-  const b = atob(pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''));
-  const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u.buffer;
+// tebakan nama dari pesan: "saya Budi", "nama: Budi", "atas nama Budi", "dari Masjid ..."
+function guessName(text) {
+  const t = String(text || '').replace(/K\s*L\s*M[\s:\-]*[0-9A-Z\-\s]{16,24}/gi, ' ');
+  const cut = (s) => (s || '').replace(/\s+(device|id|kode|mau|ingin|minta|mohon|beli|dari|di)\b.*$/i, '').replace(/\s+/g, ' ').trim();
+  const named = t.match(/\b(?:atas\s+nama|nama(?:\s+saya)?|a\.n\.)\s*[:=]?\s*([^\n,.;!?]{2,60})/i);
+  if (named) return cut(named[1]);
+  const inst = t.match(/\b((?:masjid|musholl?a|mushola|surau|gereja|pt|cv|studio|sekolah|smk|sma|smp|sd|mts|tv|radio|yayasan|pondok|ponpes|pesantren|kantor|dinas|universitas|kampus)\s+[^\n,.;!?]{2,50})/i);
+  const person = t.match(/\b(?:[Ss]aya|[Aa]ku)\s+([A-Z][\w'-]*(?:\s+[A-Z][\w'-]*){0,3})/);
+  const ins = inst ? inst[1].replace(/\s+(device|id|kode|mau|ingin|minta|mohon|beli)\b.*$/i, '').trim() : '';
+  const per = person ? cut(person[1]) : '';
+  return per && ins ? per + ' — ' + ins : (ins || per);
 }
+
+let nameTouched = false;
+$('#name').addEventListener('input', () => { nameTouched = !!$('#name').value.trim(); });
+function onPaste() {
+  const det = $('#det'), ids = findDevice($('#paste').value);
+  cur = null; $('#outCard').hidden = true;
+  if (!$('#paste').value.trim()) { det.textContent = ''; det.className = 'det'; updBtn(); return; }
+  if (!ids.length) { det.textContent = 'Device ID belum ditemukan. Bentuknya KLM-XXXX-XXXX-XXXX-XXXX (ada di Bantuan → Lisensi pada KLM pembeli).'; det.className = 'det err'; updBtn(); return; }
+  if (ids.length > 1) { det.textContent = 'Ada ' + ids.length + ' Device ID di pesan ini. Tempel satu saja.'; det.className = 'det err'; updBtn(); return; }
+  const id = ids[0];
+  det.className = 'det';
+  det.innerHTML = '✓ Device ID: <code></code>';
+  det.querySelector('code').textContent = id;
+  const old = hist().find((r) => r.d === id);
+  if (old) {
+    const s = document.createElement('div'); s.className = 'note';
+    s.textContent = 'Device ID ini sudah pernah dibuatkan lisensi pada ' + new Date(old.t).toLocaleDateString('id-ID') + ' atas nama ' + old.n + '. Bila pembeli install ulang Windows, kirim ulang kunci yang sama: ';
+    const b = document.createElement('button'); b.className = 'sm'; b.textContent = 'Tampilkan kunci lama';
+    b.onclick = () => showResult(old.d, old.n, old.k, old.p); s.appendChild(b); det.appendChild(s);
+  }
+  if (!nameTouched) $('#name').value = guessName($('#paste').value);
+  updBtn();
+}
+$('#paste').addEventListener('input', onPaste);
+const updBtn = () => { $('#issue').disabled = !(privKey && findDevice($('#paste').value).length === 1); };
+
+/* ---------- kunci penjual ---------- */
+function pemToDer(pem) { const b = atob(pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '')); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u.buffer; }
+async function matches(k) { // tanda tangan uji harus lolos dengan kunci publik aplikasi
+  const data = new TextEncoder().encode('klm-cek-kunci');
+  const sig = await crypto.subtle.sign(SIG, k, data);
+  return crypto.subtle.verify(SIG, pubKey, sig, data);
+}
+// simpan kunci di IndexedDB sebagai CryptoKey "non-extractable": bisa dipakai menandatangani, tidak bisa dibaca/disalin keluar
+const idb = () => new Promise((res, rej) => { const r = indexedDB.open('klm-lisensi', 1); r.onupgradeneeded = () => r.result.createObjectStore('k'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+async function idbGet() { try { const db = await idb(); return await new Promise((res) => { const q = db.transaction('k').objectStore('k').get('priv'); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }); } catch (e) { return null; } }
+async function idbSet(v) { try { const db = await idb(); await new Promise((res) => { const tx = db.transaction('k', 'readwrite'); v ? tx.objectStore('k').put(v, 'priv') : tx.objectStore('k').delete('priv'); tx.oncomplete = res; tx.onerror = res; }); return true; } catch (e) { return false; } }
+
+function keyState(mode) {
+  const st = $('#keySt');
+  $('#pick').hidden = mode !== 'none'; $('#forget').hidden = mode !== 'saved';
+  if (mode === 'embed') setMsg(st, '✓ Kunci penjual sudah tertanam di file ini, siap membuat lisensi', true);
+  else if (mode === 'saved') setMsg(st, '✓ Kunci penjual tersimpan di browser ini, siap membuat lisensi', true);
+  else { st.textContent = 'Langkah sekali saja: pilih file kunci privat (klm-mix-private-key.jwk.json atau .pem). Sesudah itu browser ini mengingatnya.'; st.className = 'st'; }
+  updBtn();
+}
+async function init() {
+  try { pubKey = await crypto.subtle.importKey('spki', pemToDer(PUBLIC_PEM), ALG, false, ['verify']); }
+  catch (e) { setMsg($('#keySt'), 'Browser ini tidak mendukung Web Crypto. Buka file ini di Chrome atau Edge.', false); return; }
+  try {
+    if (EMBED_JWK) { const k = await crypto.subtle.importKey('jwk', EMBED_JWK, ALG, false, ['sign']); if (await matches(k)) { privKey = k; return keyState('embed'); } setMsg($('#keySt'), '✗ Kunci tertanam tidak cocok dengan aplikasi KLM', false); }
+  } catch (e) { setMsg($('#keySt'), '✗ Kunci tertanam rusak: ' + e.message, false); }
+  const saved = await idbGet();
+  if (saved) { try { if (await matches(saved)) { privKey = saved; return keyState('saved'); } } catch (e) {} }
+  keyState('none');
+}
+$('#pick').onclick = () => $('#keyFile').click();
 $('#keyFile').onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  const txt = await f.text();
+  const txt = await f.text(); e.target.value = '';
   try {
-    const alg = { name: 'ECDSA', namedCurve: 'P-256' };
-    if (txt.trim().startsWith('{')) privKey = await crypto.subtle.importKey('jwk', JSON.parse(txt), alg, false, ['sign']);
-    else if (txt.includes('BEGIN PRIVATE KEY')) privKey = await crypto.subtle.importKey('pkcs8', pemToDer(txt), alg, false, ['sign']);
-    else throw new Error('bukan kunci privat');
-    setMsg($('#keyMsg'), '✓ Kunci privat dimuat', true); $('#issue').disabled = false;
-  } catch (err) { privKey = null; $('#issue').disabled = true; setMsg($('#keyMsg'), 'Gagal membaca kunci: ' + err.message, false); }
+    let k;
+    if (txt.trim().startsWith('{')) k = await crypto.subtle.importKey('jwk', JSON.parse(txt), ALG, false, ['sign']);
+    else if (txt.includes('BEGIN PRIVATE KEY')) k = await crypto.subtle.importKey('pkcs8', pemToDer(txt), ALG, false, ['sign']);
+    else throw new Error('ini bukan file kunci privat');
+    if (!(await matches(k))) throw new Error('kunci ini tidak cocok dengan aplikasi KLM');
+    privKey = k;
+    await idbSet(k);
+    if (await idbGet()) keyState('saved');
+    else { keyState('none'); setMsg($('#keySt'), '✓ Kunci dimuat (browser ini tidak bisa mengingatnya, pilih lagi lain kali)', true); }
+  } catch (err) { setMsg($('#keySt'), '✗ ' + err.message, false); $('#pick').hidden = false; }
 };
-$('#issue').onclick = async () => {
-  const msg = $('#issueMsg');
-  const dev = normDev($('#dev').value);
-  if (!dev) return setMsg(msg, 'Device ID tidak valid (contoh: KLM-AB12-CD34-EF56-GH78)', false);
-  const name = $('#name').value.trim(); if (!name) return setMsg(msg, 'Isi nama pembeli', false);
-  const days = 0; // seumur hidup
+$('#forget').onclick = async () => {
+  if (!confirm('Lupakan kunci penjual dari browser ini? Anda perlu memilih file kunci privat lagi untuk membuat lisensi.')) return;
+  await idbSet(null); privKey = null; keyState('none');
+};
+
+/* ---------- membuat lisensi ---------- */
+async function issue() {
+  const ids = findDevice($('#paste').value);
+  if (!privKey || ids.length !== 1) return;
+  const dev = ids[0], name = $('#name').value.trim() || 'Pengguna KLM', plan = $('#plan').value.trim() || 'Pro';
   const now = Date.now();
   const rnd = Array.from(crypto.getRandomValues(new Uint8Array(2)), (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-  const payload = { v: 1, d: dev, n: name, p: $('#plan').value.trim() || 'Pro', i: now, e: days > 0 ? now + days * 86400000 : 0, s: 'KM' + now.toString(36).toUpperCase() + rnd };
+  const payload = { v: 1, d: dev, n: name, p: plan, i: now, e: 0, s: 'KM' + now.toString(36).toUpperCase() + rnd };
   const head = 'KLM1.' + b64uStr(JSON.stringify(payload));
   try {
-    const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privKey, new TextEncoder().encode(head));
-    lastKey = head + '.' + b64u(sig); lastDev = dev;
-    $('#out').value = lastKey; $('#outCard').hidden = false;
-    const hs = hist(); hs.unshift({ t: now, n: name, d: dev, p: payload.p, e: payload.e, s: payload.s, k: lastKey }); localStorage.setItem(HKEY, JSON.stringify(hs.slice(0, 2000)));
-    renderHist(); setMsg(msg, '✓ Lisensi dibuat', true);
-  } catch (err) { setMsg(msg, 'Gagal menandatangani: ' + err.message, false); }
-};
-$('#copy').onclick = () => { navigator.clipboard.writeText(lastKey).then(() => setMsg($('#issueMsg'), '✓ Kunci disalin', true)); };
-$('#dl').onclick = () => download('lisensi-' + lastDev + '.klmlic', lastKey + '\n', 'text/plain');
+    const sig = await crypto.subtle.sign(SIG, privKey, new TextEncoder().encode(head));
+    if (!(await crypto.subtle.verify(SIG, pubKey, sig, new TextEncoder().encode(head)))) throw new Error('tanda tangan tidak lolos pemeriksaan');
+    const key = head + '.' + b64u(sig);
+    const h = hist(); h.unshift({ t: now, n: name, d: dev, p: plan, e: 0, s: payload.s, k: key }); saveHist(h);
+    renderHist(); showResult(dev, name, key, plan);
+  } catch (err) { alertOut('Gagal membuat lisensi: ' + err.message); }
+}
+function alertOut(t) { $('#outCard').hidden = false; setMsg($('#outMsg'), t, false); }
+function buyerMsg(dev, name, key) {
+  return 'Lisensi KLM (Kinetic Live Mixer)\n'
+    + 'Atas nama: ' + name + '\n'
+    + 'Device ID: ' + dev + '\n'
+    + 'Berlaku: seumur hidup\n\n'
+    + 'Kunci lisensi:\n' + key + '\n\n'
+    + 'Cara aktivasi:\n'
+    + '1. Buka KLM, lalu klik tombol 🔒 Aktifkan di bar atas (atau menu Bantuan → 🔑 Lisensi).\n'
+    + '2. Salin seluruh kunci di atas (diawali KLM1.), tempel, lalu tekan Aktifkan.\n\n'
+    + 'Simpan pesan ini. Bila Windows di-install ulang, cukup masukkan kunci yang sama lagi.';
+}
+function showResult(dev, name, key, plan) {
+  cur = { dev, name, key, plan };
+  $('#out').value = buyerMsg(dev, name, key);
+  $('#outCard').hidden = false; $('#outMsg').textContent = '';
+  setMsg($('#outMsg'), '✓ Lisensi siap untuk ' + name, true);
+  $('#outCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+async function copy(t, label) {
+  try { await navigator.clipboard.writeText(t); }
+  catch (e) { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); }
+  setMsg($('#outMsg'), '✓ ' + label + ' disalin', true);
+}
+$('#issue').onclick = issue;
+document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); issue(); } });
+$('#copyMsg').onclick = () => cur && copy($('#out').value, 'Pesan');
+$('#copyKey').onclick = () => cur && copy(cur.key, 'Kunci');
+$('#wa').onclick = () => cur && window.open('https://wa.me/?text=' + encodeURIComponent($('#out').value), '_blank');
+$('#dl').onclick = () => cur && download('lisensi-' + cur.dev + '.klmlic', cur.key + '\n', 'text/plain');
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); }
-const fmt = (ms) => (ms ? new Date(ms).toLocaleDateString('id-ID') : 'Seumur hidup');
+
+/* ---------- tabel riwayat ---------- */
 function renderHist() {
-  const tb = $('#hist'); tb.replaceChildren();
-  for (const r of hist()) {
+  const tb = $('#hist'), q = $('#q').value.trim().toLowerCase(); tb.replaceChildren();
+  const rows = hist().filter((r) => !q || (r.n + ' ' + r.d + ' ' + r.s).toLowerCase().includes(q));
+  if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 5; td.className = 'muted'; td.textContent = q ? 'Tidak ada yang cocok.' : 'Belum ada lisensi yang dibuat di browser ini.'; tr.appendChild(td); tb.appendChild(tr); return; }
+  for (const r of rows.slice(0, 300)) {
     const tr = document.createElement('tr');
-    [new Date(r.t).toLocaleString('id-ID'), r.n, r.d, r.p, fmt(r.e), r.s].forEach((v, i) => { const td = document.createElement('td'); if (i === 2 || i === 5) { const c = document.createElement('code'); c.textContent = v; td.appendChild(c); } else td.textContent = v; tr.appendChild(td); });
+    [new Date(r.t).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }), r.n, r.d, r.p].forEach((v, i) => { const td = document.createElement('td'); if (i === 2) { const c = document.createElement('code'); c.textContent = v; td.appendChild(c); } else td.textContent = v; tr.appendChild(td); });
+    const td = document.createElement('td'); const b = document.createElement('button'); b.className = 'sm'; b.textContent = 'Kirim ulang';
+    b.onclick = () => showResult(r.d, r.n, r.k, r.p); td.appendChild(b); tr.appendChild(td);
     tb.appendChild(tr);
   }
 }
+$('#q').addEventListener('input', renderHist);
+const csvQ = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
 $('#csv').onclick = () => {
-  const q = (v) => '"' + String(v).replace(/"/g, '""') + '"';
   const rows = [['tanggal', 'pembeli', 'device_id', 'paket', 'berlaku_sampai', 'serial', 'kunci']].concat(hist().map((r) => [new Date(r.t).toISOString(), r.n, r.d, r.p, r.e ? new Date(r.e).toISOString().slice(0, 10) : 'selamanya', r.s, r.k]));
-  download('lisensi-klm.csv', rows.map((r) => r.map(q).join(',')).join('\n'), 'text/csv');
+  download('lisensi-klm-' + new Date().toISOString().slice(0, 10) + '.csv', '\ufeff' + rows.map((r) => r.map(csvQ).join(',')).join('\n'), 'text/csv');
 };
-$('#clr').onclick = () => { if (confirm('Hapus semua riwayat lisensi di browser ini? (Ekspor CSV dulu bila perlu)')) { localStorage.removeItem(HKEY); renderHist(); } };
-renderHist();
+// impor CSV hasil ekspor (mis. pindah komputer / browser)
+function parseCsv(t) { const out = []; let row = [], f = '', q = false; for (let i = 0; i < t.length; i++) { const c = t[i]; if (q) { if (c === '"') { if (t[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; } else if (c === '"') q = true; else if (c === ',') { row.push(f); f = ''; } else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; row.push(f); out.push(row); row = []; f = ''; } else f += c; } if (f || row.length) { row.push(f); out.push(row); } return out; }
+$('#imp').onclick = () => $('#impFile').click();
+$('#impFile').onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return; e.target.value = '';
+  const rows = parseCsv((await f.text()).replace(/^\ufeff/, '')); const head = rows.shift() || [];
+  const ix = (n) => head.indexOf(n), h = hist(), have = new Set(h.map((r) => r.s));
+  let n = 0;
+  for (const r of rows) {
+    const k = r[ix('kunci')]; if (!k || !/^KLM1\./.test(k)) continue;
+    const s = r[ix('serial')]; if (have.has(s)) continue;
+    h.push({ t: Date.parse(r[ix('tanggal')]) || Date.now(), n: r[ix('pembeli')], d: r[ix('device_id')], p: r[ix('paket')] || 'Pro', e: 0, s, k }); have.add(s); n++;
+  }
+  h.sort((a, b) => b.t - a.t); saveHist(h); renderHist();
+  alert(n + ' lisensi diimpor ke riwayat.');
+};
+$('#clr').onclick = () => { if (confirm('Hapus semua riwayat lisensi di browser ini? Ekspor CSV dulu bila perlu.')) { localStorage.removeItem(HKEY); renderHist(); } };
+
+renderHist(); init();
 </script>
 </body>
 </html>

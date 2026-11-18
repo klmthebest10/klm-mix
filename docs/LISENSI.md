@@ -18,14 +18,28 @@ KLM memakai **lisensi offline per komputer**. Pembeli tidak perlu internet untuk
 
 ## Membuat lisensi
 
-### Cara mudah: halaman `tools/license/pembuat-lisensi.html`
+### Cara mudah: halaman pembuat lisensi (3 langkah)
 
-Buka file itu di Chrome/Edge (offline, tidak perlu server):
+1. Buka **`KLM-Pembuat-Lisensi-PRIBADI.html`** (klik dua kali, terbuka di Chrome/Edge, offline).
+2. **Tempel pesan WhatsApp pembeli apa adanya** (atau Device ID-nya saja). Device ID dan nama pembeli dikenali otomatis. Salah ketik huruf O/I/L dibetulkan sendiri.
+3. Tekan **Buat lisensi** (atau Ctrl+Enter), lalu **Kirim lewat WhatsApp** atau **Salin pesan**. Pesan untuk pembeli sudah berisi kunci lisensi dan cara aktivasinya.
 
-1. Pilih file kunci privat `klm-mix-private-key.jwk.json` (atau `.pem`).
-2. Isi Device ID, nama pembeli, dan paket. Lisensi selalu berlaku seumur hidup.
-3. Tekan **Buat lisensi** → **Salin kunci** atau **Unduh file .klmlic**.
-4. Riwayat lisensi tersimpan di browser itu dan bisa diekspor ke CSV (simpan sebagai arsip penjualan).
+Hal lain yang otomatis:
+
+- **Lisensi selalu seumur hidup.** Paket (default `Pro`) ada di "Lanjutan".
+- **Device ID yang sudah pernah dibuatkan lisensi** langsung diberi tanda. Kunci lamanya bisa dikirim ulang, misalnya untuk pembeli yang install ulang Windows. Di tabel riwayat, tombol **Kirim ulang** tersedia di setiap baris dan ada kolom pencarian.
+- **Setiap lisensi diperiksa** dengan kunci publik aplikasi sebelum ditampilkan, jadi kunci yang salah tidak akan terkirim.
+- **Riwayat tersimpan di browser.** Pakai **Ekspor CSV** untuk arsip penjualan dan **Impor CSV** saat pindah komputer.
+
+**Membuat salinan PRIBADI** (kunci privat tertanam, tidak perlu memilih file kunci):
+
+```
+node tools/license/buat-pembuat-pribadi.js --key D:\kunci\klm-mix-private-key.pem
+```
+
+File `KLM-Pembuat-Lisensi-PRIBADI.html` sama rahasianya dengan kunci privat. Simpan hanya di komputer Anda sendiri dan jangan dibagikan. `.gitignore` sudah menolak `*PRIBADI*`.
+
+Tanpa salinan pribadi, buka `tools/license/pembuat-lisensi.html` lalu pilih file kunci privat **sekali saja**. Browser itu akan mengingatnya sebagai kunci yang hanya bisa dipakai untuk menandatangani dan tidak bisa disalin keluar. Kunci dihapus dari browser lewat **Lupakan kunci**.
 
 ### Cara baris perintah (perlu Node.js)
 
