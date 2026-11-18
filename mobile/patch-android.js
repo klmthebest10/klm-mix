@@ -49,6 +49,15 @@ const [vM, vm, vp] = ver.split('.').map((n) => parseInt(n, 10) || 0);
 const code = vM * 10000 + vm * 100 + vp;
 let g = fs.readFileSync(gradle, 'utf8');
 g = g.replace(/versionCode\s+\d+/, 'versionCode ' + code).replace(/versionName\s+"[^"]*"/, 'versionName "' + ver + '"');
+// kunci tanda tangan tetap (CI: env KLM_KEYSTORE) → APK baru bisa dipasang menimpa versi lama
+if (!g.includes('KLM_KEYSTORE')) g += `
+def klmKs = System.getenv('KLM_KEYSTORE')
+if (klmKs && file(klmKs).exists()) {
+    android.signingConfigs.create('klm') { storeFile file(klmKs); storePassword 'android'; keyAlias 'androiddebugkey'; keyPassword 'android' }
+    android.buildTypes.debug.signingConfig android.signingConfigs.klm
+    android.buildTypes.release.signingConfig android.signingConfigs.klm
+}
+`;
 fs.writeFileSync(gradle, g);
 console.log('Versi APK: ' + ver + ' (' + code + ')');
 

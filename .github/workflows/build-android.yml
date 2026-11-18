@@ -57,9 +57,9 @@ jobs:
           mkdir -p ~/.android
           if [ -n "$KS" ]; then
             # buang spasi / baris baru / CR (sering ikut saat menempel dari Windows)
-            printf '%s' "$KS" | tr -d ' \r\n\t' | base64 -d > ~/.android/debug.keystore 2>/dev/null || { echo "::error::secret ANDROID_DEBUG_KEYSTORE bukan base64 yang valid — tempel ulang seluruh isi klm-hp-signing.keystore.base64.txt (panjang $(printf '%s' "$KS" | tr -d ' \r\n\t' | wc -c) karakter, seharusnya 3576)"; if [ "$RELEASE" = "1" ]; then exit 1; fi; rm -f ~/.android/debug.keystore; }
-            if [ -f ~/.android/debug.keystore ]; then keytool -list -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep -i "fingerprint" || { echo "::error::keystore dari secret tidak bisa dibuka (alias/kata sandi salah)"; if [ "$RELEASE" = "1" ]; then exit 1; fi; rm -f ~/.android/debug.keystore; }; fi
-            echo "kunci tetap dipakai"
+            printf '%s' "$KS" | tr -d ' \r\n\t' | base64 -d > "$RUNNER_TEMP/klm-hp.keystore" 2>/dev/null || { echo "::error::secret ANDROID_DEBUG_KEYSTORE bukan base64 yang valid — tempel ulang seluruh isi klm-hp-signing.keystore.base64.txt (panjang $(printf '%s' "$KS" | tr -d ' \r\n\t' | wc -c) karakter, seharusnya 3576)"; if [ "$RELEASE" = "1" ]; then exit 1; fi; rm -f "$RUNNER_TEMP/klm-hp.keystore"; }
+            if [ -f "$RUNNER_TEMP/klm-hp.keystore" ]; then keytool -list -keystore "$RUNNER_TEMP/klm-hp.keystore" -storepass android -alias androiddebugkey | grep -i "fingerprint" || { echo "::error::keystore dari secret tidak bisa dibuka (alias/kata sandi salah)"; if [ "$RELEASE" = "1" ]; then exit 1; fi; rm -f "$RUNNER_TEMP/klm-hp.keystore"; }; fi
+            if [ -f "$RUNNER_TEMP/klm-hp.keystore" ]; then echo "KLM_KEYSTORE=$RUNNER_TEMP/klm-hp.keystore" >> "$GITHUB_ENV"; echo "kunci tetap dipakai"; fi
           else echo "::warning::secret ANDROID_DEBUG_KEYSTORE kosong — APK ditandatangani kunci sementara (tidak bisa update menimpa)"; fi
 
       - name: Build APK
@@ -68,7 +68,10 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ../../KLM-HP.apk
-          "$ANDROID_HOME"/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner verify --print-certs ../../KLM-HP.apk | head -3
+          CERT=$("$ANDROID_HOME"/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner verify --print-certs ../../KLM-HP.apk)
+          echo "$CERT" | head -3
+          if [ -n "$KLM_KEYSTORE" ] && ! echo "$CERT" | grep -q "CN=KLM HP"; then echo "::error::APK tidak ditandatangani kunci KLM HP"; exit 1; fi
+          if [ "$RELEASE" = "1" ] && ! echo "$CERT" | grep -q "CN=KLM HP"; then echo "::error::rilis APK wajib memakai kunci KLM HP"; exit 1; fi
           grep -o 'versionCode [0-9]*\|versionName "[^"]*"' app/build.gradle
 
       - name: Upload artifact
