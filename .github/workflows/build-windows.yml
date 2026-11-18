@@ -259,6 +259,8 @@ jobs:
           if (Test-Path dist/win-unpacked/resources/vsthost/klm-vsthost.exe) { Write-Host "host VST ikut terpasang: resources/vsthost/klm-vsthost.exe" } else { Write-Host "::error::klm-vsthost.exe tidak ada di paket"; exit 1 }
           if (-not (Test-Path dist/win-unpacked/resources/procaudio/klm-procaudio.exe)) { Write-Host "::error::klm-procaudio.exe tidak ada di paket"; exit 1 }
           if (Test-Path dist/win-unpacked/resources/app-update.yml) { Write-Host "app-update.yml:"; Get-Content dist/win-unpacked/resources/app-update.yml } else { Write-Host "::error::app-update.yml tidak ada (update di aplikasi tidak akan jalan)"; exit 1 }
+          $eu = node -e "const a=require('@electron/asar'); console.log(a.listPackage('dist/win-unpacked/resources/app.asar').filter(f=>/node_modules[\\/]electron-updater[\\/]package\.json$/.test(f)).length)"
+          if ($eu -ne '1') { Write-Host "::error::electron-updater tidak ikut dipaketkan"; exit 1 } else { Write-Host "electron-updater ikut dipaketkan" }
           if (Test-Path dist/latest.yml) { Write-Host "latest.yml:"; Get-Content dist/latest.yml } else { Write-Host "::error::dist/latest.yml tidak dibuat"; exit 1 }
           if (Test-Path dist/win-unpacked/resources/airplay/klm-airplay.exe) { Get-ChildItem dist/win-unpacked/resources/airplay | ForEach-Object { Write-Host ("airplay: {0} {1:N0} KB" -f $_.Name, ($_.Length / 1KB)) } } else { Write-Host "::error::klm-airplay.exe tidak ada di paket"; exit 1 }
 
