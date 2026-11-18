@@ -184,4 +184,4 @@ function lockedHtml(feature) {
 /** sumber Device ID (hw = perangkat keras, hws = serial board, win = instalasi Windows, fb = cadangan) — untuk diagnosa */
 const deviceSource = () => String(machineRaw()).split(':')[0];
 
-module.exports = { deviceSource, lockedHtml, create, deviceId, parse, PUBLIC_KEY, normId, parseSmbios };
+module.exports = { smbiosIds, deviceSource, lockedHtml, create, deviceId, parse, PUBLIC_KEY, normId, parseSmbios };
