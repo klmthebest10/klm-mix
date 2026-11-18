@@ -282,8 +282,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          repository: ${{ vars.RELEASE_REPO || github.repository }}
-          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          repository: ${{ vars.RELEASE_REPO || 'klmthebest10/klm-releases' }}
+          token: ${{ secrets.RELEASE_TOKEN }}
           body_path: dist/release-notes.md
           files: |
             dist/*.exe

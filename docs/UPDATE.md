@@ -20,23 +20,29 @@ Sejak v1.17.0, KLM (versi installer) memeriksa versi baru sendiri dari **GitHub 
    git tag v1.17.1
    git push origin v1.17.1
    ```
-4. GitHub Actions membangun installer, menandatanganinya bila sertifikat sudah dipasang (lihat `docs/SIGNING.md`), lalu menerbitkan Release berisi `KLM-Setup-1.17.1.exe`, `KLM-Portable-1.17.1.exe`, `latest.yml`, dan APK HP.
-5. Dalam beberapa jam, semua KLM yang sedang menyala mendapat popup update.
+4. GitHub Actions membangun installer, menandatanganinya bila sertifikat sudah dipasang (lihat `docs/SIGNING.md`), lalu menerbitkan Release di `klm-releases` berisi `KLM-Setup-1.17.1.exe`, `KLM-Portable-1.17.1.exe`, `latest.yml`, dan `KLM-HP.apk`.
+5. KLM di PC yang sedang menyala mendapat popup update dalam beberapa jam (atau saat dibuka). Aplikasi HP memeriksa saat dibuka.
+
+### Aplikasi HP (APK)
+
+KLM HP memeriksa rilis terbaru saat dibuka (paling sering tiap 6 jam). Bila ada APK lebih baru muncul popup **Update KLM HP tersedia** dengan **Update sekarang / Nanti**. *Update sekarang* mengunduh APK di dalam aplikasi (dengan progres) lalu membuka penginstal Android; Android meminta izin "Pasang aplikasi tak dikenal" sekali untuk KLM HP. Pemasangan tetap dikonfirmasi pengguna (aturan Android untuk aplikasi di luar Play Store).
 
 Push ke `main` tanpa tag hanya membangun installer uji (artifact Actions), **tidak** memicu update ke pengguna.
 
-## Bila repo kode dijadikan privat (disarankan sebelum menjual)
+## Repo rilis publik: `klmthebest10/klm-releases`
 
-Aplikasi pengguna tidak bisa membaca Release dari repo privat tanpa token, dan token tidak boleh ditanam di aplikasi. Solusinya: **repo khusus rilis yang publik** (hanya berisi installer, tanpa kode).
+Installer, `latest.yml`, dan APK diterbitkan ke repo publik terpisah **`klm-releases`** (hanya berisi file rilis, tanpa kode). Dengan begitu repo kode `klm-mix` boleh dijadikan privat tanpa memutus update pengguna. Alamat ini tertanam di `package.json` (`build.publish`) dan di APK.
 
-1. Buat repo publik baru yang kosong, misalnya `klmthebest10/klm-releases`.
-2. Buat **Personal Access Token** (fine-grained) dengan izin **Contents: Read and write** hanya untuk repo `klm-releases`.
-3. Di repo kode (`klm-mix`) → **Settings → Secrets and variables → Actions**:
-   - tab **Variables**: buat `RELEASE_REPO` = `klmthebest10/klm-releases`
-   - tab **Secrets**: buat `RELEASE_TOKEN` = token tadi
-4. Rilis berikutnya otomatis diterbitkan ke `klm-releases`, dan aplikasi yang dibangun sejak itu memeriksa update ke sana.
+Yang diperlukan sekali di repo kode (`klm-mix` → **Settings → Secrets and variables → Actions → Secrets**):
 
-Aplikasi yang sudah terpasang sebelum langkah ini masih memeriksa repo lama. Jadi lakukan langkah ini **sebelum** repo kode dijadikan privat, lalu terbitkan satu rilis lagi selagi repo lama masih publik agar semua pengguna pindah ke sumber baru.
+| Secret | Isi | Untuk |
+|---|---|---|
+| `RELEASE_TOKEN` | Personal Access Token (fine-grained), akses **hanya** ke `klm-releases`, izin **Contents: Read and write** | CI menerbitkan rilis ke `klm-releases` |
+| `ANDROID_DEBUG_KEYSTORE` | isi file `klm-hp-signing.keystore.base64.txt` | APK selalu ditandatangani kunci yang sama → update APK bisa menimpa versi lama |
+
+Simpan cadangan file `klm-hp-signing.keystore`. Bila hilang, APK berikutnya tidak bisa dipasang menimpa versi lama (pengguna harus uninstall dulu).
+
+Untuk memindahkan rilis ke repo lain, buat variabel `RELEASE_REPO` (mis. `akun/repo-lain`) dan ubah `build.publish` di `package.json`.
 
 ## Catatan teknis
 

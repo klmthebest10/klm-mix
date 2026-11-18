@@ -144,6 +144,8 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Update di dalam aplikasi.** KLM memeriksa versi baru sendiri (saat dibuka dan tiap 6 jam). Bila ada, muncul popup **Update KLM tersedia** dengan catatan rilis dan tombol **Update sekarang** / **Nanti**.
 - **Update sekarang** mengunduh di latar belakang (KLM tetap bisa dipakai), lalu **Pasang & buka ulang** menutup KLM dengan aman (simpan preset, rekaman/streaming diakhiri dengan benar), memasang tanpa jendela installer, dan membuka KLM kembali. Tidak perlu lagi mengunduh dan menjalankan installer sendiri.
 - Periksa manual: **Bantuan → ⬆ Periksa update** atau **Pengaturan → Tentang** (ada pilihan mematikan pemeriksaan otomatis). Versi portable diarahkan ke unduhan versi portable terbaru.
+- **Aplikasi HP (APK) juga memberi tahu update**: saat dibuka, KLM HP memeriksa rilis terbaru; bila ada muncul popup **Update sekarang / Nanti**. APK diunduh di dalam aplikasi (dengan progres) lalu penginstal Android terbuka. APK kini selalu ditandatangani kunci yang sama dan nomor versinya mengikuti KLM, sehingga bisa dipasang menimpa versi lama.
+- Rilis (installer PC, `latest.yml`, APK) diterbitkan ke repo publik **klmthebest10/klm-releases**, sehingga repo kode boleh dijadikan privat tanpa memutus update.
 - Panduan merilis versi baru: [docs/UPDATE.md](docs/UPDATE.md).
 
 ### Baru di v1.16.0

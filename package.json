@@ -27,7 +27,7 @@
   "build": {
     "appId": "com.klm.mix",
     "publish": [
-      { "provider": "github", "owner": "klmthebest10", "repo": "klm-mix", "releaseType": "release" }
+      { "provider": "github", "owner": "klmthebest10", "repo": "klm-releases", "releaseType": "release" }
     ],
     "productName": "KLM",
     "copyright": "KLM",
