@@ -13,7 +13,7 @@
     if (!isEl()) { if (manual) KM.toast('Update otomatis hanya ada di versi PC (.exe)', 'info'); return null; }
     auto = !manual;
     if (manual) KM.toast('Memeriksa update…', 'info', 2000);
-    const s = await call('update:check', { beta: KM.settings.updateBeta === true });
+    const s = await call('update:check', { beta: KM.settings.updateBeta === true || /-/.test(KM.version) }); // versi uji terpasang → tetap menerima versi uji berikutnya
     if (manual && s) {
       if (s.state === 'latest') KM.toast('✓ KLM sudah versi terbaru (v' + KM.version + ')', 'ok', 4000);
       else if (s.state === 'error' || s.state === 'unsupported') KM.toast(s.message || 'Gagal memeriksa update', 'warn', 6000);

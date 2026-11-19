@@ -82,10 +82,12 @@
   // Frame lama dilepas begitu frame baru datang → kolam tekstur lapisan tidak pernah habis.
   if (KM.settings.utcZeroCopy == null) KM.settings.utcZeroCopy = true;
   U.zc = { on: false, why: '', frames: 0, recv: false };
-  function dropZC(L) { const z = L.zc; if (!z) return; L.zc = null; try { z.vf.close(); } catch (e) {} try { z.imp.release(); } catch (e) {} }
+  // texW/texH dikosongkan: bila lapisan lalu pindah ke jalur salinan CPU, tekstur WebGL-nya WAJIB dialokasikan ulang
+  // (dulu ukuran sisa jalur GPU membuat alokasi dilewati → grafis kosong setelah pindah jalur)
+  function dropZC(L) { const z = L.zc; if (!z) return; L.zc = null; L.texW = L.texH = 0; L.bbox = null; try { z.vf.close(); } catch (e) {} try { z.imp.release(); } catch (e) {} }
   U.pushZC = function (imp, id, meta) {
     const L = LY[id];
-    if (!L || L.paused || !L.started) { try { imp.release(); } catch (e) {} return; }
+    if (!L || !L.started) { try { imp.release(); } catch (e) {} return; }
     const vf = imp.getVideoFrame();
     dropZC(L);
     L.zc = { imp, vf };
@@ -101,7 +103,7 @@
   /** terima potongan frame {L,x,y,w,h,W,H,buf} (BGRA premultiplied) */
   U.pushFrame = function (f) {
     const L = LY[f.L || 'main']; if (!L) return;
-    if (L.zc) { dropZC(L); L.texW = 0; } // lapisan pindah ke jalur salinan CPU
+    if (L.zc) dropZC(L); // lapisan pindah ke jalur salinan CPU
     if (!L.gl && !initGL(L)) return;
     const gl = L.gl, cv = L.cv;
     if (f.W !== L.texW || f.H !== L.texH) {
@@ -245,7 +247,7 @@
     L.started = true; L.paused = false; L.usedAt = KM.now(); L.native = L.nextNative = null; L.has = false; L.bbox = null;
     window.klm.send('utc:start', { L: id, w: KM.settings.width, h: KM.settings.height, fps: fpsOsr() });
   }
-  function pauseLayer(id) { const L = LY[id]; if (L.started && !L.paused) { L.paused = true; L.native = L.nextNative = null; dropZC(L); L.has = false; window.klm.send('utc:pause', { L: id }); } }
+  function pauseLayer(id) { const L = LY[id]; if (L.started && !L.paused) { L.paused = true; L.native = L.nextNative = null; window.klm.send('utc:pause', { L: id }); } }
   function resumeLayer(id) { const L = LY[id]; L.usedAt = KM.now(); if (!L.started) startLayer(id); else if (L.paused) { L.paused = false; window.klm.send('utc:resume', { L: id }); } }
   U.started = false; U.paused = false;
   // lapisan dinyalakan satu per satu & hanya yang menampilkan sesuatu (tidak membebani saat aplikasi dibuka)
@@ -287,7 +289,8 @@
     window.klm.on('utc:tk', (m) => { try { onTk(m); } catch (e) { console.warn('utc tk', e); } });
     window.klm.on('utc:zc', (m) => {
       U.zc.on = !!(m && m.on); U.zc.why = (m && m.why) || '';
-      if (!U.zc.on) ORDER.forEach((id) => dropZC(LY[id]));
+      // pindah jalur: proses utama membuat ulang lapisan (tidak terjeda) → samakan status di sini
+      if (!U.zc.on) ORDER.forEach((id) => { const L = LY[id]; dropZC(L); if (L.started) L.paused = false; });
       KM.changed('utc');
     });
     // penerima tekstur GPU dipasang sekali; proses utama baru mengirim tekstur setelah "zc-ready"

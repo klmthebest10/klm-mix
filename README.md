@@ -140,6 +140,14 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.2
+Versi uji (beta).
+- **Perbaikan: UTC Acara kosong setelah beberapa saat (hanya teks running text yang tampil).** Penyebabnya, satu gambar tanpa tekstur GPU yang muncul sesaat (misalnya saat grafis dilanjutkan setelah dijeda) langsung memindahkan grafis ke jalur cadangan CPU, dan jalur cadangan itu tidak menyiapkan ulang tekstur gambarnya sehingga kosong. Kini KLM baru pindah jalur bila tekstur GPU benar-benar tidak tersedia terus-menerus (≥ 30 gambar, > 3 detik), dan jalur cadangan selalu menyiapkan teksturnya dari awal. Uji otomatis kini memaksa pindah jalur di tengah siaran dan memastikan grafis tetap tampil.
+- Grafis yang dijeda lalu dilanjutkan langsung tampil lagi (frame terakhir disimpan, gambar baru selalu diminta).
+- Perbaikan: performa otomatis tidak lagi menurunkan resolusi/fps sendiri tepat setelah KLM dibuka atau sebelum ada input.
+- Log diagnosis grafis UTC: `%APPDATA%\KLM Mix\config\klm-utc.log`.
+- Catatan rilis di popup update kini tampil lengkap.
+
 ### Baru di v1.18.0-beta.1
 Versi uji (beta). Hanya diterima KLM yang mencentang **Pengaturan → Tentang → Ikut versi uji (beta)**.
 - **UTC Acara zero-copy GPU.** Grafis UTC dirender langsung ke tekstur GPU bersama (D3D11) dan dikirim ke mixer tanpa disalin ke CPU. Mixer menggambarnya langsung ke Program sebagai VideoFrame. Bila GPU / driver tidak mendukung, KLM otomatis kembali ke jalur lama (grafis tetap tampil). Bisa dimatikan di Pengaturan → Performa → Grafis UTC (GPU).

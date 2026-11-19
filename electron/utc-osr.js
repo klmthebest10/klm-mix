@@ -20,6 +20,7 @@ const path = require('path');
 const electron = require('electron');
 const { BrowserWindow, ipcMain } = electron;
 const sharedTexture = electron.sharedTexture; // Electron ≥ 40 (eksperimental)
+const fs = require('fs');
 
 module.exports = function setupUtcOsr(o) {
   const layers = new Map(); // id → layer
@@ -30,6 +31,17 @@ module.exports = function setupUtcOsr(o) {
   };
   if (!zc.on) zc.why = !sharedTexture ? 'Electron tanpa sharedTexture' : process.platform !== 'win32' ? 'hanya Windows' : 'dimatikan (KLM_NO_ZC)';
   const graveyard = []; // jendela offscreen lama: tidak di-destroy (lihat catatan di create)
+  // log diagnosis kecil (config/klm-utc.log, maks ±256 KB) untuk melacak masalah grafis di PC pengguna
+  const logPath = o.logDir ? path.join(o.logDir, 'klm-utc.log') : '';
+  function dlog(m) {
+    if (!logPath) return;
+    try {
+      const st = fs.existsSync(logPath) ? fs.statSync(logPath) : null;
+      if (st && st.size > 256 * 1024) fs.renameSync(logPath, logPath + '.1');
+      fs.appendFileSync(logPath, new Date().toISOString() + ' ' + m + '\n');
+    } catch (e) {}
+  }
+  dlog('mulai: Electron ' + process.versions.electron + ', zero-copy ' + (zc.on ? 'tersedia' : 'tidak (' + zc.why + ')'));
 
   // Tiap lapisan dimuat dari nama host SENDIRI (klm-lt.localhost, klm-tt.localhost, …; *.localhost selalu = komputer ini).
   // Chromium hanya membuka 6 sambungan HTTP sekaligus per host; tiap lapisan memegang 1 sambungan event (SSE). Dulu semua
@@ -99,7 +111,16 @@ module.exports = function setupUtcOsr(o) {
   function relTex(x) { if (x && x.tex) { try { x.tex.release(); } catch (e) {} } }
   function paintGpu(L, e, dirty) {
     const tex = e && e.texture;
-    if (!tex) { if (L.t && !L.paused) fallback('Electron tidak memberi tekstur GPU (akselerasi GPU mati?)'); return; }
+    // gambar tanpa tekstur GPU bisa muncul SESAAT (saat dilanjutkan dari jeda, ganti ukuran, memuat halaman).
+    // Baru pindah ke jalur CPU bila terus-menerus: ≥ 30 gambar berturut-turut tanpa tekstur & > 3 dtk sejak mulai/lanjut.
+    if (!tex) {
+      if (!L.t || L.paused) return;
+      L.zNull = (L.zNull || 0) + 1;
+      if (L.zNull === 1) dlog(L.id + ': gambar tanpa tekstur GPU');
+      if (L.zNull >= 30 && Date.now() - (L.zSince || 0) > 3000) fallback(L.id + ': Electron tidak memberi tekstur GPU (akselerasi GPU mati?)');
+      return;
+    }
+    L.zNull = 0;
     if (!L.t || L.paused || !zc.ready || !target || target.isDestroyed()) { relTex({ tex }); return; }
     const ti = tex.textureInfo || {}, cs = ti.codedSize || {};
     const meta = { W: cs.width | 0, H: cs.height | 0, seq: ++L.seq };
@@ -127,9 +148,9 @@ module.exports = function setupUtcOsr(o) {
       .catch((err) => failGpu('kirim tekstur: ' + (err && err.message)))
       .finally(done);
   }
-  function failGpu(why) { zc.fails++; if (zc.fails >= 5) fallback(why); }
+  function failGpu(why) { zc.fails++; dlog('gagal (' + zc.fails + '): ' + why); if (zc.fails >= 5) fallback(why); }
   /** jalur GPU tidak bisa dipakai di PC ini → semua lapisan dibuat ulang dengan jalur salinan CPU */
-  function fallback(why) { if (!zc.on) return; zc.on = false; zc.why = why; console.warn('[UTC] zero-copy dimatikan: ' + why); rebuild(); }
+  function fallback(why) { if (!zc.on) return; zc.on = false; zc.why = why; console.warn('[UTC] zero-copy dimatikan: ' + why); dlog('PINDAH KE JALUR CPU: ' + why); rebuild(); }
   function rebuild() {
     if (target && !target.isDestroyed()) target.send('utc:zc', { on: zc.on, why: zc.why });
     for (const L of layers.values()) {
@@ -154,7 +175,7 @@ module.exports = function setupUtcOsr(o) {
     if (!url) return false;
     const L = layer(id);
     if (!L.win || L.win.isDestroyed() || !L.wc || L.wc.isDestroyed()) create(L);
-    L.t = Object.assign({}, t, { url }); L.last = null; L.pend = null; L.inflight = false; L.sentFull = false; L.fixed = false; L.paused = false;
+    L.t = Object.assign({}, t, { url }); L.last = null; L.pend = null; L.inflight = false; L.sentFull = false; L.fixed = false; L.paused = false; L.zSince = Date.now(); L.zNull = 0;
     L.win.setContentSize(t.w, t.h);
     L.wc.setFrameRate(Math.max(10, Math.min(60, t.fps || 30)));
     L.wc.startPainting();
@@ -220,10 +241,11 @@ module.exports = function setupUtcOsr(o) {
   ipcMain.on('utc:ack', (e, a) => { const L = layers.get(L_of(a) || 'main'); if (L) { L.inflight = false; pump(L); } });
   // jeda saat lapisan tidak menampilkan apa-apa (hemat CPU/GPU); halaman tetap dimuat sehingga lanjut seketika
   ipcMain.on('utc:pause', (e, a) => { for (const L of layers.values()) if ((!L_of(a) || L.id === L_of(a)) && L.wc && !L.wc.isDestroyed() && !L.paused) { L.paused = true; try { L.wc.stopPainting(); } catch (er) {} } });
-  ipcMain.on('utc:resume', (e, a) => { for (const L of layers.values()) if ((!L_of(a) || L.id === L_of(a)) && L.wc && !L.wc.isDestroyed() && L.t && L.paused) { L.paused = false; L.sentFull = false; try { L.wc.startPainting(); L.wc.invalidate(); } catch (er) {} } });
+  // lanjut: selalu minta gambar baru (juga bila proses utama tidak sedang menjeda, mis. setelah pindah jalur)
+  ipcMain.on('utc:resume', (e, a) => { for (const L of layers.values()) if ((!L_of(a) || L.id === L_of(a)) && L.wc && !L.wc.isDestroyed() && L.t) { if (L.paused) { L.paused = false; L.zSince = Date.now(); L.zNull = 0; try { L.wc.startPainting(); } catch (er) {} } L.sentFull = false; try { L.wc.invalidate(); } catch (er) {} } });
   // pesan dari halaman overlay (running text native): teruskan ke mixer
   ipcMain.on('osr:msg', (e, msg) => {
     for (const L of layers.values()) if (L.wc && !L.wc.isDestroyed() && L.wc.id === e.sender.id) { if (L.t && msg && typeof msg === 'object') tell(L, msg); return; }
   });
-  return { stop: () => stop(), zc: () => Object.assign({}, zc, { layers: [...layers.values()].filter((L) => L.t).map((L) => L.id + (L.gpu ? ':gpu' : ':cpu')) }), active: () => [...layers.values()].some((L) => !!L.t), hosts: () => [...layers.values()].filter((L) => L.t).map((L) => L.id + '@' + (String(L.t.url).match(/\/\/([^/:]+)/) || [])[1]) };
+  return { stop: () => stop(), forceFallback: (why) => fallback(why || 'uji'), zc: () => Object.assign({}, zc, { layers: [...layers.values()].filter((L) => L.t).map((L) => L.id + (L.gpu ? ':gpu' : ':cpu')) }), active: () => [...layers.values()].some((L) => !!L.t), hosts: () => [...layers.values()].filter((L) => L.t).map((L) => L.id + '@' + (String(L.t.url).match(/\/\/([^/:]+)/) || [])[1]) };
 };

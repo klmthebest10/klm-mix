@@ -379,7 +379,7 @@ app.whenReady().then(async () => {
   netInfo = await serverP;
   splashStep(22, 'Memuat antarmuka…');
   T.server = Date.now() - T0;
-  utcOsr = setupUtcOsr({ port: () => netInfo.ports.http, scorePort: () => { const sc = server.score(); return sc ? sc.port() : 0; } });
+  utcOsr = setupUtcOsr({ logDir: process.env.KLM_CONFIG_DIR, port: () => netInfo.ports.http, scorePort: () => { const sc = server.score(); return sc ? sc.port() : 0; } });
   if (mainWin && !mainWin.isDestroyed()) mainWin.loadURL(`http://127.0.0.1:${netInfo.ports.http}/`).catch((e) => console.warn('loadURL', e.message));
   T.window2 = Date.now() - T0;
   if (process.env.KLM_SMOKE) smokeTest();
@@ -456,6 +456,16 @@ function smokeTest() {
       if (!(s.px > 0.002)) { fail++; log('GAGAL: lapisan UTC kosong di Program'); }
       const progPng = async (name) => { const png = await js('new Promise(r => KM.engine.prog.toBlob(b => { const f = new FileReader(); f.onload = () => r(f.result); f.readAsDataURL(b); }, "image/png"))'); fs.writeFileSync(path.join(out, name), Buffer.from(png.split(',')[1], 'base64')); };
       await progPng('program.png');
+      // pindah dari jalur GPU ke jalur CPU di tengah siaran (cadangan otomatis): grafis HARUS tetap tampil
+      if (utcOsr && utcOsr.forceFallback && JSON.parse(await js('JSON.stringify(!!KM.utc.zc.on)'))) {
+        const f0 = +(await js('KM.utc.frames'));
+        utcOsr.forceFallback('uji smoke: paksa jalur CPU');
+        await wait(5000);
+        const sf = JSON.parse(await js('JSON.stringify({ frames: KM.utc.frames, px: KM.utc.coverage(), zc: KM.utc.zc.on })'));
+        log('setelah pindah GPU → CPU: ' + JSON.stringify(sf) + ' (frame sebelum ' + f0 + ') • utama ' + JSON.stringify(utcOsr.zc()));
+        if (sf.zc || !(sf.px > 0.002) || !(sf.frames > f0)) { fail++; log('GAGAL: grafis UTC hilang setelah pindah dari GPU ke jalur CPU'); }
+        await progPng('program-cpu.png');
+      }
       // --- lapisan terpisah + running text native ---
       const li = JSON.parse(await js('JSON.stringify(KM.utc.layerInfo())'));
       log('lapisan: ' + JSON.stringify(li.map((l) => [l.id, l.frames, l.native, l.bbox && [l.bbox.x, l.bbox.y, l.bbox.w, l.bbox.h]])));
