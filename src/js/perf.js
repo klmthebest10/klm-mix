@@ -47,6 +47,9 @@
   KM.on('fps', (fps) => {
     const st = KM.settings, E = KM.engine;
     if (st.autoPerf === false || document.hidden || !E || E.quiet || KM.perf.level >= 4) { low = 0; return; }
+    // 30 detik pertama (memuat antarmuka, cache GPU/shader dibangun ulang setelah update) dan tanpa input: fps rendah wajar,
+    // bukan tanda PC berat → jangan menurunkan pengaturan (dulu: setelah update, output turun sendiri ke 540p 30 fps)
+    if (performance.now() < 30000 || !KM.state.inputs.length) { low = 0; return; }
     if (fps >= st.fps * 0.8) { low = Math.max(0, low - 1); return; }
     if (++low < 4) return; // ±4 detik berturut-turut tertinggal
     low = 0;
