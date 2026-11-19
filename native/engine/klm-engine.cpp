@@ -17,8 +17,19 @@
 //   stats                                 minta statistik sekarang
 //   quit
 //
+// Fase 2 — grafis UTC di Program (tekstur GPU bersama dari lapisan offscreen Chromium, tanpa salinan CPU):
+//   utex <layer> <handle> <W> <H> <seq>   handle NT tekstur bersama (sudah diduplikasi ke proses ini oleh KLM) →
+//                                         disalin GPU ke tekstur lapisan, handle ditutup, dibalas "uack <layer> <seq>"
+//   ulay <id,id,..|->                     lapisan UTC yang tampil di atas Program (urutan bawah → atas)
+//   uclear                                lupakan semua tekstur lapisan (KLM berhenti mengirim)
+//   utk <layer> <id> <at> <vx> <vy> <vw> <vh> <w> <speed> <snap> <px0> <E0> <ntile>   running text native
+//   ublob <layer> <id> <x> <w> <h> <n>    + n byte RGBA (potongan teks berjalan) langsung sesudah baris ini
+//   utkgeo <layer> <id> <vx> <vy> <vw> <vh> | utklive <layer> <id|-> | ureset <layer>
+//   probe <pvw|pgm> <fx> <fy>             baca 1 piksel monitor (uji) → "probe r g b"
+//
 // Keluaran stdout (satu baris per kejadian): ready <adapter> | shown <bus> | hidden <bus> | click <bus> <x> <y> <btn> <dbl>
-//   | srcerr <id> <pesan> | srcok <id> <w> <h> | stats fps=.. ms=.. mem=.. | err <pesan>
+//   | srcerr <id> <pesan> | srcok <id> <w> <h> | stats fps=.. ms=.. mem=.. utex=.. | err <pesan>
+//   | uack <layer> <seq> | uready <layer> | uerr <layer> <pesan>
 //
 // --selftest : uji mandiri tanpa KLM (jendela tersembunyi, perangkat WARP bila tanpa GPU) — dipakai CI.
 #include <windows.h>
@@ -68,18 +79,31 @@ static double nowMs() {
 }
 
 // ---------------------------------------------------------------- perintah dari stdin
+struct Cmd { std::string line; std::vector<uint8_t> data; };
 static std::mutex g_qMx;
-static std::deque<std::string> g_q;
+static std::deque<Cmd> g_q;
 static std::atomic<bool> g_quit{false};
 static void stdinThread() {
   HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
-  char buf[8192]; DWORD n = 0; std::string line;
+  static char buf[65536]; DWORD n = 0; std::string line;
+  Cmd blob; size_t need = 0; // "ublob ... <n>" → n byte biner berikutnya milik perintah itu
   while (!g_quit && ReadFile(h, buf, sizeof buf, &n, nullptr) && n) {
     for (DWORD i = 0; i < n; i++) {
+      if (need) {
+        size_t take = std::min<size_t>(need, n - i);
+        blob.data.insert(blob.data.end(), buf + i, buf + i + take);
+        need -= take; i += (DWORD)take - 1;
+        if (!need) { std::lock_guard<std::mutex> l(g_qMx); g_q.push_back(std::move(blob)); blob = Cmd(); }
+        continue;
+      }
       char c = buf[i];
       if (c == '\n') {
         if (!line.empty() && line.back() == '\r') line.pop_back();
-        { std::lock_guard<std::mutex> l(g_qMx); g_q.push_back(line); }
+        if (line.compare(0, 6, "ublob ") == 0) {
+          size_t sp = line.find_last_of(' ');
+          unsigned long long nb = strtoull(line.c_str() + sp + 1, nullptr, 10);
+          if (nb > 0 && nb <= 64ull * 1024 * 1024) { blob.line = line; blob.data.clear(); blob.data.reserve((size_t)nb); need = (size_t)nb; }
+        } else { std::lock_guard<std::mutex> l(g_qMx); g_q.push_back(Cmd{ line, {} }); }
         line.clear();
       } else if (line.size() < 8192) line += c;
     }
@@ -93,10 +117,11 @@ static ComPtr<ID3D11DeviceContext> g_ctx;
 static ComPtr<IDXGIFactory2> g_fac;
 static ComPtr<IDXGIAdapter> g_adapter;
 static ComPtr<ID3D11VertexShader> g_vs;
-static ComPtr<ID3D11PixelShader> g_psTex, g_psDown, g_psSolid;
+static ComPtr<ID3D11PixelShader> g_psTex, g_psDown, g_psSolid, g_psPM;
 static ComPtr<ID3D11SamplerState> g_samp;
-static ComPtr<ID3D11BlendState> g_blend;
-static ComPtr<ID3D11RasterizerState> g_rast;
+static ComPtr<ID3D11BlendState> g_blend, g_blendPM;
+static ComPtr<ID3D11RasterizerState> g_rast, g_rastSc;
+static ComPtr<ID3D11Query> g_query;
 static ComPtr<ID3D11Buffer> g_cb;
 static std::string g_adapterName;
 static bool g_warp = false;
@@ -114,6 +139,8 @@ O vs(uint id : SV_VertexID) {
 Texture2D tx : register(t0); SamplerState sm : register(s0);
 float4 ps(O i) : SV_Target { float4 c = tx.Sample(sm, i.t); return float4(c.rgb, c.a * col.a); }
 float4 psSolid(O i) : SV_Target { return col; }
+// alpha premultiplied (tekstur lapisan UTC dari Chromium): warna sudah dikali alpha
+float4 psPM(O i) : SV_Target { return tx.Sample(sm, i.t) * col.a; }
 // perkecil berkualitas tinggi: rata-rata n×n sampel bilinear di seluruh tapak piksel tujuan (tajam, tanpa gerigi / kedip)
 float4 psDown(O i) : SV_Target {
   int n = (int)p2.z; float4 s = 0;
@@ -161,6 +188,8 @@ static bool initD3D(bool forceWarp) {
   g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psDown);
   if (!compile("psSolid", "ps_4_0", b)) return false;
   g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psSolid);
+  if (!compile("psPM", "ps_4_0", b)) return false;
+  g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psPM);
 
   D3D11_SAMPLER_DESC sd{}; sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
   sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP; sd.MaxLOD = D3D11_FLOAT32_MAX;
@@ -170,8 +199,14 @@ static bool initD3D(bool forceWarp) {
   rt.SrcBlendAlpha = D3D11_BLEND_ONE; rt.DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA; rt.BlendOpAlpha = D3D11_BLEND_OP_ADD;
   rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
   g_dev->CreateBlendState(&bd, &g_blend);
+  rt.SrcBlend = D3D11_BLEND_ONE; // premultiplied
+  g_dev->CreateBlendState(&bd, &g_blendPM);
   D3D11_RASTERIZER_DESC rd{}; rd.FillMode = D3D11_FILL_SOLID; rd.CullMode = D3D11_CULL_NONE; rd.DepthClipEnable = TRUE;
   g_dev->CreateRasterizerState(&rd, &g_rast);
+  rd.ScissorEnable = TRUE;
+  g_dev->CreateRasterizerState(&rd, &g_rastSc);
+  D3D11_QUERY_DESC qd{ D3D11_QUERY_EVENT, 0 };
+  g_dev->CreateQuery(&qd, &g_query);
   D3D11_BUFFER_DESC cbd{}; cbd.ByteWidth = sizeof(CB); cbd.Usage = D3D11_USAGE_DYNAMIC; cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER; cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
   if (FAILED(g_dev->CreateBuffer(&cbd, nullptr, &g_cb))) { emit("err constant buffer"); return false; }
   return true;
@@ -381,6 +416,155 @@ static void drawSource(const std::string& id, float alpha) {
   g_ctx->PSSetShaderResources(0, 1, s.srv.GetAddressOf());
   g_ctx->Draw(4, 0);
 }
+// ---------------------------------------------------------------- grafis UTC (Fase 2)
+static double unixMs() { // = performance.timeOrigin + performance.now() di Chromium (jam dinding, ms)
+  FILETIME ft; GetSystemTimePreciseAsFileTime(&ft);
+  ULARGE_INTEGER u; u.LowPart = ft.dwLowDateTime; u.HighPart = ft.dwHighDateTime;
+  return (double)(u.QuadPart - 116444736000000000ull) / 10000.0;
+}
+struct Tile { double x = 0; UINT w = 0, h = 0; ComPtr<ID3D11Texture2D> tex; ComPtr<ID3D11ShaderResourceView> srv; };
+struct Ticker {
+  bool valid = false; std::string id; double at = 0, vx = 0, vy = 0, vw = 0, vh = 0, w = 0, speed = 0, px0 = 0, E0 = 0;
+  bool snap = false; int ntile = 0; std::vector<Tile> tiles; double cur = 0; long long f = -1; bool hasCur = false;
+};
+struct ULayer {
+  ComPtr<ID3D11Texture2D> tex; ComPtr<ID3D11ShaderResourceView> srv; UINT w = 0, h = 0; DXGI_FORMAT fmt = DXGI_FORMAT_UNKNOWN;
+  bool valid = false, readySent = false;
+  Ticker cur, next;
+  HANDLE pend = nullptr; unsigned long long pendSeq = 0; UINT pW = 0, pH = 0; // handle terbaru yang menunggu disalin
+};
+static std::map<std::string, ULayer> g_ul;
+static std::vector<std::string> g_ulay;
+static long long g_frameNo = 0;
+static unsigned long long g_utexN = 0;
+
+static void ackHandle(const std::string& id, HANDLE h, unsigned long long seq) {
+  if (h) CloseHandle(h);
+  emit("uack %s %llu", id.c_str(), seq);
+}
+// salin semua tekstur yang menunggu (satu per lapisan), tunggu GPU selesai, baru balas → KLM boleh mengembalikan tekstur
+static void flushUtex() {
+  std::vector<std::pair<std::string, unsigned long long>> acks;
+  ComPtr<ID3D11Device1> d1; g_dev.As(&d1);
+  for (auto& kv : g_ul) {
+    ULayer& L = kv.second; if (!L.pend) continue;
+    HANDLE h = L.pend; unsigned long long seq = L.pendSeq; L.pend = nullptr;
+    ComPtr<ID3D11Texture2D> st;
+    HRESULT hr = d1 ? d1->OpenSharedResource1(h, IID_PPV_ARGS(&st)) : E_NOINTERFACE;
+    CloseHandle(h);
+    if (FAILED(hr) || !st) { emit("uerr %s OpenSharedResource1 0x%08lx", kv.first.c_str(), (unsigned long)hr); acks.push_back({ kv.first, seq }); continue; }
+    D3D11_TEXTURE2D_DESC d{}; st->GetDesc(&d);
+    if (!L.tex || L.w != d.Width || L.h != d.Height || L.fmt != d.Format) {
+      D3D11_TEXTURE2D_DESC n{}; n.Width = d.Width; n.Height = d.Height; n.MipLevels = 1; n.ArraySize = 1; n.Format = d.Format;
+      n.SampleDesc.Count = 1; n.Usage = D3D11_USAGE_DEFAULT; n.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+      L.tex.Reset(); L.srv.Reset();
+      if (FAILED(g_dev->CreateTexture2D(&n, nullptr, &L.tex)) || FAILED(g_dev->CreateShaderResourceView(L.tex.Get(), nullptr, &L.srv))) {
+        emit("uerr %s tekstur lapisan (format %d)", kv.first.c_str(), (int)d.Format); L.tex.Reset(); acks.push_back({ kv.first, seq }); continue;
+      }
+      L.w = d.Width; L.h = d.Height; L.fmt = d.Format;
+    }
+    ComPtr<IDXGIKeyedMutex> km; bool locked = false;
+    if (SUCCEEDED(st.As(&km)) && km) locked = km->AcquireSync(0, 8) == S_OK;
+    g_ctx->CopyResource(L.tex.Get(), st.Get());
+    if (locked) km->ReleaseSync(0);
+    L.valid = true; g_utexN++;
+    if (!L.readySent) { L.readySent = true; emit("uready %s", kv.first.c_str()); }
+    acks.push_back({ kv.first, seq });
+  }
+  if (acks.empty()) return;
+  if (g_query) { // salinan GPU benar-benar selesai sebelum Chromium boleh memakai ulang teksturnya
+    g_ctx->End(g_query.Get()); g_ctx->Flush();
+    double t0 = nowMs();
+    while (g_ctx->GetData(g_query.Get(), nullptr, 0, 0) == S_FALSE && nowMs() - t0 < 50) YieldProcessor();
+  }
+  for (auto& a : acks) emit("uack %s %llu", a.first.c_str(), a.second);
+}
+static void tileTex(Tile& t, const uint8_t* rgba) { // RGBA lurus (getImageData) → BGRA premultiplied
+  std::vector<uint8_t> px((size_t)t.w * t.h * 4);
+  for (size_t i = 0, n = (size_t)t.w * t.h; i < n; i++) {
+    const uint8_t* s = rgba + i * 4; uint8_t* d = &px[i * 4]; unsigned a = s[3];
+    d[0] = (uint8_t)((s[2] * a + 127) / 255); d[1] = (uint8_t)((s[1] * a + 127) / 255); d[2] = (uint8_t)((s[0] * a + 127) / 255); d[3] = (uint8_t)a;
+  }
+  makeTex(t.w, t.h, px.data(), t.tex, t.srv);
+}
+static double tkStep(Ticker& n, double t) { // = tkStep di utc.js: maju tepat satu langkah tiap frame, ikut jam bila meleset
+  if (n.f == g_frameNo && n.hasCur) return n.cur;
+  double step = n.speed / (g_fps ? g_fps : 30), ideal = n.px0 + (t - n.E0) * n.speed / 1000.0;
+  if (!n.hasCur || std::fabs(ideal - (n.cur + step)) > std::max(0.6, step * 0.4)) n.cur = n.snap ? std::round(ideal) : ideal;
+  else n.cur += n.snap ? std::round(step) : step;
+  n.hasCur = true; n.f = g_frameNo;
+  return n.cur;
+}
+static void quad(double x, double y, double w, double h, double sx, double sy, ID3D11ShaderResourceView* srv, float alpha) {
+  float dst[4] = { (float)(x * sx / g_W * 2 - 1), (float)(1 - y * sy / g_H * 2), (float)((x + w) * sx / g_W * 2 - 1), (float)(1 - (y + h) * sy / g_H * 2) };
+  float uv[4] = { 0, 0, 1, 1 }, col[4] = { 1, 1, 1, alpha }, p2[4] = { 0, 0, 1, 0 };
+  setCB(dst, uv, col, p2);
+  g_ctx->PSSetShaderResources(0, 1, &srv);
+  g_ctx->Draw(4, 0);
+}
+static void drawUtc() {
+  if (g_ulay.empty()) return;
+  float bf[4] = { 0, 0, 0, 0 };
+  g_ctx->OMSetBlendState(g_blendPM.Get(), bf, 0xffffffff);
+  g_ctx->PSSetShader(g_psPM.Get(), nullptr, 0);
+  double t = unixMs();
+  for (auto& id : g_ulay) {
+    auto it = g_ul.find(id); if (it == g_ul.end()) continue;
+    ULayer& L = it->second; if (!L.valid || !L.w || !L.h) continue;
+    double sx = (double)g_W / L.w, sy = (double)g_H / L.h;
+    quad(0, 0, L.w, L.h, sx, sy, L.srv.Get(), 1);
+    if (L.next.valid && t >= L.next.at) { L.cur = std::move(L.next); L.next = Ticker(); }
+    Ticker& n = L.cur;
+    if (!n.valid || t < n.at || n.w <= 0) continue;
+    double off = std::fmod(tkStep(n, t), n.w); if (off < 0) off += n.w;
+    D3D11_RECT sc{ (LONG)std::floor(n.vx * sx), (LONG)std::floor(n.vy * sy), (LONG)std::ceil((n.vx + n.vw) * sx), (LONG)std::ceil((n.vy + n.vh) * sy) };
+    g_ctx->RSSetState(g_rastSc.Get()); g_ctx->RSSetScissorRects(1, &sc);
+    for (double base = n.vx - off; base < n.vx + n.vw; base += n.w)
+      for (auto& tl : n.tiles) {
+        double x = base + tl.x;
+        if (!tl.srv || x > n.vx + n.vw || x + tl.w < n.vx) continue;
+        quad(x, n.vy, tl.w, tl.h, sx, sy, tl.srv.Get(), 1);
+      }
+    g_ctx->RSSetState(g_rast.Get());
+  }
+  g_ctx->OMSetBlendState(g_blend.Get(), bf, 0xffffffff);
+}
+static void utcCommand(const std::string& c, std::istringstream& is, const std::vector<uint8_t>& data) {
+  std::string lid; is >> lid;
+  if (c == "ulay") {
+    g_ulay.clear();
+    if (lid != "-") { std::stringstream ss(lid); std::string x; while (std::getline(ss, x, ',')) if (!x.empty()) g_ulay.push_back(x); }
+    return;
+  }
+  if (c == "uclear") { for (auto& kv : g_ul) { if (kv.second.pend) ackHandle(kv.first, kv.second.pend, kv.second.pendSeq); kv.second.pend = nullptr; kv.second.valid = false; kv.second.readySent = false; } return; }
+  if (lid.empty() || lid.size() > 16) return;
+  ULayer& L = g_ul[lid];
+  if (c == "utex") {
+    unsigned long long hv = 0, seq = 0; UINT W = 0, H = 0; is >> hv >> W >> H >> seq;
+    if (L.pend) ackHandle(lid, L.pend, L.pendSeq); // frame lama yang belum sempat disalin: lewati, kembalikan
+    L.pend = (HANDLE)(uintptr_t)hv; L.pendSeq = seq; L.pW = W; L.pH = H;
+  } else if (c == "ureset") {
+    L.cur = Ticker(); L.next = Ticker(); L.valid = false; L.readySent = false;
+  } else if (c == "utk") {
+    Ticker n; int snap = 0; is >> n.id >> n.at >> n.vx >> n.vy >> n.vw >> n.vh >> n.w >> n.speed >> snap >> n.px0 >> n.E0 >> n.ntile;
+    n.snap = snap != 0; n.tiles.reserve(n.ntile > 0 && n.ntile < 256 ? n.ntile : 0);
+    if (n.ntile <= 0 || n.ntile > 256 || n.w <= 0) return;
+    L.next = std::move(n); L.next.valid = false; // valid setelah semua potongan diterima
+  } else if (c == "ublob") {
+    std::string id; Tile t; size_t nb = 0; is >> id >> t.x >> t.w >> t.h >> nb;
+    if (id != L.next.id || L.next.valid || !t.w || !t.h || data.size() < (size_t)t.w * t.h * 4) return;
+    tileTex(t, data.data());
+    L.next.tiles.push_back(std::move(t));
+    if ((int)L.next.tiles.size() >= L.next.ntile) L.next.valid = true;
+  } else if (c == "utkgeo") {
+    std::string id; double vx, vy, vw, vh; is >> id >> vx >> vy >> vw >> vh;
+    for (Ticker* n : { &L.cur, &L.next }) if (n->id == id) { n->vx = vx; n->vy = vy; n->vw = vw; n->vh = vh; }
+  } else if (c == "utklive") {
+    std::string id; is >> id;
+    if (id == "-" || L.cur.id == id || L.next.id == id) { L.cur = Ticker(); L.next = Ticker(); }
+  }
+}
+
 static float ease(float p) { p = p < 0 ? 0 : p > 1 ? 1 : p; return p < 0.5f ? 4 * p * p * p : 1 - std::pow(-2 * p + 2, 3.0f) / 2; } // = KM.ease
 static void compose(Bus& b, bool program) {
   ensureRT(b); if (!b.rtv) return;
@@ -390,6 +574,7 @@ static void compose(Bus& b, bool program) {
   float black[4] = { 0, 0, 0, 1 }; g_ctx->ClearRenderTargetView(b.rtv.Get(), black);
   if (program && g_tr.on) { drawSource(g_tr.from, 1); drawSource(g_tr.to, ease((float)g_tr.k)); }
   else drawSource(b.id, 1);
+  if (program) drawUtc(); // grafis UTC ON AIR di atas Program (sama dengan lapisan DSK di mesin JS)
 }
 static void present(Bus& b) {
   if (!b.want || !b.hwnd) return;
@@ -424,7 +609,7 @@ static void hideBus(Bus& b) {
 static int g_frames = 0; static double g_msAcc = 0;
 static void sendStats(int fps, double ms) {
   PROCESS_MEMORY_COUNTERS pm{}; pm.cb = sizeof pm; GetProcessMemoryInfo(GetCurrentProcess(), &pm, sizeof pm);
-  emit("stats fps=%d ms=%.2f mem=%llu warp=%d", fps, ms, (unsigned long long)(pm.WorkingSetSize / (1024 * 1024)), g_warp ? 1 : 0);
+  emit("stats fps=%d ms=%.2f mem=%llu warp=%d utex=%llu", fps, ms, (unsigned long long)(pm.WorkingSetSize / (1024 * 1024)), g_warp ? 1 : 0, g_utexN);
 }
 static void applyRect(Bus& b, int x, int y, int w, int h, bool vis) {
   b.want = vis && w >= 8 && h >= 8;
@@ -435,8 +620,17 @@ static void applyRect(Bus& b, int x, int y, int w, int h, bool vis) {
   if (!ensureWindow(b)) return;
   if (moved && b.shown) SetWindowPos(b.hwnd, HWND_TOP, x, y, w, h, SWP_NOACTIVATE);
 }
-static void command(const std::string& line) {
+static bool readPixel(Bus& b, UINT x, UINT y, int rgb[3]);
+static void command(const std::string& line, const std::vector<uint8_t>& data = {}) {
   std::istringstream is(line); std::string c; is >> c;
+  if (c == "utex" || c == "ulay" || c == "uclear" || c == "ureset" || c == "utk" || c == "ublob" || c == "utkgeo" || c == "utklive") { utcCommand(c, is, data); return; }
+  if (c == "probe") {
+    std::string bn; double fx = 0, fy = 0; is >> bn >> fx >> fy; int px[3] = { -1, -1, -1 };
+    Bus& b = bn == "pvw" ? g_pvw : g_pgm;
+    readPixel(b, (UINT)std::min<double>(g_W - 1, std::max(0.0, fx * g_W)), (UINT)std::min<double>(g_H - 1, std::max(0.0, fy * g_H)), px);
+    emit("probe %d %d %d", px[0], px[1], px[2]);
+    return;
+  }
   if (c == "parent") {
     unsigned long long v = 0; is >> v; HWND p = (HWND)(uintptr_t)v;
     if (!IsWindow(p)) { emit("err jendela induk tidak valid"); return; }
@@ -484,9 +678,11 @@ static void command(const std::string& line) {
 }
 
 static void frame(double now) {
-  std::deque<std::string> q;
+  std::deque<Cmd> q;
   { std::lock_guard<std::mutex> l(g_qMx); q.swap(g_q); }
-  for (auto& l : q) command(l);
+  for (auto& l : q) command(l.line, l.data);
+  g_frameNo++;
+  flushUtex();
   if (g_tr.on && !g_tr.manual) {
     g_tr.k = (now - g_tr.t0) / g_tr.dur;
     if (g_tr.k >= 1) { g_tr.on = false; g_pgm.id = g_tr.to; }
@@ -564,6 +760,40 @@ static int selftest(bool warp) {
   chk(g_pgm, 1917, 1077, 255, 255, 0, 6, "Ganti resolusi 1080p (pojok kanan bawah kuning)");
   command("rect pgm 0 0 640 360 1"); run(3);
   emit("  %s ubah ukuran monitor (swapchain %ux%u)", g_pgm.scW == 640 ? "OK " : "GAGAL", g_pgm.scW, g_pgm.scH); if (g_pgm.scW != 640) ok = 0;
+  // ---- Fase 2: grafis UTC dari tekstur NT bersama (seperti lapisan offscreen Chromium) + running text native
+  command("pgm a"); run(2);
+  {
+    const UINT W = 1920, H = 1080; std::vector<uint32_t> px(W * H, 0);
+    for (UINT i = 0; i < W * (H / 2); i++) px[i] = 0x80808080u; // separuh atas: putih 50% (premultiplied)
+    D3D11_TEXTURE2D_DESC d{}; d.Width = W; d.Height = H; d.MipLevels = 1; d.ArraySize = 1; d.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    d.SampleDesc.Count = 1; d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    d.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+    D3D11_SUBRESOURCE_DATA sd{ px.data(), W * 4, 0 };
+    ComPtr<ID3D11Texture2D> sh; ComPtr<IDXGIResource1> r1; HANDLE hs = nullptr;
+    bool okTex = SUCCEEDED(g_dev->CreateTexture2D(&d, &sd, &sh)) && SUCCEEDED(sh.As(&r1)) &&
+                 SUCCEEDED(r1->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &hs));
+    if (!okTex) emit("  (info) tekstur NT bersama tidak didukung perangkat ini — uji UTC dilewati");
+    else {
+      char c1[128]; snprintf(c1, sizeof c1, "utex lt %llu %u %u 7", (unsigned long long)(uintptr_t)hs, W, H);
+      command(c1); command("ulay lt"); run(3);
+      emit("  %s tekstur UTC diterima (utex=%llu, siap=%d)", g_utexN >= 1 ? "OK " : "GAGAL", g_utexN, g_ul["lt"].valid ? 1 : 0); if (g_utexN < 1) ok = 0;
+      chk(g_pgm, 100, 100, 255, 128, 128, 3, "UTC putih 50% di atas merah");
+      chk(g_pgm, 100, 900, 255, 0, 0, 2, "UTC transparan: Program tetap merah");
+      char c2[256]; double t = unixMs();
+      snprintf(c2, sizeof c2, "utk lt T1 %.3f 0 200 1920 100 400 0 0 0 %.3f 1", t - 1000, t);
+      command(c2);
+      std::vector<uint8_t> tile(400 * 100 * 4);
+      for (size_t i = 0; i < 400 * 100; i++) { tile[i * 4] = 0; tile[i * 4 + 1] = 255; tile[i * 4 + 2] = 0; tile[i * 4 + 3] = 255; }
+      command("ublob lt T1 0 400 100 160000", tile); run(3);
+      chk(g_pgm, 50, 250, 0, 255, 0, 2, "Running text native (potongan hijau)");
+      chk(g_pgm, 450, 250, 0, 255, 0, 2, "Running text berulang sepanjang lebar");
+      chk(g_pgm, 50, 350, 255, 128, 128, 3, "Di luar jalur running text");
+      command("utklive lt -"); run(2);
+      chk(g_pgm, 50, 250, 255, 128, 128, 3, "Running text dilepas (kembali ke halaman)");
+      command("ulay -"); run(2);
+      chk(g_pgm, 100, 100, 255, 0, 0, 2, "UTC disembunyikan");
+    }
+  }
   command("src s screen 0 0 1024 768"); run(10);
   emit("  (info) tangkap layar DXGI: %s", g_src.count("s") && g_src["s"]->dup ? "tersedia" : "tidak tersedia di mesin ini (wajar di CI tanpa sesi desktop)");
   command("rect pvw 0 0 0 0 0"); run(2);
