@@ -727,6 +727,28 @@ function smokeTest() {
         log('mesin native: piksel layar di monitor Preview (kanvas JS disembunyikan) = ' + JSON.stringify(px) + ' (harap ±192,192,192 dari color bars)');
         if (ns.state !== 'ready' || !ns.pvw) { fail++; log('GAGAL: mesin native tidak mengambil alih monitor Preview'); }
         else if (!px || Math.abs(px[0] - 192) > 24 || Math.abs(px[1] - 192) > 24 || Math.abs(px[2] - 192) > 24) log('catatan: piksel layar tidak cocok (desktop CI mungkin tidak menampilkan jendela) — dicek manual lewat native-desktop.png');
+        // --- Fase 3: kamera dibuka mesin native (pola uji) → tekstur bersama → mesin JS (VideoFrame) + monitor native ---
+        try {
+          await js(`(async () => { const c = KM.inputs.create('camera', { title: 'Kamera native uji', opts: { deviceId: 'klm-native-test', width: 640, height: 360, fps: 30 } }); window.__ncam = c.id; return 1; })()`);
+          await wait(4000);
+          const cs = JSON.parse(await js(`(() => { const i = KM.getInput(window.__ncam); const c = i && i.rt.ncam && KM.nengine.cams.get(i.rt.ncam);
+            const r = { ncam: i && i.rt.ncam, ok: c && c.ok, frames: c ? c.frames : 0, err: c ? c.err : (i && i.rt.err), stat: KM.nengine.camStat };
+            const so = i && KM.inputTypes.camera.source(i);
+            if (so && so.src && so.w) { const cv = document.createElement('canvas'); cv.width = so.w; cv.height = so.h; const g = cv.getContext('2d'); g.drawImage(so.src, 0, 0);
+              r.size = so.w + 'x' + so.h; r.px = [g.getImageData(4, so.h >> 1, 1, 1).data, g.getImageData(so.w - 5, so.h >> 1, 1, 1).data].map((d) => [d[0], d[1], d[2], d[3]]); }
+            return JSON.stringify(r); })()`));
+          log('kamera native (pola uji): ' + JSON.stringify(cs));
+          const bg = (p) => p && Math.abs(p[0] - 32) <= 3 && Math.abs(p[1] - 160) <= 3 && Math.abs(p[2] - 224) <= 3 && p[3] === 255;
+          if (!cs.ok || !(cs.frames > 10)) { fail++; log('GAGAL: frame kamera native tidak sampai ke mesin JS'); }
+          else if (!cs.px || !(bg(cs.px[0]) || bg(cs.px[1]))) { fail++; log('GAGAL: isi frame kamera native di mesin JS salah'); }
+          else log('kamera native: OK — frame GPU sampai ke mesin JS dengan isi benar');
+          await js('KM.engine.setPreview(window.__ncam)'); await wait(1500);
+          const cp = JSON.parse(await js('JSON.stringify({ pvw: KM.nengine.pvw, why: KM.nengine.why.pvw })'));
+          log('kamera native di monitor Preview: ' + JSON.stringify(cp));
+          if (!cp.pvw) { fail++; log('GAGAL: kamera native tidak tampil di monitor Preview native'); }
+          await js('KM.inputs.remove ? KM.inputs.remove(window.__ncam) : 0'); await wait(800);
+          log('kamera native setelah input dihapus: ' + await js('JSON.stringify({ cams: KM.nengine.cams.size })'));
+        } catch (e) { fail++; log('GAGAL kamera native: ' + e.message); }
         // --- Fase 2: grafis UTC ON AIR di atas Program, digambar mesin native dari tekstur GPU yang sama ---
         try {
           // uji sebelumnya memaksa jalur CPU → nyalakan lagi zero-copy (mesin native hanya menerima tekstur GPU)

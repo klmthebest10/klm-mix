@@ -16,7 +16,7 @@ function findExe() {
   return c.find((p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }) || '';
 }
 // hanya perintah yang dikenal mesin, tanpa baris baru / karakter kendali (perintah utex/utk/ublob hanya dari proses utama)
-const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe)( [\w.,\- ]{0,200})?$/;
+const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist)( [\w.,\- ]{0,600})?$/;
 
 // DuplicateHandle (kernel32) lewat koffi: handle NT tekstur lapisan UTC → disalin ke proses klm-engine
 let K = null;
@@ -38,6 +38,37 @@ function k32() {
 const ntHandleOf = (ti) => { const b = (ti && ti.handle && ti.handle.ntHandle) || (ti && ti.sharedTextureHandle); return b && b.length >= 8 ? b.readBigUInt64LE(0) : b && b.length >= 4 ? BigInt(b.readUInt32LE(0)) : 0n; };
 
 function setup({ win, log = () => {} }) {
+  // ---- Fase 3: kamera native → tekstur bersama → mixer (VideoFrame, tanpa salinan CPU) ----
+  const sharedTexture = require('electron').sharedTexture;
+  const camBuf = new Map(); // "id/gen/slot" → { h (handle di proses ini), buf, w, h }
+  function camDropAll() { const k = k32(); for (const b of camBuf.values()) { if (k) try { k.CloseHandle(b.handle); } catch (e) {} } camBuf.clear(); }
+  function onCbuf(a) { // cbuf id gen slot handle w h
+    const k = k32(); const key = a[1] + '/' + a[2] + '/' + a[3];
+    // cincin lama (generasi sebelumnya) kamera ini dilepas
+    for (const [kk, b] of camBuf) if (kk.startsWith(a[1] + '/') && !kk.startsWith(a[1] + '/' + a[2] + '/')) { if (k) try { k.CloseHandle(b.handle); } catch (e) {} camBuf.delete(kk); }
+    if (!k || !hProc) return;
+    const out = [0];
+    if (!k.DuplicateHandle(hProc, BigInt(a[4]), k.GetCurrentProcess(), out, 0, 0, 2) || !out[0]) { toWin('camerr ' + a[1] + ' DuplicateHandle gagal'); return; }
+    const buf = Buffer.alloc(8); buf.writeBigUInt64LE(BigInt(out[0]));
+    camBuf.set(key, { handle: out[0], buf, w: +a[5], h: +a[6] });
+  }
+  function onCfr(a) { // cfr id gen slot seq
+    const key = a[1] + '/' + a[2] + '/' + a[3], b = camBuf.get(key);
+    const rel = () => write('crel ' + a[1] + ' ' + a[2] + ' ' + a[3]);
+    const w = win(); let fr = null; try { fr = w && !w.isDestroyed() ? w.webContents.mainFrame : null; } catch (e) {}
+    if (!b || !fr || !sharedTexture || !sharedTexture.importSharedTexture) { rel(); return; }
+    let imp;
+    try {
+      imp = sharedTexture.importSharedTexture({
+        textureInfo: { pixelFormat: 'bgra', codedSize: { width: b.w, height: b.h }, visibleRect: { x: 0, y: 0, width: b.w, height: b.h }, timestamp: 0, handle: { ntHandle: b.buf } },
+        allReferencesReleased: rel // mixer selesai memakai frame ini → slot cincin boleh dipakai lagi
+      });
+    } catch (e) { rel(); camFail = camFail || ('impor tekstur: ' + e.message); toWin('camerr ' + a[1] + ' ' + camFail); return; }
+    sharedTexture.sendSharedTexture({ frame: fr, importedSharedTexture: imp }, 'cam:' + a[1], { W: b.w, H: b.h, seq: +a[4] })
+      .catch((e) => { if (!camFail) { camFail = 'kirim tekstur: ' + (e && e.message); toWin('camerr ' + a[1] + ' ' + camFail); } })
+      .finally(() => { try { imp.release(); } catch (e) {} });
+  }
+  let camFail = '';
   let P = null, buf = '', st = { state: 'off' }, restarts = 0, want = false;
   // ---- Fase 2: grafis UTC ----
   let hProc = 0, utcOn = false, utcErr = '', onUtcWant = null;
@@ -126,6 +157,8 @@ function setup({ win, log = () => {} }) {
         const s = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
         if (!s) continue;
         if (s.startsWith('uack ')) { const a = s.split(' '); onAck(a[1], +a[2]); continue; } // tidak diteruskan (sering)
+        if (s.startsWith('cfr ')) { onCfr(s.split(' ')); continue; }
+        if (s.startsWith('cbuf ')) { onCbuf(s.split(' ')); continue; }
         if (s.startsWith('ready ')) {
           st = { state: 'ready', adapter: s.slice(6) }; restarts = 0; write('parent ' + hwnd()); log('[nengine] siap: ' + s.slice(6));
           const k = k32(); hProc = k ? k.OpenProcess(0x40 /* PROCESS_DUP_HANDLE */, 0, p.pid) : 0;
@@ -139,7 +172,7 @@ function setup({ win, log = () => {} }) {
     p.on('error', (e) => { st = { state: 'error', msg: e.message }; toWin('exit error'); });
     p.on('exit', (code) => {
       if (P !== p) return; P = null;
-      dropUtc(); if (hProc && k32()) { try { k32().CloseHandle(hProc); } catch (e) {} } hProc = 0;
+      dropUtc(); camDropAll(); if (hProc && k32()) { try { k32().CloseHandle(hProc); } catch (e) {} } hProc = 0;
       toWin('exit ' + code);
       if (want && restarts < 3) { restarts++; st = { state: 'restarting' }; setTimeout(() => { if (want) { start(); toWin('restart'); } }, 800 * restarts); }
       else if (want) st = { state: 'error', msg: 'mesin native berhenti (kode ' + code + ')' };

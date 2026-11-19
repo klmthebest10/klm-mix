@@ -8,7 +8,10 @@
  * Fase 1 mendukung sumber: Warna/Gradien, Color Bars, Tangkap Layar (DXGI Desktop Duplication, zero-copy GPU).
  * Fase 2: grafis UTC ON AIR (Acara & Scoreboard) di atas Program — tekstur GPU lapisan offscreen yang sama dikirim ke
  * mesin native (handle NT, tanpa salinan CPU), running text native digulir mesin native.
- * Bila monitor menampilkan hal lain (kamera, KLMCAM, video, overlay, efek, transisi selain fade/cut,
+ * Fase 3: kamera USB / capture card dibuka mesin native lewat Media Foundation (dekode & konversi warna di GPU). Frame
+ * kamera tampil langsung di monitor native dan dikirim ke mesin JS sebagai tekstur GPU bersama (VideoFrame) untuk
+ * Program/rekam/streaming — perangkat hanya dibuka sekali, tanpa salinan CPU.
+ * Bila monitor menampilkan hal lain (KLMCAM, video, overlay, efek, transisi selain fade/cut,
  * mode grid) atau ada menu/dialog di atas monitor, monitor itu otomatis kembali ke tampilan JS — tanpa kedip.
  */
 'use strict';
@@ -16,6 +19,7 @@
   const N = KM.nengine = { pvw: false, pgm: false, state: 'off', adapter: '', fps: 0, mem: 0, ms: 0, why: { pvw: '', pgm: '' }, available: false };
   const el = () => !!(window.klm && window.klm.isElectron && window.klm.send);
   if (KM.settings.nativeEngine == null) KM.settings.nativeEngine = false;
+  if (KM.settings.nativeCam == null) KM.settings.nativeCam = true; // berlaku hanya bila mesin native menyala
 
   let running = false, ready = false, frameN = 0;
   const srcSent = new Map();   // id native → spesifikasi terakhir
@@ -50,6 +54,7 @@
       return 'colour ' + a.join(' ') + ' ' + b.join(' ') + ' ' + ({ linear: 1, radial: 2 }[o.grad] || 0);
     }
     if (inp.type === 'bars') return 'bars';
+    if (inp.type === 'camera') { const c = inp.rt.ncam && cams.get(inp.rt.ncam); return c && c.frames > 0 ? 'cam' : null; }
     if (inp.type === 'screen') {
       if (!o.sourceId || !/^screen:/.test(o.sourceId) || !inp.rt || !inp.rt.ready) return null;
       if (!scr.has(o.sourceId)) { resolveScreen(o.sourceId); return null; }
@@ -115,11 +120,13 @@
     if (o !== out) { out = o; cmd('out ' + o); }
     // sumber yang dipakai Preview / Program / transisi
     const need = new Map();
-    const add = (id) => { const i = id && KM.getInput(id); const s = i && spec(i); if (s) need.set(nid(i), s); };
+    // kamera native: id mesin = id kamera (sudah dibuka lewat camOpen, tidak dikirim sebagai "src")
+    const eid = (i) => (i.type === 'camera' && i.rt.ncam ? i.rt.ncam : nid(i));
+    const add = (id) => { const i = id && KM.getInput(id); const s = i && spec(i); if (s) need.set(eid(i), s); };
     add(S.previewId); add(S.programId); if (S.trans) { add(S.trans.fromId); add(S.trans.toId); }
-    for (const [k, s] of need) if (srcSent.get(k) !== s) { srcSent.set(k, s); cmd('src ' + k + ' ' + s); }
+    for (const [k, s] of need) if (s !== 'cam' && srcSent.get(k) !== s) { srcSent.set(k, s); cmd('src ' + k + ' ' + s); }
     for (const k of [...srcSent.keys()]) if (!need.has(k)) { srcSent.delete(k); cmd('del ' + k); }
-    const idOf = (id) => { const i = id && KM.getInput(id); return i && need.has(nid(i)) ? nid(i) : '-'; };
+    const idOf = (id) => { const i = id && KM.getInput(id); return i && need.has(eid(i)) ? eid(i) : '-'; };
     // transisi: fade otomatis dikirim sekali; T-bar manual dikirim posisinya
     const tr = S.trans;
     if (tr && tr.type === 'fade' && !tr.manual) {
@@ -167,16 +174,17 @@
 
   function onEv(s) {
     const sp = s.indexOf(' '), t = sp < 0 ? s : s.slice(0, sp), rest = sp < 0 ? '' : s.slice(sp + 1);
-    if (t === 'ready') { ready = true; N.state = 'ready'; N.adapter = rest; resetSent(); KM.changed('nengine'); }
+    if (t === 'ready') { ready = true; N.state = 'ready'; N.adapter = rest; resetSent(); KM.changed('nengine'); camReopen(); }
     else if (t === 'shown' && bus[rest]) { bus[rest].shown = true; N[rest] = bus[rest].want; }
     else if (t === 'hidden' && bus[rest]) { bus[rest].shown = false; N[rest] = false; }
     else if (t === 'srcerr') { const id = rest.split(' ')[0]; srcErr.add(id); srcSent.delete(id); KM.log && KM.log('mesin native: ' + rest); }
-    else if (t === 'stats') { const m = /fps=(\d+) ms=([\d.]+) mem=(\d+)/.exec(rest); if (m) { N.fps = +m[1]; N.ms = +m[2]; N.mem = +m[3]; } const u = /utex=(\d+)/.exec(rest); if (u) N.utex = +u[1]; }
+    else if (t === 'stats') { const m = /fps=(\d+) ms=([\d.]+) mem=(\d+)/.exec(rest); if (m) { N.fps = +m[1]; N.ms = +m[2]; N.mem = +m[3]; } const u = /utex=(\d+)/.exec(rest); if (u) N.utex = +u[1]; const cm = /cams=(\S+)/.exec(rest); N.camStat = cm ? cm[1] : '-'; }
     else if (t === 'probe') { const f = probeWait.shift(); if (f) f(rest.split(' ').map(Number)); }
     else if (t === 'click') clickFwd(rest.split(' '));
     else if (t === 'uready') uready.add(rest);
+    else if (t === 'camok' || t === 'camerr') camEv(t, rest);
     else if (t === 'uerr') { utcErr = rest.replace(/^\S+ /, '').slice(0, 80); KM.log && KM.log('mesin native UTC: ' + rest); }
-    else if (t === 'exit' || t === 'restart') { ready = false; N.pvw = N.pgm = false; N.state = t === 'exit' ? 'berhenti' : 'memulai ulang'; resetSent(); KM.changed('nengine'); }
+    else if (t === 'exit' || t === 'restart') { ready = false; N.pvw = N.pgm = false; N.state = t === 'exit' ? 'berhenti' : 'memulai ulang'; resetSent(); camLost(); KM.changed('nengine'); }
   }
   function resetSent() { srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; uready.clear(); ulaySent = null; if (utcWant) { utcWant = false; if (el()) window.klm.send('nengine:utc', false); } for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
   // klik di jendela native diteruskan ke kanvas di bawahnya (pilih kotak grid, klik kanan menu monitor, dll.)
@@ -190,12 +198,73 @@
     if (dbl) cv.dispatchEvent(new MouseEvent('dblclick', o));
   }
 
+  // ---------- kamera native (Fase 3) ----------
+  const cams = new Map(); // id kamera → { users:Set, key, w, h, fps, ok, err, frames, cur:{imp,vf}, wait:[] }
+  N.cams = cams;
+  const hexStr = (s) => { if (!s) return '-'; return [...new TextEncoder().encode(s)].map((b) => b.toString(16).padStart(2, '0')).join(''); };
+  const camIdOf = (key) => { let h = 2166136261; for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 16777619); } return 'c' + (h >>> 0).toString(36); };
+  N.camUsable = () => el() && running && ready && KM.settings.nativeEngine === true && KM.settings.nativeCam !== false;
+  N.camOpen = function (inp, label, o) {
+    const test = o.deviceId === 'klm-native-test';
+    const key = test ? 'test' : (label || 'default') + '@' + o.width + 'x' + o.height + '@' + o.fps;
+    const id = camIdOf(key);
+    if (inp.rt.ncam && inp.rt.ncam !== id) N.camClose(inp);
+    let c = cams.get(id);
+    if (!c) {
+      c = { id, users: new Set(), key, ok: false, err: '', frames: 0, cur: null, wait: [] };
+      cams.set(id, c);
+      if (test) cmd('camtest ' + id + ' ' + (o.width | 0) + ' ' + (o.height | 0) + ' ' + (o.fps | 0));
+      else cmd('cam ' + id + ' ' + (o.width | 0) + ' ' + (o.height | 0) + ' ' + (o.fps | 0) + ' ' + hexStr(label));
+      cmd('camexp ' + id + ' 1');
+    }
+    c.users.add(inp.id); inp.rt.ncam = id;
+    if (c.ok) return Promise.resolve(c);
+    return new Promise((res, rej) => {
+      const t = setTimeout(() => { c.wait = c.wait.filter((x) => x.res !== res); rej(new Error('mesin native tidak menjawab')); }, 9000);
+      c.wait.push({ res: (v) => { clearTimeout(t); res(v); }, rej: (e) => { clearTimeout(t); rej(e); } });
+    });
+  };
+  function camFree(c) { if (c.cur) { try { c.cur.vf.close(); } catch (e) {} try { c.cur.imp.release(); } catch (e) {} c.cur = null; } }
+  N.camClose = function (inp) {
+    const id = inp.rt.ncam; inp.rt.ncam = null; if (!id) return;
+    const c = cams.get(id); if (!c) return;
+    c.users.delete(inp.id);
+    if (!c.users.size) { cmd('camoff ' + id); camFree(c); cams.delete(id); }
+  };
+  function camEv(t, rest) {
+    const sp = rest.indexOf(' '), id = sp < 0 ? rest : rest.slice(0, sp), c = cams.get(id); if (!c) return;
+    if (t === 'camok') { const a = rest.split(' '); c.ok = true; c.w = +a[1]; c.h = +a[2]; c.fps = +a[3]; c.err = ''; c.wait.splice(0).forEach((w) => w.res(c)); }
+    else {
+      c.err = rest.slice(sp + 1); const was = c.ok; c.ok = false;
+      c.wait.splice(0).forEach((w) => w.rej(new Error(c.err)));
+      // kamera putus / gagal saat berjalan → input membuka ulang (lewat mesin native lagi, atau jalur biasa bila gagal terus)
+      if (was) for (const uid of [...c.users]) { const inp = KM.getInput(uid); if (inp && inp.rt.reopen) { inp.rt.nfail = (inp.rt.nfail || 0) + 1; inp.rt.reopen(); } }
+    }
+  }
+  N.camFrame = function (imp, id, meta) {
+    const c = cams.get(id);
+    if (!c) { try { imp.release(); } catch (e) {} return; }
+    let vf; try { vf = imp.getVideoFrame(); } catch (e) { try { imp.release(); } catch (x) {} return; }
+    camFree(c); c.cur = { imp, vf }; c.frames++;
+    if (c.frames === 1) KM.changed('input');
+  };
+  N.camSrc = (id) => { const c = cams.get(id); return c && c.cur ? { src: c.cur.vf, w: c.cur.vf.displayWidth, h: c.cur.vf.displayHeight } : null; };
+  N.camErr = (id) => { const c = cams.get(id); return c ? c.err : ''; };
+  // mesin berhenti → kamera native hilang: input kamera dibuka ulang (jalur biasa sampai mesin siap lagi)
+  function camLost() {
+    for (const c of cams.values()) { camFree(c); c.wait.splice(0).forEach((w) => w.rej(new Error('mesin native berhenti'))); }
+    const users = [...cams.values()].flatMap((c) => [...c.users]); cams.clear();
+    for (const uid of users) { const inp = KM.getInput(uid); if (inp) { inp.rt.ncam = null; inp.rt.reopen && inp.rt.reopen(); } }
+  }
+  function camReopen() { if (!N.camUsable()) return; for (const inp of KM.state.inputs) if (inp.type === 'camera' && !inp.rt.ncam && inp.rt.reopen && !(inp.rt.nfail >= 3)) inp.rt.reopen(); }
+  N.camReopenAll = () => { for (const inp of KM.state.inputs) if (inp.type === 'camera' && inp.rt.reopen) { inp.rt.nfail = 0; inp.rt.reopen(); } };
+
   N.start = async function () {
     if (!el() || running) return;
     running = true; ready = false; N.state = 'memulai';
     const r = await window.klm.invoke('nengine:start').catch((e) => ({ state: 'error', msg: e.message }));
     if (r && r.state === 'error') { running = false; N.state = 'gagal: ' + (r.msg || '?'); KM.toast('Mesin video native tidak bisa dimulai: ' + (r.msg || '?'), 'warn', 7000); }
-    else if (r && r.state === 'ready') { ready = true; N.state = 'ready'; N.adapter = r.adapter || ''; resetSent(); }
+    else if (r && r.state === 'ready') { ready = true; N.state = 'ready'; N.adapter = r.adapter || ''; resetSent(); camReopen(); }
     KM.changed('nengine');
   };
   N.stop = function () {
@@ -204,6 +273,7 @@
     N.pvw = N.pgm = false; // JS langsung menggambar monitor lagi
     for (const k in bus) cmd('rect ' + k + ' 0 0 0 0 0');
     running = false; ready = false; N.state = 'off';
+    camLost(); // kamera kembali dibuka jalur biasa
     window.klm.invoke('nengine:stop').catch(() => {});
     KM.changed('nengine');
   };

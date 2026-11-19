@@ -195,6 +195,30 @@
       inp.opts = Object.assign({ deviceId: '', width: 1920, height: 1080, fps: 30, audioDeviceId: '' }, inp.opts);
       const o = inp.opts;
       const open = async () => {
+        // mesin video native (Fase 3): kamera dibuka Media Foundation di GPU, frame datang sebagai tekstur bersama (VideoFrame)
+        const N = KM.nengine;
+        if (N && N.camUsable && N.camUsable() && !(inp.rt.nfail >= 3)) {
+          try {
+            let label = '';
+            if (o.deviceId && o.deviceId !== 'klm-native-test') { try { const d = (await navigator.mediaDevices.enumerateDevices()).find((x) => x.kind === 'videoinput' && x.deviceId === o.deviceId); label = (d && d.label) || ''; } catch (e) {} }
+            // jalur biasa yang masih terbuka ditutup dulu (kamera USB umumnya tidak bisa dibuka dua aplikasi sekaligus)
+            if (inp.rt.stream) { inp.rt.stream.getTracks().forEach((t) => t.stop()); inp.rt.stream = null; }
+            if (inp.rt.el) { try { inp.rt.el.srcObject = null; inp.rt.el.remove(); } catch (e) {} inp.rt.el = null; }
+            await N.camOpen(inp, label, o);
+            if (inp.rt.gone) { N.camClose(inp); return; }
+            if (o.audioDeviceId) { // suara capture card / mic kamera tetap lewat jalur audio biasa
+              const st = await navigator.mediaDevices.getUserMedia({ video: false, audio: { deviceId: { exact: o.audioDeviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false } }).catch(() => null);
+              if (st) { inp.rt.stream = st; KM.audio && KM.audio.attach(inp); }
+            }
+            inp.rt.ready = true; inp.rt.err = ''; inp.rt.retry = 0; inp.rt.nfail = 0;
+            KM.changed('input');
+            return;
+          } catch (e) {
+            N.camClose(inp); inp.rt.nfail = (inp.rt.nfail || 0) + 1;
+            console.warn('kamera native gagal, pakai jalur biasa:', e.message);
+            if (inp.rt.nfail === 1) KM.toast('Kamera "' + inp.title + '" dibuka jalur biasa (mesin native: ' + e.message + ')', 'warn', 6000);
+          }
+        } else if (inp.rt.ncam && N) N.camClose(inp);
         // kamera yang sama dipakai lagi di input lain: pakai salinan stream yang sudah terbuka (perangkat tidak dibuka dua kali
         // dengan pengaturan berbeda → tidak patah-patah / saling mengganggu)
         const twin = KM.state.inputs.find((i) => i !== inp && i.type === 'camera' && i.rt.stream && (i.opts.deviceId || '') === (o.deviceId || '') && i.rt.stream.getVideoTracks().some((t) => t.readyState === 'live'));
@@ -220,8 +244,8 @@
       try { await open(); }
       catch (e) { inp.rt.err = 'Kamera gagal: ' + e.name + (e.name === 'NotReadableError' ? ' (dipakai aplikasi lain?)' : ''); KM.changed('input'); if (e.name !== 'NotAllowedError' && e.name !== 'NotFoundError' && e.name !== 'OverconstrainedError') again(); }
     },
-    destroy(inp) { inp.rt.gone = true; clearTimeout(inp.rt.retryT); },
-    source: (inp) => vSrc(inp) || placeholder(inp, inp.title, inp.rt.err || 'Membuka kamera…'),
+    destroy(inp) { inp.rt.gone = true; clearTimeout(inp.rt.retryT); if (inp.rt.ncam && KM.nengine) KM.nengine.camClose(inp); },
+    source: (inp) => (inp.rt.ncam && KM.nengine ? KM.nengine.camSrc(inp.rt.ncam) || placeholder(inp, inp.title, KM.nengine.camErr(inp.rt.ncam) || 'Membuka kamera (mesin native)…') : vSrc(inp) || placeholder(inp, inp.title, inp.rt.err || 'Membuka kamera…')),
     hasAudio: (inp) => !!(inp.rt.stream && inp.rt.stream.getAudioTracks().length)
   };
 

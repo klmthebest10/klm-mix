@@ -303,7 +303,7 @@
       KM.changed('utc');
     });
     // penerima tekstur GPU dipasang sekali; proses utama baru mengirim tekstur setelah "zc-ready"
-    if (window.klm.zcReceiver && window.klm.zcReceiver((imp, id, meta) => U.pushZC(imp, id, meta))) {
+    if (window.klm.zcReceiver && window.klm.zcReceiver((imp, id, meta) => (typeof id === 'string' && id.startsWith('cam:') && KM.nengine && KM.nengine.camFrame ? KM.nengine.camFrame(imp, id.slice(4), meta) : U.pushZC(imp, id, meta)))) {
       U.zc.recv = true;
       window.klm.send('utc:zc-ready', {});
       if (KM.settings.utcZeroCopy === false) window.klm.send('utc:zc-set', { on: false });
