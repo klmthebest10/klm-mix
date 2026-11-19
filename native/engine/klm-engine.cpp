@@ -27,6 +27,17 @@
 //   utkgeo <layer> <id> <vx> <vy> <vw> <vh> | utklive <layer> <id|-> | ureset <layer>
 //   probe <pvw|pgm> <fx> <fy>             baca 1 piksel monitor (uji) → "probe r g b"
 //
+// Fase 3 — kamera USB / capture card dibuka langsung lewat Windows Media Foundation (dekode & konversi warna di GPU):
+//   camlist                               daftar kamera → "camdev <namaHex> <linkHex>" … "camdevend"
+//   cam <id> <w> <h> <fps> <kueriHex|->   buka kamera (kueri = label Chromium, mis. "HD Webcam (0c45:6713)", UTF-8 hex)
+//   camtest <id> <w> <h> <fps>            kamera uji (pola bergerak, untuk CI)
+//   camoff <id>                           tutup kamera
+//   camexp <id> <0|1>                     kirim frame ke KLM sebagai tekstur bersama (cincin 3 tekstur NT):
+//                                         "cbuf <id> <gen> <slot> <handle> <w> <h>" saat cincin dibuat,
+//                                         "cfr <id> <gen> <slot> <seq>" tiap frame;  KLM membalas  crel <id> <gen> <slot>
+//   Kamera bisa ditampilkan di monitor native dengan id-nya (pvw <id> / pgm <id>).
+//   Keluaran: camok <id> <w> <h> <fps> <namaHex> | camerr <id> <pesan>
+//
 // Keluaran stdout (satu baris per kejadian): ready <adapter> | shown <bus> | hidden <bus> | click <bus> <x> <y> <btn> <dbl>
 //   | srcerr <id> <pesan> | srcok <id> <w> <h> | stats fps=.. ms=.. mem=.. utex=.. | err <pesan>
 //   | uack <layer> <seq> | uready <layer> | uerr <layer> <pesan>
@@ -37,6 +48,11 @@
 #include <dxgi1_2.h>
 #include <d3dcompiler.h>
 #include <psapi.h>
+#include <d3d11_4.h>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
+#include <mferror.h>
 #include <timeapi.h>
 #include <wrl/client.h>
 #include <atomic>
@@ -122,6 +138,7 @@ static ComPtr<ID3D11SamplerState> g_samp;
 static ComPtr<ID3D11BlendState> g_blend, g_blendPM;
 static ComPtr<ID3D11RasterizerState> g_rast, g_rastSc;
 static ComPtr<ID3D11Query> g_query;
+static ComPtr<ID3D11PixelShader> g_psOpaque;
 static ComPtr<ID3D11Buffer> g_cb;
 static std::string g_adapterName;
 static bool g_warp = false;
@@ -141,6 +158,8 @@ float4 ps(O i) : SV_Target { float4 c = tx.Sample(sm, i.t); return float4(c.rgb,
 float4 psSolid(O i) : SV_Target { return col; }
 // alpha premultiplied (tekstur lapisan UTC dari Chromium): warna sudah dikali alpha
 float4 psPM(O i) : SV_Target { return tx.Sample(sm, i.t) * col.a; }
+// kamera (RGB32 / X8): kanal alpha dari dekoder tidak berarti → selalu buram
+float4 psOpaque(O i) : SV_Target { return float4(tx.Sample(sm, i.t).rgb, col.a); }
 // perkecil berkualitas tinggi: rata-rata n×n sampel bilinear di seluruh tapak piksel tujuan (tajam, tanpa gerigi / kedip)
 float4 psDown(O i) : SV_Target {
   int n = (int)p2.z; float4 s = 0;
@@ -190,6 +209,10 @@ static bool initD3D(bool forceWarp) {
   g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psSolid);
   if (!compile("psPM", "ps_4_0", b)) return false;
   g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psPM);
+  if (!compile("psOpaque", "ps_4_0", b)) return false;
+  g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psOpaque);
+  // Media Foundation (kamera) memakai device ini dari utasnya sendiri → konteks wajib dilindungi multithread
+  { ComPtr<ID3D11Multithread> mt; if (SUCCEEDED(g_ctx.As(&mt))) mt->SetMultithreadProtected(TRUE); }
 
   D3D11_SAMPLER_DESC sd{}; sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
   sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP; sd.MaxLOD = D3D11_FLOAT32_MAX;
@@ -234,6 +257,163 @@ struct Source {
   bool got = false;
 };
 static std::map<std::string, std::unique_ptr<Source>> g_src;
+
+// ---------------------------------------------------------------- kamera (Fase 3, Media Foundation)
+struct Cam {
+  std::string id; std::mutex mx;
+  ComPtr<ID3D11Texture2D> tex; ComPtr<ID3D11ShaderResourceView> srv; ComPtr<ID3D11RenderTargetView> rtv;
+  UINT w = 0, h = 0, mw = 0, mh = 0; DXGI_FORMAT fmt = DXGI_FORMAT_UNKNOWN;
+  std::atomic<bool> stop{ false }, fresh{ false }; std::atomic<int> frames{ 0 }; bool got = false, test = false;
+  ComPtr<IMFMediaSource> src;
+  // ekspor ke KLM (cincin tekstur NT bersama)
+  bool exp = false; int gen = 0; unsigned long long seq = 0; UINT rw = 0, rh = 0;
+  struct Slot { ComPtr<ID3D11Texture2D> tex; ComPtr<ID3D11RenderTargetView> rtv; HANDLE h = nullptr; bool busy = false; } ring[3];
+};
+static std::map<std::string, std::shared_ptr<Cam>> g_cams;
+static bool g_mf = false;
+static ComPtr<IMFDXGIDeviceManager> g_mfMgr;
+static UINT g_mfToken = 0;
+static bool initMF() {
+  if (g_mf) return true;
+  if (FAILED(MFStartup(MF_VERSION, MFSTARTUP_NOSOCKET))) { emit("err MFStartup gagal"); return false; }
+  if (SUCCEEDED(MFCreateDXGIDeviceManager(&g_mfToken, &g_mfMgr))) { if (FAILED(g_mfMgr->ResetDevice(g_dev.Get(), g_mfToken))) g_mfMgr.Reset(); }
+  g_mf = true; return true;
+}
+static std::string hexOf(const std::string& s) { static const char* H = "0123456789abcdef"; std::string o; for (unsigned char c : s) { o += H[c >> 4]; o += H[c & 15]; } return o.empty() ? "-" : o; }
+static std::string unhex(const std::string& s) { std::string o; if (s == "-") return o; for (size_t i = 0; i + 1 < s.size(); i += 2) o += (char)strtol(s.substr(i, 2).c_str(), nullptr, 16); return o; }
+static std::wstring widen(const std::string& s) { int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, nullptr, 0); std::wstring w(n > 0 ? n - 1 : 0, L'\0'); if (n > 1) MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, &w[0], n); return w; }
+static std::wstring lower(std::wstring s) { for (auto& c : s) c = (wchar_t)towlower(c); return s; }
+struct CamDev { std::wstring name, link; };
+static std::vector<CamDev> listCams() {
+  std::vector<CamDev> v; if (!initMF()) return v;
+  ComPtr<IMFAttributes> a; MFCreateAttributes(&a, 1);
+  a->SetGUID(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID);
+  IMFActivate** devs = nullptr; UINT32 n = 0;
+  if (SUCCEEDED(MFEnumDeviceSources(a.Get(), &devs, &n))) {
+    for (UINT32 i = 0; i < n; i++) {
+      CamDev d; WCHAR* t = nullptr; UINT32 l = 0;
+      if (SUCCEEDED(devs[i]->GetAllocatedString(MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, &t, &l))) { d.name = t; CoTaskMemFree(t); }
+      if (SUCCEEDED(devs[i]->GetAllocatedString(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK, &t, &l))) { d.link = t; CoTaskMemFree(t); }
+      v.push_back(d); devs[i]->Release();
+    }
+    CoTaskMemFree(devs);
+  }
+  return v;
+}
+// label Chromium "Nama Kamera (046d:0825)" → nama + "vid_046d&pid_0825" untuk dicocokkan dengan perangkat Media Foundation
+static int pickCam(const std::vector<CamDev>& v, const std::string& q8) {
+  if (v.empty()) return -1;
+  std::wstring q = lower(widen(q8)), base = q, vp;
+  size_t lp = q.rfind(L" (");
+  if (lp != std::wstring::npos && q.size() >= lp + 12 && q.back() == L')' && q[lp + 6] == L':') { vp = L"vid_" + q.substr(lp + 2, 4) + L"&pid_" + q.substr(lp + 7, 4); base = q.substr(0, lp); }
+  if (q.empty()) return 0;
+  for (size_t i = 0; i < v.size(); i++) if (!vp.empty() && lower(v[i].link).find(vp) != std::wstring::npos && lower(v[i].name) == base) return (int)i;
+  for (size_t i = 0; i < v.size(); i++) if (lower(v[i].name) == base) return (int)i;
+  for (size_t i = 0; i < v.size(); i++) if (!vp.empty() && lower(v[i].link).find(vp) != std::wstring::npos) return (int)i;
+  for (size_t i = 0; i < v.size(); i++) if (!base.empty() && (lower(v[i].name).find(base) != std::wstring::npos || base.find(lower(v[i].name)) != std::wstring::npos)) return (int)i;
+  return -1;
+}
+static bool camTex(Cam& c, UINT w, UINT h, DXGI_FORMAT f, bool rt) { // dipanggil dengan c.mx terkunci
+  if (c.tex && c.w == w && c.h == h && c.fmt == f) return true;
+  D3D11_TEXTURE2D_DESC d{}; d.Width = w; d.Height = h; d.MipLevels = 1; d.ArraySize = 1; d.Format = f; d.SampleDesc.Count = 1;
+  d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE | (rt ? D3D11_BIND_RENDER_TARGET : 0);
+  ComPtr<ID3D11Texture2D> t; ComPtr<ID3D11ShaderResourceView> v; ComPtr<ID3D11RenderTargetView> r;
+  if (FAILED(g_dev->CreateTexture2D(&d, nullptr, &t)) || FAILED(g_dev->CreateShaderResourceView(t.Get(), nullptr, &v))) return false;
+  if (rt) g_dev->CreateRenderTargetView(t.Get(), nullptr, &r);
+  c.tex = t; c.srv = v; c.rtv = r; c.w = w; c.h = h; c.fmt = f;
+  return true;
+}
+static void camThread(std::shared_ptr<Cam> c, ComPtr<IMFSourceReader> rd) {
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  while (!c->stop) {
+    DWORD si = 0, fl = 0; LONGLONG ts = 0; ComPtr<IMFSample> smp;
+    HRESULT hr = rd->ReadSample((DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &si, &fl, &ts, &smp);
+    if (c->stop) break;
+    if (FAILED(hr) || (fl & (MF_SOURCE_READERF_ERROR | MF_SOURCE_READERF_ENDOFSTREAM))) { emit("camerr %s kamera terputus (0x%08lx)", c->id.c_str(), (unsigned long)hr); break; }
+    if (!smp) continue;
+    ComPtr<IMFMediaBuffer> mb; if (FAILED(smp->GetBufferByIndex(0, &mb))) continue;
+    ComPtr<IMFDXGIBuffer> db;
+    if (SUCCEEDED(mb.As(&db))) { // jalur GPU: frame sudah berupa tekstur di device ini (tanpa salinan CPU)
+      ComPtr<ID3D11Texture2D> t; UINT sub = 0;
+      if (FAILED(db->GetResource(IID_PPV_ARGS(&t))) || FAILED(db->GetSubresourceIndex(&sub))) continue;
+      D3D11_TEXTURE2D_DESC d{}; t->GetDesc(&d);
+      std::lock_guard<std::mutex> l(c->mx);
+      if (!camTex(*c, d.Width, d.Height, d.Format, false)) continue;
+      g_ctx->CopySubresourceRegion(c->tex.Get(), 0, 0, 0, 0, t.Get(), sub, nullptr);
+    } else { // jalur CPU (driver tanpa pemroses video GPU)
+      UINT w = c->mw, h = c->mh; if (!w || !h) continue;
+      std::vector<uint8_t> tmp; const BYTE* src = nullptr; LONG pitch = 0; BYTE* p = nullptr;
+      ComPtr<IMF2DBuffer> b2; bool l2 = false; DWORD mx = 0, cur = 0;
+      if (SUCCEEDED(mb.As(&b2)) && SUCCEEDED(b2->Lock2D(&p, &pitch))) { l2 = true; src = p; }
+      else if (SUCCEEDED(mb->Lock(&p, &mx, &cur))) { src = p; pitch = (LONG)w * 4; if (cur < w * h * 4) { mb->Unlock(); continue; } }
+      else continue;
+      if (pitch < 0) { tmp.resize((size_t)w * h * 4); for (UINT y = 0; y < h; y++) memcpy(&tmp[(size_t)y * w * 4], src + (LONG)y * pitch, (size_t)w * 4); src = tmp.data(); pitch = (LONG)w * 4; }
+      {
+        std::lock_guard<std::mutex> l(c->mx);
+        if (camTex(*c, w, h, DXGI_FORMAT_B8G8R8A8_UNORM, false)) g_ctx->UpdateSubresource(c->tex.Get(), 0, nullptr, src, (UINT)pitch, 0);
+      }
+      if (l2) b2->Unlock2D(); else mb->Unlock();
+    }
+    { std::lock_guard<std::mutex> l(c->mx); c->got = true; }
+    c->fresh = true; c->frames++;
+  }
+  CoUninitialize();
+}
+static void camClose(const std::string& id) {
+  auto it = g_cams.find(id); if (it == g_cams.end()) return;
+  auto c = it->second; c->stop = true;
+  if (c->src) c->src->Shutdown(); // ReadSample di utas kamera langsung kembali → utas selesai sendiri
+  for (auto& s : c->ring) { if (s.h) CloseHandle(s.h); s.h = nullptr; }
+  g_cams.erase(it);
+}
+static void camOpen(const std::string& id, UINT W, UINT H, UINT F, const std::string& q) {
+  camClose(id);
+  auto c = std::make_shared<Cam>(); c->id = id;
+  auto devs = listCams(); int i = pickCam(devs, q);
+  if (i < 0) { emit("camerr %s kamera tidak ditemukan di Media Foundation", id.c_str()); return; }
+  ComPtr<IMFAttributes> a; MFCreateAttributes(&a, 2);
+  a->SetGUID(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID);
+  a->SetString(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK, devs[i].link.c_str());
+  HRESULT hr = MFCreateDeviceSource(a.Get(), &c->src);
+  if (FAILED(hr)) { emit("camerr %s kamera tidak bisa dibuka (dipakai aplikasi lain?) 0x%08lx", id.c_str(), (unsigned long)hr); return; }
+  ComPtr<IMFAttributes> ra; MFCreateAttributes(&ra, 3);
+  if (g_mfMgr) ra->SetUnknown(MF_SOURCE_READER_D3D_MANAGER, g_mfMgr.Get());
+  ra->SetUINT32(MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, TRUE);
+  ra->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE);
+  ComPtr<IMFSourceReader> rd;
+  hr = MFCreateSourceReaderFromMediaSource(c->src.Get(), ra.Get(), &rd);
+  if (FAILED(hr)) { c->src->Shutdown(); emit("camerr %s SourceReader 0x%08lx", id.c_str(), (unsigned long)hr); return; }
+  const DWORD ST = (DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM;
+  // format asli terdekat: ukuran sama persis diutamakan, lalu fps ≥ permintaan, lalu ukuran terdekat
+  ComPtr<IMFMediaType> best; double bestScore = -1e18; UINT32 bw = 0, bh = 0; double bf = 0;
+  for (DWORD k = 0;; k++) {
+    ComPtr<IMFMediaType> mt; if (FAILED(rd->GetNativeMediaType(ST, k, &mt))) break;
+    UINT32 w = 0, h = 0, n = 0, d = 0; MFGetAttributeSize(mt.Get(), MF_MT_FRAME_SIZE, &w, &h); MFGetAttributeRatio(mt.Get(), MF_MT_FRAME_RATE, &n, &d);
+    double f = d ? (double)n / d : 0;
+    double sc = -std::fabs((double)w * h - (double)W * H) / 1000.0 - (f + 0.5 < F ? (F - f) * 400 : (f - F) * 2) + (w == W && h == H ? 5000 : 0);
+    if (sc > bestScore) { bestScore = sc; best = mt; bw = w; bh = h; bf = f; }
+  }
+  if (best) rd->SetCurrentMediaType(ST, nullptr, best.Get());
+  ComPtr<IMFMediaType> out; MFCreateMediaType(&out);
+  out->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video); out->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+  if (bw && bh) MFSetAttributeSize(out.Get(), MF_MT_FRAME_SIZE, bw, bh);
+  hr = rd->SetCurrentMediaType(ST, nullptr, out.Get());
+  if (FAILED(hr)) { out->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_ARGB32); hr = rd->SetCurrentMediaType(ST, nullptr, out.Get()); }
+  if (FAILED(hr)) { c->src->Shutdown(); emit("camerr %s konversi warna tidak didukung 0x%08lx", id.c_str(), (unsigned long)hr); return; }
+  ComPtr<IMFMediaType> cur; if (SUCCEEDED(rd->GetCurrentMediaType(ST, &cur))) MFGetAttributeSize(cur.Get(), MF_MT_FRAME_SIZE, &bw, &bh);
+  c->mw = bw; c->mh = bh;
+  rd->SetStreamSelection((DWORD)MF_SOURCE_READER_ALL_STREAMS, FALSE); rd->SetStreamSelection(ST, TRUE);
+  g_cams[id] = c;
+  emit("camok %s %u %u %.2f %s %d", id.c_str(), bw, bh, bf, hexOf(narrow(devs[i].name.c_str())).c_str(), g_mfMgr ? 1 : 0);
+  std::thread(camThread, c, rd).detach();
+}
+static void camTestOpen(const std::string& id, UINT W, UINT H) {
+  camClose(id);
+  auto c = std::make_shared<Cam>(); c->id = id; c->test = true; c->mw = W; c->mh = H;
+  { std::lock_guard<std::mutex> l(c->mx); camTex(*c, W, H, DXGI_FORMAT_B8G8R8A8_UNORM, true); }
+  g_cams[id] = c;
+  emit("camok %s %u %u 0 %s 1", id.c_str(), W, H, hexOf("KLM pola uji").c_str());
+}
 
 static inline uint32_t bgra(int r, int g, int b) { return 0xFF000000u | ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b; }
 static inline int lerpi(int a, int b, double t) { return (int)std::lround(a + (b - a) * t); }
@@ -404,7 +584,20 @@ static void viewport(UINT w, UINT h) { D3D11_VIEWPORT v{ 0, 0, (float)w, (float)
 // sumber "fit": rasio terjaga, di tengah (sama dengan posisi bawaan input KLM)
 static void drawSource(const std::string& id, float alpha) {
   if (id.empty() || id == "-" || alpha <= 0) return;
-  auto it = g_src.find(id); if (it == g_src.end()) return;
+  auto it = g_src.find(id);
+  if (it == g_src.end()) { // kamera Media Foundation
+    auto ci = g_cams.find(id); if (ci == g_cams.end()) return;
+    Cam& c = *ci->second; ComPtr<ID3D11ShaderResourceView> srv; UINT cw, ch;
+    { std::lock_guard<std::mutex> l(c.mx); if (!c.got || !c.srv) return; srv = c.srv; cw = c.w; ch = c.h; }
+    double sc = std::min((double)g_W / cw, (double)g_H / ch), dw = cw * sc, dh = ch * sc, x0 = (g_W - dw) / 2, y0 = (g_H - dh) / 2;
+    float dst[4] = { (float)(x0 / g_W * 2 - 1), (float)(1 - y0 / g_H * 2), (float)((x0 + dw) / g_W * 2 - 1), (float)(1 - (y0 + dh) / g_H * 2) };
+    float uv[4] = { 0, 0, 1, 1 }, col[4] = { 1, 1, 1, alpha }, p2[4] = { 0, 0, 1, 0 };
+    setCB(dst, uv, col, p2);
+    g_ctx->PSSetShader(g_psOpaque.Get(), nullptr, 0);
+    g_ctx->PSSetShaderResources(0, 1, srv.GetAddressOf());
+    g_ctx->Draw(4, 0);
+    return;
+  }
   Source& s = *it->second; if (!s.srv || !s.w || !s.h) return;
   if (s.kind == "screen" && !s.got) return;
   double sc = std::min((double)g_W / s.w, (double)g_H / s.h), dw = s.w * sc, dh = s.h * sc;
@@ -529,6 +722,70 @@ static void drawUtc() {
   }
   g_ctx->OMSetBlendState(g_blend.Get(), bf, 0xffffffff);
 }
+// ---- kamera: pola uji + ekspor frame ke KLM (tekstur NT bersama, alpha dipaksa buram)
+static void camTick() {
+  ComPtr<ID3D11DeviceContext1> c1; g_ctx.As(&c1);
+  for (auto& kv : g_cams) {
+    Cam& c = *kv.second; if (!c.test) continue;
+    std::lock_guard<std::mutex> l(c.mx); if (!c.rtv) continue;
+    float bg[4] = { 32 / 255.f, 160 / 255.f, 224 / 255.f, 1 }; g_ctx->ClearRenderTargetView(c.rtv.Get(), bg);
+    if (c1) { LONG x = (LONG)((g_frameNo * 8) % c.w); D3D11_RECT r{ x, 0, x + 40, (LONG)c.h }; float wh[4] = { 1, 1, 1, 1 }; c1->ClearView(c.rtv.Get(), wh, &r, 1); }
+    c.got = true; c.fresh = true; c.frames++;
+  }
+  std::vector<std::string> evs;
+  for (auto& kv : g_cams) {
+    Cam& c = *kv.second; if (!c.exp || !c.fresh) continue;
+    ComPtr<ID3D11ShaderResourceView> srv; UINT cw = 0, ch = 0;
+    { std::lock_guard<std::mutex> l(c.mx); if (!c.got || !c.srv) continue; srv = c.srv; cw = c.w; ch = c.h; }
+    c.fresh = false;
+    if (c.rw != cw || c.rh != ch || !c.ring[0].tex) {
+      for (auto& sl : c.ring) { if (sl.h) CloseHandle(sl.h); sl = Cam::Slot(); }
+      c.gen++; c.rw = cw; c.rh = ch;
+      for (int i = 0; i < 3; i++) {
+        D3D11_TEXTURE2D_DESC d{}; d.Width = cw; d.Height = ch; d.MipLevels = 1; d.ArraySize = 1; d.Format = DXGI_FORMAT_B8G8R8A8_UNORM; d.SampleDesc.Count = 1;
+        d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET; d.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+        auto& sl = c.ring[i]; ComPtr<IDXGIResource1> r1;
+        if (FAILED(g_dev->CreateTexture2D(&d, nullptr, &sl.tex)) || FAILED(g_dev->CreateRenderTargetView(sl.tex.Get(), nullptr, &sl.rtv)) || FAILED(sl.tex.As(&r1)) ||
+            FAILED(r1->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &sl.h))) {
+          emit("camerr %s tekstur bersama tidak didukung GPU ini", kv.first.c_str()); c.exp = false; break;
+        }
+        emit("cbuf %s %d %d %llu %u %u", kv.first.c_str(), c.gen, i, (unsigned long long)(uintptr_t)sl.h, cw, ch);
+      }
+      if (!c.exp) continue;
+    }
+    int slot = -1; for (int i = 0; i < 3; i++) if (!c.ring[i].busy) { slot = i; break; }
+    if (slot < 0) continue; // KLM masih memegang ketiganya → frame ini dilewati (tidak menumpuk)
+    auto& sl = c.ring[slot];
+    ID3D11ShaderResourceView* none = nullptr; g_ctx->PSSetShaderResources(0, 1, &none);
+    g_ctx->OMSetRenderTargets(1, sl.rtv.GetAddressOf(), nullptr); viewport(cw, ch);
+    float dst[4] = { -1, 1, 1, -1 }, uv[4] = { 0, 0, 1, 1 }, col[4] = { 1, 1, 1, 1 }, p2[4] = { 0, 0, 1, 0 };
+    setCB(dst, uv, col, p2);
+    g_ctx->PSSetShader(g_psOpaque.Get(), nullptr, 0);
+    g_ctx->PSSetShaderResources(0, 1, srv.GetAddressOf());
+    g_ctx->Draw(4, 0);
+    sl.busy = true; c.seq++;
+    char b[160]; snprintf(b, sizeof b, "cfr %s %d %d %llu", kv.first.c_str(), c.gen, slot, c.seq); evs.push_back(b);
+  }
+  if (evs.empty()) return;
+  if (g_query) { g_ctx->End(g_query.Get()); g_ctx->Flush(); double t0 = nowMs(); while (g_ctx->GetData(g_query.Get(), nullptr, 0, 0) == S_FALSE && nowMs() - t0 < 50) YieldProcessor(); }
+  for (auto& e : evs) emit("%s", e.c_str());
+}
+static void camCommand(const std::string& c, std::istringstream& is) {
+  if (c == "camlist") {
+    for (auto& d : listCams()) emit("camdev %s %s", hexOf(narrow(d.name.c_str())).c_str(), hexOf(narrow(d.link.c_str())).c_str());
+    emit("camdevend"); return;
+  }
+  std::string id; is >> id; if (id.empty() || id.size() > 64) return;
+  if (c == "cam") { UINT w = 0, h = 0, f = 0; std::string q; is >> w >> h >> f >> q; camOpen(id, w ? w : 1920, h ? h : 1080, f ? f : 30, unhex(q)); }
+  else if (c == "camtest") { UINT w = 0, h = 0, f = 0; is >> w >> h >> f; camTestOpen(id, w >= 16 ? w : 1280, h >= 16 ? h : 720); }
+  else if (c == "camoff") camClose(id);
+  else if (c == "camexp") { int v = 0; is >> v; auto it = g_cams.find(id); if (it != g_cams.end()) { it->second->exp = v != 0; if (v) it->second->fresh = true; } }
+  else if (c == "crel") {
+    int gen = 0, slot = -1; is >> gen >> slot; auto it = g_cams.find(id);
+    if (it != g_cams.end() && it->second->gen == gen && slot >= 0 && slot < 3) it->second->ring[slot].busy = false;
+  }
+}
+
 static void utcCommand(const std::string& c, std::istringstream& is, const std::vector<uint8_t>& data) {
   std::string lid; is >> lid;
   if (c == "ulay") {
@@ -609,7 +866,8 @@ static void hideBus(Bus& b) {
 static int g_frames = 0; static double g_msAcc = 0;
 static void sendStats(int fps, double ms) {
   PROCESS_MEMORY_COUNTERS pm{}; pm.cb = sizeof pm; GetProcessMemoryInfo(GetCurrentProcess(), &pm, sizeof pm);
-  emit("stats fps=%d ms=%.2f mem=%llu warp=%d utex=%llu", fps, ms, (unsigned long long)(pm.WorkingSetSize / (1024 * 1024)), g_warp ? 1 : 0, g_utexN);
+  std::string cams; for (auto& kv : g_cams) cams += (cams.empty() ? "" : ",") + kv.first + ":" + std::to_string(kv.second->frames.load());
+  emit("stats fps=%d ms=%.2f mem=%llu warp=%d utex=%llu cams=%s", fps, ms, (unsigned long long)(pm.WorkingSetSize / (1024 * 1024)), g_warp ? 1 : 0, g_utexN, cams.empty() ? "-" : cams.c_str());
 }
 static void applyRect(Bus& b, int x, int y, int w, int h, bool vis) {
   b.want = vis && w >= 8 && h >= 8;
@@ -624,6 +882,7 @@ static bool readPixel(Bus& b, UINT x, UINT y, int rgb[3]);
 static void command(const std::string& line, const std::vector<uint8_t>& data = {}) {
   std::istringstream is(line); std::string c; is >> c;
   if (c == "utex" || c == "ulay" || c == "uclear" || c == "ureset" || c == "utk" || c == "ublob" || c == "utkgeo" || c == "utklive") { utcCommand(c, is, data); return; }
+  if (c == "cam" || c == "camtest" || c == "camoff" || c == "camexp" || c == "crel" || c == "camlist") { camCommand(c, is); return; }
   if (c == "probe") {
     std::string bn; double fx = 0, fy = 0; is >> bn >> fx >> fy; int px[3] = { -1, -1, -1 };
     Bus& b = bn == "pvw" ? g_pvw : g_pgm;
@@ -693,6 +952,7 @@ static void frame(double now) {
     if (used) tickScreen(*kv.second, id, now);
   }
   pipeline();
+  camTick();
   if (g_pgm.want || !g_parent) compose(g_pgm, true);
   if (g_pvw.want || !g_parent) compose(g_pvw, false);
   present(g_pgm);
@@ -794,6 +1054,26 @@ static int selftest(bool warp) {
       chk(g_pgm, 100, 100, 255, 0, 0, 2, "UTC disembunyikan");
     }
   }
+  // ---- Fase 3: kamera (pola uji) → monitor native + ekspor tekstur bersama ke KLM
+  {
+    command("camtest c1 640 360 30"); command("camexp c1 1"); command("pgm c1"); run(4);
+    auto it = g_cams.find("c1"); bool have = it != g_cams.end();
+    int busy = 0; unsigned long long sq = 0; if (have) { for (auto& sl : it->second->ring) busy += sl.busy ? 1 : 0; sq = it->second->seq; }
+    emit("  %s kamera uji: frame=%d, ekspor seq=%llu, slot dipegang=%d", have && it->second->frames > 2 && sq >= 1 ? "OK " : "GAGAL", have ? it->second->frames.load() : 0, sq, busy);
+    if (!have || sq < 1) ok = 0;
+    emit("  %s cincin penuh → frame dilewati, tidak menumpuk (dipegang=%d)", busy == 3 ? "OK " : "GAGAL", busy); if (busy != 3) ok = 0;
+    command("crel c1 1 0"); command("crel c1 1 1"); run(2);
+    int p1[3], p2[3]; bool a = readPixel(g_pgm, 30, 540, p1), b = readPixel(g_pgm, 1890, 540, p2);
+    auto isBg = [](int* q) { return std::abs(q[0] - 32) <= 2 && std::abs(q[1] - 160) <= 2 && std::abs(q[2] - 224) <= 2; };
+    bool okc = a && b && (isBg(p1) || isBg(p2));
+    emit("  %s kamera di monitor Program: (%d,%d,%d) / (%d,%d,%d) harap latar (32,160,224)", okc ? "OK " : "GAGAL", p1[0], p1[1], p1[2], p2[0], p2[1], p2[2]); if (!okc) ok = 0;
+    command("camoff c1"); command("pgm a"); run(2);
+    emit("  %s kamera ditutup", g_cams.empty() ? "OK " : "GAGAL"); if (!g_cams.empty()) ok = 0;
+    auto devs = listCams();
+    emit("  (info) Media Foundation: %s, %d kamera, pengelola DXGI %s", g_mf ? "aktif" : "gagal", (int)devs.size(), g_mfMgr ? "ada" : "tidak ada");
+    command("cam c2 1280 720 30 -"); run(1);
+    if (g_cams.count("c2")) { Sleep(1500); run(3); emit("  (info) kamera nyata pertama: frame=%d", g_cams["c2"]->frames.load()); command("camoff c2"); }
+  }
   command("src s screen 0 0 1024 768"); run(10);
   emit("  (info) tangkap layar DXGI: %s", g_src.count("s") && g_src["s"]->dup ? "tersedia" : "tidak tersedia di mesin ini (wajar di CI tanpa sesi desktop)");
   command("rect pvw 0 0 0 0 0"); run(2);
@@ -807,6 +1087,7 @@ static int selftest(bool warp) {
 // ---------------------------------------------------------------- utama
 int wmain(int argc, wchar_t** argv) {
   SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED); // Media Foundation (kamera)
   bool warp = false, test = false;
   for (int i = 1; i < argc; i++) { if (!wcscmp(argv[i], L"--selftest")) test = true; if (!wcscmp(argv[i], L"--warp")) warp = true; }
   if (test) return selftest(warp);
