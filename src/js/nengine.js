@@ -1,4 +1,4 @@
-/* KLM — pengendali mesin video native (klm-engine, Direct3D 11) — Fase 1, EKSPERIMEN.
+/* KLM — pengendali mesin video native (klm-engine, Direct3D 11) — Fase 1–2, EKSPERIMEN.
  *
  * Bila aktif (Pengaturan → Performa → Mesin video native), monitor Preview / Program digambar oleh mesin native di GPU
  * pada jendela yang ditempel tepat di atas kanvas monitor. Mesin JS tetap menjadi acuan keadaan (input, transisi) dan
@@ -6,7 +6,9 @@
  * alih TAMPILAN monitor, sehingga kanvas monitor JS boleh berhenti dicat selama itu.
  *
  * Fase 1 mendukung sumber: Warna/Gradien, Color Bars, Tangkap Layar (DXGI Desktop Duplication, zero-copy GPU).
- * Bila monitor menampilkan hal lain (kamera, KLMCAM, video, grafis UTC ON AIR, overlay, efek, transisi selain fade/cut,
+ * Fase 2: grafis UTC ON AIR (Acara & Scoreboard) di atas Program — tekstur GPU lapisan offscreen yang sama dikirim ke
+ * mesin native (handle NT, tanpa salinan CPU), running text native digulir mesin native.
+ * Bila monitor menampilkan hal lain (kamera, KLMCAM, video, overlay, efek, transisi selain fade/cut,
  * mode grid) atau ada menu/dialog di atas monitor, monitor itu otomatis kembali ke tampilan JS — tanpa kedip.
  */
 'use strict';
@@ -24,6 +26,9 @@
     pgm: { want: false, shown: false, hideAt: -1, rect: '', id: null }
   };
   let out = '', transKey = '', tbarSent = '';
+  // Fase 2: grafis UTC
+  let utcWant = false, ulaySent = null, utcErr = '';
+  const uready = new Set();
   const cmd = (l) => { if (running) window.klm.send('nengine:cmd', l); };
   const nid = (inp) => 'i' + String(inp.id).replace(/[^\w.-]/g, '_').slice(0, 60);
 
@@ -56,11 +61,11 @@
   const label = (inp) => (inp ? (KM.inputTypes[inp.type] && KM.inputTypes[inp.type].label) || inp.type : '');
 
   // ---------- apakah monitor bisa ditampilkan native sekarang ----------
-  function pgmWhy() {
+  // tanpa memperhitungkan grafis UTC
+  function pgmBaseWhy() {
     const S = KM.state;
     if (S.ftb && (S.ftb.on || S.ftb.v > 0)) return 'FTB';
     if ((S.overlays || []).some((ch) => ch.phase !== 'off' && ch.inputId)) return 'overlay aktif';
-    if (KM.utc && KM.utc.drawsDSK && KM.utc.drawsDSK()) return 'grafis UTC ON AIR';
     if (S.trans) {
       if (S.trans.type !== 'fade' && S.trans.type !== 'cut') return 'transisi ' + S.trans.type;
       for (const id of [S.trans.fromId, S.trans.toId]) { const i = KM.getInput(id); if (id && !spec(i)) return 'sumber ' + label(i); }
@@ -68,6 +73,16 @@
     if (!S.programId) return '';
     const inp = KM.getInput(S.programId);
     return spec(inp) ? '' : 'sumber ' + label(inp);
+  }
+  function utcWhy(ids) {
+    if (!ids.length) return '';
+    if (utcErr) return 'grafis UTC: ' + utcErr;
+    if (!utcWant) return 'grafis UTC ON AIR';
+    for (const id of ids) {
+      if (!KM.utc.layerGpu(id)) return 'grafis UTC jalur CPU (zero-copy mati)';
+      if (!uready.has(id)) return 'menunggu grafis UTC';
+    }
+    return '';
   }
   function pvwWhy() {
     const S = KM.state, E = KM.engine;
@@ -117,6 +132,13 @@
       if (tbarSent) { tbarSent = ''; cmd('tbar off'); }
       transKey = tr ? transKey : '';
     }
+    // grafis UTC: tekstur lapisan diminta dari proses utama selama Program bisa ditampilkan native
+    const base = pgmBaseWhy(), U = KM.utc;
+    const uw = !base && !utcErr && !!(U && U.zc && U.zc.on && U.dskIds);
+    if (uw !== utcWant) { utcWant = uw; window.klm.send('nengine:utc', uw); if (!uw) { uready.clear(); ulaySent = null; } }
+    const ids = utcWant ? U.dskIds() : [];
+    if (utcWant) { const l = ids.join(',') || '-'; if (l !== ulaySent) { ulaySent = l; cmd('ulay ' + l); } }
+    const pgWhy = base || utcWhy(U && U.dskIds ? (utcWant ? ids : U.dskIds()) : []);
     const pg = idOf(S.programId), pv = idOf(S.previewId);
     if (!tr && pg !== bus.pgm.id) { bus.pgm.id = pg; cmd('pgm ' + pg); }
     if (pv !== bus.pvw.id) { bus.pvw.id = pv; cmd('pvw ' + pv); }
@@ -124,7 +146,7 @@
     const geo = frameN % 3 === 0;
     for (const k of ['pvw', 'pgm']) {
       const b = bus[k], cv = document.getElementById(k);
-      const why = !cv ? 'tidak ada kanvas' : document.hidden ? 'jendela tersembunyi' : (k === 'pgm' ? pgmWhy() : pvwWhy());
+      const why = !cv ? 'tidak ada kanvas' : document.hidden ? 'jendela tersembunyi' : (k === 'pgm' ? pgWhy : pvwWhy());
       let want = !why;
       if (want && geo) b.cov = covered(cv);
       if (want && b.cov) want = false;
@@ -149,11 +171,14 @@
     else if (t === 'shown' && bus[rest]) { bus[rest].shown = true; N[rest] = bus[rest].want; }
     else if (t === 'hidden' && bus[rest]) { bus[rest].shown = false; N[rest] = false; }
     else if (t === 'srcerr') { const id = rest.split(' ')[0]; srcErr.add(id); srcSent.delete(id); KM.log && KM.log('mesin native: ' + rest); }
-    else if (t === 'stats') { const m = /fps=(\d+) ms=([\d.]+) mem=(\d+)/.exec(rest); if (m) { N.fps = +m[1]; N.ms = +m[2]; N.mem = +m[3]; } }
+    else if (t === 'stats') { const m = /fps=(\d+) ms=([\d.]+) mem=(\d+)/.exec(rest); if (m) { N.fps = +m[1]; N.ms = +m[2]; N.mem = +m[3]; } const u = /utex=(\d+)/.exec(rest); if (u) N.utex = +u[1]; }
+    else if (t === 'probe') { const f = probeWait.shift(); if (f) f(rest.split(' ').map(Number)); }
     else if (t === 'click') clickFwd(rest.split(' '));
+    else if (t === 'uready') uready.add(rest);
+    else if (t === 'uerr') { utcErr = rest.replace(/^\S+ /, '').slice(0, 80); KM.log && KM.log('mesin native UTC: ' + rest); }
     else if (t === 'exit' || t === 'restart') { ready = false; N.pvw = N.pgm = false; N.state = t === 'exit' ? 'berhenti' : 'memulai ulang'; resetSent(); KM.changed('nengine'); }
   }
-  function resetSent() { srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
+  function resetSent() { srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; uready.clear(); ulaySent = null; if (utcWant) { utcWant = false; if (el()) window.klm.send('nengine:utc', false); } for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
   // klik di jendela native diteruskan ke kanvas di bawahnya (pilih kotak grid, klik kanan menu monitor, dll.)
   function clickFwd(a) {
     const cv = document.getElementById(a[0]); if (!cv) return;
@@ -175,12 +200,17 @@
   };
   N.stop = function () {
     if (!running) return;
+    if (utcWant) { utcWant = false; window.klm.send('nengine:utc', false); } utcErr = '';
     N.pvw = N.pgm = false; // JS langsung menggambar monitor lagi
     for (const k in bus) cmd('rect ' + k + ' 0 0 0 0 0');
     running = false; ready = false; N.state = 'off';
     window.klm.invoke('nengine:stop').catch(() => {});
     KM.changed('nengine');
   };
+  // uji: baca 1 piksel monitor native (koordinat 0..1)
+  const probeWait = [];
+  N.probe = (bus, fx, fy) => new Promise((res) => { if (!running) return res(null); probeWait.push(res); cmd('probe ' + bus + ' ' + (+fx).toFixed(4) + ' ' + (+fy).toFixed(4)); setTimeout(() => { const i = probeWait.indexOf(res); if (i >= 0) { probeWait.splice(i, 1); res(null); } }, 2000); });
+  N.utcState = () => ({ want: utcWant, err: utcErr, ready: [...uready], ulay: ulaySent });
   N.set = (on) => { KM.settings.nativeEngine = !!on; KM.saveSettings(); if (on) N.start(); else N.stop(); };
   N.status = () => (el() ? window.klm.invoke('nengine:status').catch(() => null) : Promise.resolve(null));
 

@@ -206,6 +206,15 @@
       drawLayer(ctx, L, W, H);
     }
   };
+  /** lapisan yang sedang digambar di atas Program, urutan bawah → atas (untuk mesin video native) */
+  U.dskIds = function () {
+    const ui = U.input(), si = SC.input();
+    const acara = !!ui && U.onAir() && !viaInput(ui), score = !!si && KM.settings.scoreOnAir && !viaInput(si);
+    if (!acara && !score) return [];
+    return ORDER.filter((id) => (id === 'score' ? score : acara) && layerVisible(LY[id]));
+  };
+  /** lapisan yang tampil dari jalur zero-copy GPU (mesin native hanya bisa menerima tekstur GPU) */
+  U.layerGpu = (id) => !!(LY[id] && LY[id].zc);
   /** apakah lapisan ON AIR sedang menggambar sesuatu di Program (ON AIR tetapi tanpa grafis tampil = tidak) */
   U.drawsDSK = function () {
     const ui = U.input(), si = SC.input();

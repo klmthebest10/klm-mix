@@ -380,7 +380,7 @@ app.whenReady().then(async () => {
   netInfo = await serverP;
   splashStep(22, 'Memuat antarmuka…');
   T.server = Date.now() - T0;
-  utcOsr = setupUtcOsr({ logDir: process.env.KLM_CONFIG_DIR, port: () => netInfo.ports.http, scorePort: () => { const sc = server.score(); return sc ? sc.port() : 0; } });
+  utcOsr = setupUtcOsr({ native: nEngine, logDir: process.env.KLM_CONFIG_DIR, port: () => netInfo.ports.http, scorePort: () => { const sc = server.score(); return sc ? sc.port() : 0; } });
   if (mainWin && !mainWin.isDestroyed()) mainWin.loadURL(`http://127.0.0.1:${netInfo.ports.http}/`).catch((e) => console.warn('loadURL', e.message));
   T.window2 = Date.now() - T0;
   if (process.env.KLM_SMOKE) smokeTest();
@@ -727,6 +727,32 @@ function smokeTest() {
         log('mesin native: piksel layar di monitor Preview (kanvas JS disembunyikan) = ' + JSON.stringify(px) + ' (harap ±192,192,192 dari color bars)');
         if (ns.state !== 'ready' || !ns.pvw) { fail++; log('GAGAL: mesin native tidak mengambil alih monitor Preview'); }
         else if (!px || Math.abs(px[0] - 192) > 24 || Math.abs(px[1] - 192) > 24 || Math.abs(px[2] - 192) > 24) log('catatan: piksel layar tidak cocok (desktop CI mungkin tidak menampilkan jendela) — dicek manual lewat native-desktop.png');
+        // --- Fase 2: grafis UTC ON AIR di atas Program, digambar mesin native dari tekstur GPU yang sama ---
+        try {
+          // uji sebelumnya memaksa jalur CPU → nyalakan lagi zero-copy (mesin native hanya menerima tekstur GPU)
+          await js(`(() => { KM.utc.setZeroCopy(true); if (!KM.utc.has()) KM.utc.addInput({ onAir: true }); else if (!KM.utc.onAir()) KM.utc.setOnAir(true); const c = KM.inputs.create('colour', { title: 'Latar native', color: '#c00000' }); KM.engine.cut(c.id); return 1; })()`);
+          await wait(3000);
+          await post('/utc/api/klm/cmd', { cmd: 'show', target: 'lt' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'logo' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'ticker' });
+          await wait(6000);
+          const u2 = JSON.parse(await js('JSON.stringify({ pgm: KM.nengine.pgm, why: KM.nengine.why.pgm, utex: KM.nengine.utex || 0, utc: KM.nengine.utcState(), dsk: KM.utc.dskIds(), zc: KM.utc.zc.on })'));
+          log('mesin native + UTC: ' + JSON.stringify(u2));
+          // piksel grafis yang buram (di luar jalur running text yang bergerak) dibandingkan dengan gambar native
+          const pick = JSON.parse(await js(`(() => { const c = KM.utc.canvas(), W = c.width, H = c.height, d = c.getContext('2d').getImageData(0, 0, W, H).data;
+            for (let y = Math.round(H * 0.05); y < H * 0.78; y += 6) for (let x = Math.round(W * 0.03); x < W * 0.97; x += 6) { const i = (y * W + x) * 4;
+              if (d[i + 3] >= 254) { let ok = true; for (const [dx, dy] of [[-3,0],[3,0],[0,-3],[0,3]]) { const j = ((y + dy) * W + x + dx) * 4; if (d[j + 3] < 254 || Math.abs(d[j] - d[i]) + Math.abs(d[j + 1] - d[i + 1]) + Math.abs(d[j + 2] - d[i + 2]) > 12) ok = false; } if (ok) return JSON.stringify({ fx: x / W, fy: y / H, rgb: [d[i], d[i + 1], d[i + 2]] }); } }
+            return 'null'; })()`));
+          if (pick) {
+            const pr2 = await js(`KM.nengine.probe('pgm', ${pick.fx}, ${pick.fy}).then((p) => JSON.stringify(p))`);
+            log('mesin native + UTC: piksel grafis JS ' + JSON.stringify(pick.rgb) + ' @' + pick.fx.toFixed(3) + ',' + pick.fy.toFixed(3) + ' • native ' + pr2);
+            const np = JSON.parse(pr2 || 'null');
+            if (u2.pgm && np && pick.rgb.every((v, i) => Math.abs(v - np[i]) <= 14)) log('mesin native + UTC: OK — grafis sama dengan mesin JS');
+            else if (u2.pgm) { fail++; log('GAGAL: grafis UTC di monitor native berbeda dengan mesin JS'); }
+          } else log('catatan: tidak ada piksel grafis buram untuk dibandingkan');
+          if (!u2.pgm) { fail++; log('GAGAL: Program dengan grafis UTC tidak ditampilkan native (' + u2.why + ')'); }
+          fs.writeFileSync(path.join(out, 'native-utc-desktop.png'), (await (async () => { const { desktopCapturer: dc, screen: sc2 } = require('electron'); const dd = sc2.getDisplayMatching(mainWin.getContentBounds()); const ss = await dc.getSources({ types: ['screen'], thumbnailSize: { width: Math.round(dd.size.width * (dd.scaleFactor || 1)), height: Math.round(dd.size.height * (dd.scaleFactor || 1)) } }); return (ss.find((x) => String(x.display_id) === String(dd.id)) || ss[0]).thumbnail; })()).toPNG());
+          await post('/utc/api/klm/cmd', { cmd: 'hideall' }); await wait(2500);
+          log('mesin native setelah grafis disembunyikan: ' + await js('JSON.stringify({ pgm: KM.nengine.pgm, why: KM.nengine.why.pgm, ulay: KM.nengine.utcState().ulay })'));
+        } catch (e) { fail++; log('GAGAL mesin native + UTC: ' + e.message); }
         await js('KM.nengine.set(false)'); await wait(800);
         const off = await js('JSON.stringify({ pvw: KM.nengine.pvw, state: KM.nengine.state })');
         log('mesin native dimatikan: ' + off);

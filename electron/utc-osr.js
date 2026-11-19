@@ -107,8 +107,13 @@ module.exports = function setupUtcOsr(o) {
     });
     wc.on('did-start-navigation', (e, url, inPage, isMain) => { const mf = e && e.isMainFrame != null ? e.isMainFrame : isMain, same = e && e.isSameDocument != null ? e.isSameDocument : inPage; if (mf && !same && L.wc === wc) tell(L, { k: 'reset' }); });
   }
-  // ---------- zero-copy: tekstur GPU → mixer ----------
-  function relTex(x) { if (x && x.tex) { try { x.tex.release(); } catch (e) {} } }
+  // ---------- zero-copy: tekstur GPU → mixer (dan → mesin video native, Fase 2) ----------
+  // penampung ber-refcount: tekstur dikembalikan ke kolam Chromium setelah SEMUA pemakai (mixer, mesin native) selesai
+  const hold = (tex) => ({ tex, n: 1 });
+  function unref(h) { if (h && --h.n <= 0 && h.tex) { const t = h.tex; h.tex = null; try { t.release(); } catch (e) {} } }
+  function relTex(x) { if (x && x.h) unref(x.h); }
+  const nat = o.native || null;
+  if (nat && nat.onUtcWant) nat.onUtcWant(() => { for (const L of layers.values()) if (L.t && L.gpu && !L.paused && L.wc && !L.wc.isDestroyed()) { try { L.wc.invalidate(); } catch (e) {} } });
   function paintGpu(L, e, dirty) {
     const tex = e && e.texture;
     // gambar tanpa tekstur GPU bisa muncul SESAAT (saat dilanjutkan dari jeda, ganti ukuran, memuat halaman).
@@ -121,25 +126,28 @@ module.exports = function setupUtcOsr(o) {
       return;
     }
     L.zNull = 0;
-    if (!L.t || L.paused || !zc.ready || !target || target.isDestroyed()) { relTex({ tex }); return; }
+    const h = hold(tex);
     const ti = tex.textureInfo || {}, cs = ti.codedSize || {};
     const meta = { W: cs.width | 0, H: cs.height | 0, seq: ++L.seq };
-    if (!meta.W || !meta.H) { relTex({ tex }); return; }
+    if (!meta.W || !meta.H || !L.t || L.paused) { unref(h); return; }
+    // mesin video native menampilkan grafis UTC di monitor Program → tekstur yang sama juga dikirim ke sana (tanpa salinan CPU)
+    if (nat && nat.utcWants()) { h.n++; try { nat.utcPush(L.id, h, meta, unref); } catch (er) { unref(h); } }
+    if (!zc.ready || !target || target.isDestroyed()) { unref(h); return; }
     // kontrol aliran: satu kiriman per lapisan; yang menunggu hanya frame TERBARU (frame lama langsung dikembalikan ke kolam)
-    if (L.zFly) { relTex(L.zPend); L.zPend = { tex, meta }; return; }
-    sendGpu(L, tex, meta);
+    if (L.zFly) { relTex(L.zPend); L.zPend = { h, meta }; return; }
+    sendGpu(L, h, meta);
   }
-  function sendGpu(L, tex, meta) {
+  function sendGpu(L, h, meta) {
     let imp;
     try {
-      imp = sharedTexture.importSharedTexture({ textureInfo: tex.textureInfo, allReferencesReleased: () => relTex({ tex }) });
-    } catch (err) { relTex({ tex }); failGpu('impor tekstur: ' + (err && err.message)); return; }
+      imp = sharedTexture.importSharedTexture({ textureInfo: h.tex.textureInfo, allReferencesReleased: () => unref(h) });
+    } catch (err) { unref(h); failGpu('impor tekstur: ' + (err && err.message)); return; }
     L.zFly = true;
     const done = () => {
       try { imp.release(); } catch (e) {}
       L.zFly = false;
       const p = L.zPend; L.zPend = null;
-      if (p) { if (L.gpu && L.t && !L.paused && zc.ready && target && !target.isDestroyed()) sendGpu(L, p.tex, p.meta); else relTex(p); }
+      if (p) { if (L.gpu && L.t && !L.paused && zc.ready && target && !target.isDestroyed() && p.h.tex) sendGpu(L, p.h, p.meta); else relTex(p); }
     };
     let fr = null; try { fr = target.mainFrame; } catch (e) {}
     if (!fr) { done(); return; }
@@ -168,7 +176,10 @@ module.exports = function setupUtcOsr(o) {
     if (!L) { L = { id, win: null, wc: null, t: null, last: null, pend: null, inflight: false, inflightAt: 0, sentFull: false, seq: 0, fixed: false, paused: false }; layers.set(id, L); }
     return L;
   }
-  function tell(L, msg) { if (target && !target.isDestroyed()) target.send('utc:tk', Object.assign({ L: L.id }, msg)); }
+  function tell(L, msg) {
+    if (target && !target.isDestroyed()) target.send('utc:tk', Object.assign({ L: L.id }, msg));
+    if (nat) { try { nat.utcTk(L.id, msg); } catch (e) {} } // running text native juga digulir mesin video native
+  }
 
   function start(id, t) {
     const url = urlFor(id, t);
