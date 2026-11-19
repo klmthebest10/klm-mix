@@ -1,0 +1,31 @@
+name: Mesin video native (uji cepat)
+
+# build + uji mandiri klm-engine.exe saja (±3 menit) — untuk iterasi cepat tanpa menunggu build KLM lengkap
+on:
+  push:
+    branches: [main]
+    paths: ['native/engine/**', '.github/workflows/native-engine.yml']
+  workflow_dispatch:
+
+jobs:
+  engine:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build klm-engine
+        shell: pwsh
+        run: |
+          cmake -S native/engine -B native/engine/build -A x64
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cmake --build native/engine/build --config Release
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-Item native/engine/build/Release/klm-engine.exe | ForEach-Object { Write-Host ("klm-engine.exe: {0:N0} KB" -f ($_.Length / 1KB)) }
+      - name: Uji mandiri (selftest)
+        shell: pwsh
+        run: |
+          & native/engine/build/Release/klm-engine.exe --selftest
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::selftest gagal (kode $LASTEXITCODE)"; exit 1 }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: klm-engine
+          path: native/engine/build/Release/klm-engine.exe

@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    # perubahan yang HANYA menyentuh mesin native (diuji cepat oleh native-engine.yml) tidak memicu build lengkap
+    paths-ignore: ['native/engine/**', '.github/workflows/native-engine.yml']
   workflow_dispatch:
 
 permissions:

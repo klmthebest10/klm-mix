@@ -17,3 +17,4 @@ lisensi-terbit.csv
 
 # salinan pembuat lisensi berisi kunci privat — JANGAN di-commit
 *PRIBADI*
+native/engine/build/
