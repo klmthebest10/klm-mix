@@ -446,9 +446,13 @@
     // tanpa dipotong anggaran waktu → gerakannya rata, tidak patah-patah
     const compIv = mode === 'hemat' ? 62 : 33;
     let anim = 0;
+    // input yang sedang di Preview / Program dan BARU digambar ulang frame ini → kartunya cukup menyalin hasil itu
+    // (1 salinan GPU→GPU) SETIAP frame, semulus Program. Mode Hemat: tetap terjadwal di bawah agar ringan.
+    const onAir = mode === 'hemat' ? null : (inp) => (inp.id === S.previewId && !E.gridActive() && E.prevDrawAt === now) || (inp.id === S.programId && E.progDrawAt === now && progClean());
     for (let k = 0; k < n; k++) {
       const inp = S.inputs[k];
       const cv = inp.rt.thumb; if (!cv || !cv.isConnected || E.liveThumb(inp)) continue;
+      if (onAir && cv._vis !== false && onAir(inp)) { drawThumb(inp, cv, now); inp.rt.airAt = now; anim++; continue; }
       if (now - (inp.rt.compAt || 0) > 500) { inp.rt.compAt = now; inp.rt.comp = compMoving(inp); } // dicek 2×/detik, bukan tiap frame
       if (!inp.rt.comp || cv._vis === false) continue;
       anim++;
@@ -460,7 +464,7 @@
     const budget = mode === 'hemat' ? 3 : 6, t0 = performance.now();
     for (let k = 0; k < n; k++) {
       const inp = S.inputs[(thumbCursor + k) % n];
-      const cv = inp.rt.thumb; if (!cv || !cv.isConnected || inp.rt.comp || E.liveThumb(inp)) continue;
+      const cv = inp.rt.thumb; if (!cv || !cv.isConnected || inp.rt.comp || inp.rt.airAt === now || E.liveThumb(inp)) continue;
       const moving = KM.inputs.isPlaying(inp) || inp.type === 'list' || inp.type === 'browser' || inp.type === 'utc' || inp.type === 'score' || inp.type === 'title' || inp.type === 'mirror' || inp.rt.anim;
       if (now - (inp.rt.thumbAt || 0) < (cv._vis === false ? 3000 : moving ? fast - 8 : slow)) continue;
       drawThumb(inp, cv, now);

@@ -140,6 +140,9 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.17.4
+- **Daftar input semulus Program.** Kartu input yang sedang tampil di Preview atau Program (UTC Acara, title, layer, gabungan) kini menyalin hasil gambar mixer setiap frame (1 salinan GPU, tanpa menggambar ulang). Hasilnya 60 fps saat output 60 fps; dulu maksimal 30 fps. Kamera, KLMCAM, layar, dan video yang diputar tetap tampil langsung dari stream-nya. Mode Hemat tetap memakai jadwal hemat.
+
 ### Baru di v1.17.3
 - **Preview kini sama tajamnya dengan Program.** Preview digambar pada resolusi output penuh dengan jalur gambar yang sama persis dengan Program. Teks kecil di grafis UTC (alamat web, nama kecil) setajam di Program. Di mode Hemat (PC lemah), Preview tetap mengikuti ukuran tampil agar ringan, dan diperkecil dengan halus.
 - Popup update kini menampilkan catatan rilis lengkap (sebelumnya kadang hanya judul versi).
