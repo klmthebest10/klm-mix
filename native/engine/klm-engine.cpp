@@ -26,6 +26,7 @@
 #include <dxgi1_2.h>
 #include <d3dcompiler.h>
 #include <psapi.h>
+#include <timeapi.h>
 #include <wrl/client.h>
 #include <atomic>
 #include <cmath>
@@ -380,7 +381,7 @@ static void drawSource(const std::string& id, float alpha) {
   g_ctx->PSSetShaderResources(0, 1, s.srv.GetAddressOf());
   g_ctx->Draw(4, 0);
 }
-static float ease(float p) { return p < 0.5f ? 2 * p * p : 1 - std::pow(-2 * p + 2, 2.0f) / 2; }
+static float ease(float p) { p = p < 0 ? 0 : p > 1 ? 1 : p; return p < 0.5f ? 4 * p * p * p : 1 - std::pow(-2 * p + 2, 3.0f) / 2; } // = KM.ease
 static void compose(Bus& b, bool program) {
   ensureRT(b); if (!b.rtv) return;
   ID3D11ShaderResourceView* none = nullptr; g_ctx->PSSetShaderResources(0, 1, &none);
