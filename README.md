@@ -140,6 +140,12 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.6
+Versi uji (beta).
+- **Mesin video native Fase 3: kamera USB / capture card lewat Media Foundation.** Bila mesin video native menyala, input "Kamera / Capture Card" dibuka langsung oleh mesin native (dekode MJPG/NV12 dan konversi warna di GPU). Gambarnya tampil di monitor native dan dikirim ke mesin utama sebagai tekstur GPU bersama untuk Program, rekam, streaming dan output, tanpa salinan CPU. Perangkat hanya dibuka sekali walau dipakai beberapa input dengan pengaturan sama.
+- Bila kamera tidak bisa dibuka lewat mesin native (tidak dikenali Media Foundation, dipakai aplikasi lain, GPU tidak mendukung tekstur bersama), input otomatis kembali ke jalur biasa. Suara capture card tetap lewat jalur audio biasa.
+- Pilihan baru di Pengaturan → Performa → Mesin video native: "Kamera USB / capture card dibuka langsung oleh mesin native" (aktif bila mesin native menyala). KLMCAM masih lewat jalur WebRTC biasa.
+
 ### Baru di v1.18.0-beta.5
 Versi uji (beta).
 - **Mesin video native Fase 2: grafis UTC ON AIR di monitor Program.** Lower third, title, lokasi, sosmed, logo, opening/closing dan Scoreboard kini ikut digambar mesin native (Direct3D 11) di atas Program. Tekstur GPU lapisan grafis yang sama dikirim ke mesin native lewat handle bersama Windows, tanpa salinan CPU. Running text digulir langsung oleh mesin native, sama seperti di mesin utama. Bila zero-copy UTC mati (jalur CPU), monitor Program otomatis memakai tampilan biasa.
