@@ -140,6 +140,12 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.3
+Versi uji (beta).
+- **Perbaikan: KLMCAM dari HP di jaringan lain (mode internet) tidak tampil.** KLM mengirim perintah mulai kamera ke HP tanpa server STUN/TURN karena status "HP lewat internet" baru ditandai sesudahnya, sehingga sambungan video tidak pernah terbentuk. Kini status itu ditandai sejak HP pertama kali tersambung.
+- **Layar Preview kini setajam Program:** Preview selalu dirender pada resolusi output penuh (sama dengan Program), juga di mode Hemat atau saat performa otomatis aktif, dan tidak lagi dijarangkan ke ±30 fps.
+- **Monitor Preview & Program tidak bisa digulir lagi.** Saat panel UTC Acara terbuka, halaman tidak lagi bergulir. Panel mengisi sisa tinggi layar (isinya sendiri yang digulir). Di layar pendek monitor sedikit mengecil agar panel tetap cukup lega.
+
 ### Baru di v1.18.0-beta.2
 Versi uji (beta).
 - **Perbaikan: UTC Acara kosong setelah beberapa saat (hanya teks running text yang tampil).** Penyebabnya, satu gambar tanpa tekstur GPU yang muncul sesaat (misalnya saat grafis dilanjutkan setelah dijeda) langsung memindahkan grafis ke jalur cadangan CPU, dan jalur cadangan itu tidak menyiapkan ulang tekstur gambarnya sehingga kosong. Kini KLM baru pindah jalur bila tekstur GPU benar-benar tidak tersedia terus-menerus (≥ 30 gambar, > 3 detik), dan jalur cadangan selalu menyiapkan teksturnya dari awal. Uji otomatis kini memaksa pindah jalur di tengah siaran dan memastikan grafis tetap tampil.

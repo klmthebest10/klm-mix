@@ -38,7 +38,7 @@
           if (m.t === 'bye') { if (p) onMsg({ t: 'peer-leave', id }); return; }
           if (!p) {
             if (m.t !== 'hello') return; // belum kenal → tunggu salam berikutnya
-            onMsg({ t: 'peer-join', id, role: m.role === 'guest' ? 'guest' : 'camera', name: m.name, slot: m.slot, ip: 'internet', meta: m.meta || {} });
+            onMsg({ t: 'peer-join', id, role: m.role === 'guest' ? 'guest' : 'camera', name: m.name, slot: m.slot, ip: 'internet', meta: m.meta || {}, net: true });
             p = L.peers.get(id); if (p) p.net = true;
             send({ t: 'welcome', to: id, mixer: true });
             L.bindCams();
@@ -70,7 +70,10 @@
     switch (m.t) {
       case 'welcome': L.id = m.id; L.ips = m.ips || L.ips; break;
       case 'peer-join': {
-        const p = { id: m.id, role: m.role, name: m.name, slot: m.slot, ip: m.ip, meta: m.meta || {} };
+        // net: HP di jaringan lain (lewat internet) — HARUS sudah diketahui sebelum kamera dimulai (bindCams → startCam),
+        // karena startCam memilih server STUN/TURN berdasarkan ini. Dulu ditandai sesudahnya → HP di jaringan lain
+        // menerima 0 server ICE → sambungan video tidak pernah terbentuk.
+        const p = { id: m.id, role: m.role, name: m.name, slot: m.slot, ip: m.ip, meta: m.meta || {}, net: !!m.net };
         L.peers.set(m.id, p);
         if (m.role === 'camera' && KM.license && KM.license.locked('klmcam')) { // tanpa lisensi: KLMCAM terkunci
           if (!L._camLockNote) { L._camLockNote = true; KM.toast('🔒 KLMCAM dari HP ditolak: memerlukan lisensi KLM (Bantuan → Lisensi)', 'warn', 7000); }

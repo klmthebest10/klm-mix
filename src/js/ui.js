@@ -513,9 +513,8 @@
     const st = KM.settings, grid = !!(KM.engine.gridActive && KM.engine.gridActive());
     let pw;
     if (grid) pw = Math.min(Math.round(W * Math.min(2, window.devicePixelRatio || 1)), 1600); // grid: kotak-kotak memakai seluruh bingkai
-    // Preview = resolusi output penuh, jalur gambar sama persis dengan Program → setajam & semulus Program
-    // (mode Hemat di PC lemah: mengikuti ukuran tampil agar ringan)
-    else if (st.perfLite) pw = Math.min(W, Math.max(ow * (st.previewScale || 0.5), 360), ow);
+    // Preview = SELALU resolusi output penuh (juga di mode Hemat / performa otomatis), jalur gambar sama persis dengan
+    // Program → setajam Program. (Dulu mode ringan memakai ukuran tampil CSS tanpa DPR → Preview lebih buram.)
     else pw = ow;
     if (st.perfLite && grid) pw = Math.round(pw * 0.75);
     KM.engine.setPreviewSize(Math.round(pw), Math.round(pw / ar));

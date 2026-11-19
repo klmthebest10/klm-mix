@@ -24,8 +24,7 @@
   E.resize = function () {
     E.W = KM.settings.width; E.H = KM.settings.height;
     E.prog.width = E.W; E.prog.height = E.H;
-    const ps = KM.settings.previewScale || 0.5;
-    E.prev.width = Math.round(E.W * ps); E.prev.height = Math.round(E.H * ps);
+    E.prev.width = E.W; E.prev.height = E.H; // Preview = resolusi Program (UI bisa mengubah untuk mode grid)
     KM.fx && KM.fx.resize();
     if (E.stream) { E.stream.getTracks().forEach((t) => t.stop()); E.stream = null; }
     KM.emit('resized');
@@ -34,8 +33,7 @@
   /** atur resolusi kanvas Preview (dipanggil UI). w/h kosong = kembali ke rasio output × skala preview */
   E.setPreviewSize = function (w, h) {
     if (!E.prev || !E.W) return; // mesin belum menyala
-    const ps = KM.settings.previewScale || 0.5;
-    w = Math.round(w || E.W * ps); h = Math.round(h || E.H * ps);
+    w = Math.round(w || E.W); h = Math.round(h || E.H);
     if (E.prev.width !== w || E.prev.height !== h) { E.prev.width = w; E.prev.height = h; E.prevAt = 0; }
   };
   /** gambar src ke kotak dengan rasio terjaga (Preview mode grid bisa tidak 16:9) */
@@ -527,7 +525,8 @@
     const idle = document.hidden && KM.settings.pauseHidden !== false;
     // Monitor Preview digambar SETIAP frame, sama dengan Program (mode Hemat: output 50/60 fps → ±30 fps) agar gerakan mulus.
     // Beban diturunkan dengan cara lain: Preview = Program → cukup salin kanvas Program; resolusi Preview mengikuti ukuran tampil.
-    const pvEvery = KM.settings.fps > 30 && (KM.settings.perfLite || KM.settings.perf === 'hemat') ? Math.round(KM.settings.fps / 30) : 1;
+    // Preview tidak dijarangkan (dulu mode ringan → Preview ±30 fps sementara Program 60 fps: terlihat kurang mulus)
+    const pvEvery = 1;
     if (!idle && E.frame % pvEvery === 0 && (outOn || !E.prevAt || now - E.dirtyAt < DIRTY_MS || now - (E.prevDrawAt || 0) > 1000 || previewMoving())) {
       const v = E.vctx, pw = E.prev.width, ph = E.prev.height;
       v.globalAlpha = 1;
