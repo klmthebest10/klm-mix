@@ -45,7 +45,7 @@ if (cmd === 'fix-latest') {
   console.log('app-update.yml → ' + dir + '\n' + yml);
 } else if (cmd === 'notes') {
   const v = String(arg || require('../package.json').version).replace(/^v/, '');
-  const md = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+  const md = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8').replace(/\r\n/g, '\n'); // CI Windows: checkout CRLF
   const i = md.indexOf('### Baru di v' + v + '\n');
   let body = 'KLM v' + v;
   if (i >= 0) { const rest = md.slice(i + ('### Baru di v' + v + '\n').length); const j = rest.search(/\n### /); body = (j >= 0 ? rest.slice(0, j) : rest).trim(); }
