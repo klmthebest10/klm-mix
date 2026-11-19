@@ -510,7 +510,10 @@
     // PROGRAM — hanya digambar ulang bila isinya berubah atau output aktif. Kanvas 1080p yang dicat ulang tiap frame
     // adalah beban terbesar di laptop lemah; saat Program diam (mis. warna) kanvasnya dibiarkan apa adanya.
     const outOn = E.outputBusy();
-    if (outOn || !E.progAt || now - E.dirtyAt < DIRTY_MS || now - (E.progDrawAt || 0) > 1000 || programMoving()) { // pengaman: paling lambat digambar ulang tiap 1 detik
+    // mesin video native menampilkan monitor Program & tidak ada output yang memakai kanvas Program → kanvas tidak perlu dicat
+    const nat = KM.nengine;
+    if (nat && nat.pgm && !outOn) E.progAt = now;
+    else if (outOn || !E.progAt || now - E.dirtyAt < DIRTY_MS || now - (E.progDrawAt || 0) > 1000 || programMoving()) { // pengaman: paling lambat digambar ulang tiap 1 detik
       const c = E.pctx;
       c.globalAlpha = 1; c.fillStyle = '#000'; c.fillRect(0, 0, E.W, E.H);
       if (S.trans) drawTransition(c, S.trans);
@@ -527,12 +530,13 @@
     // Beban diturunkan dengan cara lain: Preview = Program → cukup salin kanvas Program; resolusi Preview mengikuti ukuran tampil.
     // Preview tidak dijarangkan (dulu mode ringan → Preview ±30 fps sementara Program 60 fps: terlihat kurang mulus)
     const pvEvery = 1;
-    if (!idle && E.frame % pvEvery === 0 && (outOn || !E.prevAt || now - E.dirtyAt < DIRTY_MS || now - (E.prevDrawAt || 0) > 1000 || previewMoving())) {
+    if (nat && nat.pvw) { if (!idle) E.prevAt = now; } // monitor Preview ditampilkan mesin native
+    else if (!idle && E.frame % pvEvery === 0 && (outOn || !E.prevAt || now - E.dirtyAt < DIRTY_MS || now - (E.prevDrawAt || 0) > 1000 || previewMoving())) {
       const v = E.vctx, pw = E.prev.width, ph = E.prev.height;
       v.globalAlpha = 1;
       if (pw < E.W) v.imageSmoothingQuality = 'high'; // Preview lebih kecil dari output (mode Hemat): perkecil dengan halus, tidak bergerigi
       if (E.gridActive()) { v.fillStyle = '#000'; v.fillRect(0, 0, pw, ph); drawPvGrid(v, pw, ph); }
-      else if (S.previewId && S.previewId === S.programId && progClean()) v.drawImage(E.prog, 0, 0, pw, ph);
+      else if (S.previewId && S.previewId === S.programId && progClean() && !(nat && nat.pgm)) v.drawImage(E.prog, 0, 0, pw, ph);
       else { v.fillStyle = '#000'; v.fillRect(0, 0, pw, ph); const pv = KM.getInput(S.previewId); if (pv) drawInputRect(v, pv, 0, 0, pw, ph, 0); }
       E.prevAt = E.prevDrawAt = now;
     } else if (!idle) E.prevAt = now; // isi Preview masih sama (diam): salinan thumbnail tetap bisa dipakai

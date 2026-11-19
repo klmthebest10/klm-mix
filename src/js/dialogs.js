@@ -633,12 +633,16 @@
         const cur = st.perf || 'seimbang';
         const card = (k, title, desc) => h('button.tile' + (cur === k ? '.on' : ''), { style: { alignItems: 'flex-start', textAlign: 'left' }, onclick: () => { KM.perf.apply(k); show('perf'); } }, h('b', { style: { fontSize: '15px', fontWeight: 700 } }, title), h('span', desc));
         return h('div', h('div.sec', h('h4', 'Mode performa'), h('div.tiles', { style: { gridTemplateColumns: 'repeat(3, 1fr)' } },
-          card('hemat', '🍃 Hemat (PC kentang)', '720p 30fps, preview 33% & 15fps, thumbnail lambat, replay ringan. Paling ringan.'),
-          card('seimbang', '⚖ Seimbang', '1080p, frame rate tetap (30/50/60 fps), preview 50%. Cocok untuk kebanyakan PC/laptop.'),
+          card('hemat', '🍃 Hemat (PC kentang)', '720p 30fps, thumbnail lambat, replay ringan. Paling ringan. Preview tetap setajam Program.'),
+          card('seimbang', '⚖ Seimbang', '1080p, frame rate tetap (30/50/60 fps), preview penuh. Cocok untuk kebanyakan PC/laptop.'),
           card('kualitas', '💎 Kualitas', 'Resolusi & fps tetap (sampai 4K / 120 fps), preview penuh. Untuk PC dengan GPU kuat.'))),
           KM.isElectron ? h('div.sec', h('h4', 'Grafis UTC (GPU)'),
             chk('Zero-copy GPU: grafis UTC dikirim sebagai tekstur GPU langsung ke mixer, tanpa salinan CPU (Windows)', st.utcZeroCopy !== false, (v) => { KM.utc.setZeroCopy(v); setTimeout(() => show('perf'), 600); }),
             h('p.muted', (() => { const z = KM.utc.zc || {}; return z.on ? '✓ Aktif — ' + (z.frames || 0) + ' frame GPU diterima.' : 'Tidak aktif' + (z.why ? ' — ' + z.why : '') + '. Grafis memakai jalur salinan CPU (tetap tampil normal).'; })())) : null,
+          KM.isElectron && KM.nengine ? h('div.sec', h('h4', 'Mesin video native (Direct3D 11) — EKSPERIMEN, Fase 1'),
+            chk('Tampilkan monitor Preview & Program dengan mesin native GPU (Windows)', st.nativeEngine === true, (v) => { KM.nengine.set(v); setTimeout(() => show('perf'), 1500); }),
+            h('p.muted', 'Fase 1 baru mendukung sumber Warna/Gradien, Color Bars dan Tangkap Layar (zero-copy GPU). Monitor yang menampilkan sumber lain (kamera, KLMCAM, video, grafis UTC ON AIR, overlay, efek) otomatis memakai tampilan biasa. Rekam / streaming / output tetap dari mesin utama.'),
+            h('p.muted', (() => { const n = KM.nengine; if (!st.nativeEngine) return n.available ? 'Mati.' : 'Mesin native tidak ada di instalasi ini.'; return 'Status: ' + n.state + (n.adapter ? ' • GPU: ' + n.adapter : '') + (n.fps ? ' • ' + n.fps + ' fps, ' + n.ms + ' ms/frame, RAM ' + n.mem + ' MB' : '') + ' • Preview: ' + (n.pvw ? 'native ✓' : 'biasa' + (n.why.pvw ? ' (' + n.why.pvw + ')' : '')) + ' • Program: ' + (n.pgm ? 'native ✓' : 'biasa' + (n.why.pgm ? ' (' + n.why.pgm + ')' : '')); })())) : null,
           h('div.sec', h('h4', 'Penghemat otomatis'),
             chk('Jeda preview & thumbnail saat jendela diminimize (program tetap jalan)', st.pauseHidden !== false, (v) => { st.pauseHidden = v; save(); }),
             chk('Matikan multiview saat tidak ditampilkan', true, () => {}),

@@ -90,6 +90,17 @@ jobs:
           $o = & native/procaudio/build/Release/klm-procaudio.exe 2>&1; Write-Host "tanpa argumen: $o"
           $global:LASTEXITCODE = 0
 
+      # Mesin video native (Direct3D 11) — monitor Preview/Program GPU, Fase 1 (eksperimen)
+      - name: Build mesin video native (klm-engine)
+        shell: pwsh
+        run: |
+          cmake -S native/engine -B native/engine/build -A x64
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cmake --build native/engine/build --config Release
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          & native/engine/build/Release/klm-engine.exe --selftest
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::selftest klm-engine gagal (kode $LASTEXITCODE)"; exit 1 }
+
       # Penerima AirPlay (klm-airplay.exe, GPL-3.0) dari pustaka UxPlay — iPhone/iPad/Mac mirroring tanpa aplikasi
       - uses: msys2/setup-msys2@v2
         with:
@@ -261,7 +272,11 @@ jobs:
           malware_block: false
       # tanda tangan mengubah isi installer → sha512 di latest.yml (dipakai update di aplikasi) harus diperbarui
       - name: Sesuaikan latest.yml dengan installer akhir
-        run: node build/release-tools.js fix-latest
+        shell: pwsh
+        run: |
+          node build/release-tools.js fix-latest
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          node build/release-tools.js channel-yml
 
       - name: Status tanda tangan
         shell: pwsh

@@ -32,6 +32,16 @@ if (cmd === 'fix-latest') {
   const bm = file + '.blockmap';
   if (fs.existsSync(bm)) fs.unlinkSync(bm);
   console.log('latest.yml diperbarui untuk ' + path.basename(file) + ' (' + buf.length + ' byte)');
+} else if (cmd === 'channel-yml') {
+  // versi uji (mis. 1.18.0-beta.4): electron-updater di KLM beta mencari <kanal>.yml (beta.yml). electron-builder hanya
+  // menulis latest.yml → salin menjadi beta.yml agar update di aplikasi menemukan versi uji berikutnya.
+  const v = require('../package.json').version, ch = (v.split('-')[1] || '').split('.')[0];
+  if (!ch) { console.log('bukan versi uji — lewati'); process.exit(0); }
+  const src = path.join(ROOT, 'dist', 'latest.yml'), dst = path.join(ROOT, 'dist', ch + '.yml');
+  if (fs.existsSync(dst)) { console.log(ch + '.yml sudah ada'); process.exit(0); }
+  if (!fs.existsSync(src)) { console.log('dist/latest.yml tidak ada'); process.exit(1); }
+  fs.copyFileSync(src, dst);
+  console.log(ch + '.yml dibuat dari latest.yml');
 } else if (cmd === 'app-update') {
   // resources/app-update.yml = alamat sumber update yang dibaca electron-updater di aplikasi terpasang.
   // electron-builder hanya menulisnya saat target NSIS dibangun langsung; build dua tahap (folder → tanda tangan →

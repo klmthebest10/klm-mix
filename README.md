@@ -140,6 +140,11 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.4
+Versi uji (beta).
+- **Mesin video native (Direct3D 11) — Fase 1, eksperimen, mati secara bawaan.** Nyalakan di Pengaturan → Performa → Mesin video native. Monitor Preview & Program digambar langsung oleh GPU (program terpisah `klm-engine.exe`, swapchain DirectX) di atas kanvas monitor, dan kanvas monitor biasa berhenti dicat selama itu. Fase 1 baru mendukung sumber Warna/Gradien, Color Bars dan Tangkap Layar (DXGI Desktop Duplication, tanpa salinan CPU), transisi Cut/Fade dan T-bar. Monitor yang menampilkan sumber lain (kamera, KLMCAM, video, grafis UTC ON AIR, overlay, efek), atau yang sedang tertutup menu/dialog, otomatis memakai tampilan biasa tanpa kedip. Rekam, streaming dan output tetap dari mesin utama.
+- Perbaikan saluran update beta: rilis versi uji kini menyertakan `beta.yml`, sehingga KLM beta menemukan versi uji berikutnya lewat Periksa update.
+
 ### Baru di v1.18.0-beta.3
 Versi uji (beta).
 - **Perbaikan: KLMCAM dari HP di jaringan lain (mode internet) tidak tampil.** KLM mengirim perintah mulai kamera ke HP tanpa server STUN/TURN karena status "HP lewat internet" baru ditandai sesudahnya, sehingga sambungan video tidak pernah terbentuk. Kini status itu ditandai sejak HP pertama kali tersambung.

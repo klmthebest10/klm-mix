@@ -209,6 +209,7 @@ process.on('unhandledRejection', (e) => { console.warn('[KLM] unhandledRejection
 const vstMgr = require('./vst').setup({ win: () => mainWin });
 const airplay = require('./airplay').setup({ win: () => mainWin, server, configDir: server.configDir });
 const procAudio = require('./procaudio').setup({ win: () => mainWin, server });
+const nEngine = require('./nengine').setup({ win: () => mainWin, log: (m) => console.log(m) }); // mesin video native (eksperimen)
 // update di dalam aplikasi (GitHub Releases). Saat memasang, jendela ditutup tanpa dialog konfirmasi lagi
 // (penyimpanan preset & penutupan rekaman sudah dikerjakan halaman sebelum memanggil update:install).
 let updatingQuit = false;
@@ -699,6 +700,39 @@ function smokeTest() {
         if (off !== 'false') log('catatan: penerima AirPlay masih berjalan setelah input dihapus');
       } catch (e) { fail++; log('GAGAL airplay: ' + e.message); }
     }
+    // --- mesin video native (klm-engine, Direct3D 11): monitor Preview tampil native di atas kanvas ---
+    try {
+      const avail = nEngine.available();
+      log('mesin native: tersedia=' + avail);
+      if (avail) {
+        await js(`(() => { document.querySelectorAll('.modal .mh .x').forEach((x) => x.click()); const b = KM.inputs.create('bars', { title: 'Bars native' }); KM.engine.setPreview(b.id); KM.nengine.set(true); return 1; })()`);
+        await wait(5000);
+        const ns = JSON.parse(await js('JSON.stringify({ state: KM.nengine.state, adapter: KM.nengine.adapter, pvw: KM.nengine.pvw, pgm: KM.nengine.pgm, why: KM.nengine.why, fps: KM.nengine.fps, mem: KM.nengine.mem })'));
+        log('mesin native: ' + JSON.stringify(ns));
+        // kanvas Preview JS disembunyikan sesaat: yang terlihat di layar harus gambar dari jendela native (color bars)
+        const pr = JSON.parse(await js(`(() => { const c = document.getElementById('pvw'); c.style.visibility = 'hidden'; const r = c.getBoundingClientRect(); return JSON.stringify({ x: r.left, y: r.top, w: r.width, h: r.height, d: devicePixelRatio }); })()`));
+        await wait(400);
+        const { desktopCapturer, screen: scr } = require('electron');
+        const b = mainWin.getContentBounds(), disp = scr.getDisplayMatching(b), sf = disp.scaleFactor || 1;
+        const shots = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: Math.round(disp.size.width * sf), height: Math.round(disp.size.height * sf) } });
+        const shot = shots.find((x) => String(x.display_id) === String(disp.id)) || shots[0];
+        let px = null;
+        if (shot) {
+          fs.writeFileSync(path.join(out, 'native-desktop.png'), shot.thumbnail.toPNG());
+          const bm = shot.thumbnail.toBitmap(), sz = shot.thumbnail.getSize(), k = sz.width / disp.size.width;
+          const X = Math.round((b.x - disp.bounds.x + pr.x + pr.w * 0.07) * k), Y = Math.round((b.y - disp.bounds.y + pr.y + pr.h * 0.3) * k);
+          if (X >= 0 && Y >= 0 && X < sz.width && Y < sz.height) { const i = (Y * sz.width + X) * 4; px = [bm[i + 2], bm[i + 1], bm[i]]; }
+        }
+        await js(`document.getElementById('pvw').style.visibility = ''`);
+        log('mesin native: piksel layar di monitor Preview (kanvas JS disembunyikan) = ' + JSON.stringify(px) + ' (harap ±192,192,192 dari color bars)');
+        if (ns.state !== 'ready' || !ns.pvw) { fail++; log('GAGAL: mesin native tidak mengambil alih monitor Preview'); }
+        else if (!px || Math.abs(px[0] - 192) > 24 || Math.abs(px[1] - 192) > 24 || Math.abs(px[2] - 192) > 24) log('catatan: piksel layar tidak cocok (desktop CI mungkin tidak menampilkan jendela) — dicek manual lewat native-desktop.png');
+        await js('KM.nengine.set(false)'); await wait(800);
+        const off = await js('JSON.stringify({ pvw: KM.nengine.pvw, state: KM.nengine.state })');
+        log('mesin native dimatikan: ' + off);
+        if (JSON.parse(off).pvw) { fail++; log('GAGAL: monitor Preview tidak kembali ke tampilan biasa'); }
+      }
+    } catch (e) { fail++; log('GAGAL mesin native: ' + e.message); }
     // --- Virtual Set dari template + penyusun tata letak ---
     try {
       const vs = JSON.parse(await js(`(async () => { const t = KM.vset.builtin.find((x) => x.id === 'trio-utama'); const v = KM.vset.create(t, { fill: false });

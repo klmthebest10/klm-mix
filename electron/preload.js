@@ -10,9 +10,10 @@ const INVOKE = ['app:info', 'desktop:sources', 'dialog:open', 'dialog:save', 'di
   'app:boot', 'app:ready', 'live:auth-list', 'live:yt-connect', 'live:fb-connect', 'live:forget', 'live:prepare', 'live:end',
   'airplay:start', 'airplay:stop', 'airplay:status', 'airplay:firewall', 'airplay:hotspot', 'sys:open-settings',
   'procaudio:start', 'procaudio:stop', 'procaudio:available',
+  'nengine:start', 'nengine:stop', 'nengine:status', 'nengine:screen-rect',
   'update:info', 'update:check', 'update:download', 'update:install'];
-const SEND = ['file:write-chunk', 'utc:start', 'utc:stop', 'utc:ack', 'utc:reload', 'utc:full', 'utc:pause', 'utc:resume', 'utc:zc-ready', 'utc:zc-set'];
-const ON = ['utc:frame', 'utc:tk', 'utc:zc', 'vst:event', 'airplay:status', 'procaudio:status', 'update:status'];
+const SEND = ['file:write-chunk', 'utc:start', 'utc:stop', 'utc:ack', 'utc:reload', 'utc:full', 'utc:pause', 'utc:resume', 'utc:zc-ready', 'utc:zc-set', 'nengine:cmd'];
+const ON = ['utc:frame', 'utc:tk', 'utc:zc', 'vst:event', 'airplay:status', 'procaudio:status', 'update:status', 'nengine:ev'];
 
 // port audio plugin VST (MessagePort ke broker) diteruskan ke dunia halaman → AudioWorklet
 ipcRenderer.on('vst:port', (e, d) => { window.postMessage({ klmVstPort: d && d.id }, '*', e.ports); });
