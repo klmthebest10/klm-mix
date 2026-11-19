@@ -19,7 +19,9 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
-app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer,PlatformHEVCEncoderSupport,MediaRecorderEnableMp4Muxer');
+// AllowWgcScreenCapturer / AllowWgcWindowCapturer: input Tangkap Layar/Jendela memakai Windows Graphics Capture (API native
+// Windows 10 1903+, GPU) untuk layar maupun jendela; bila tidak tersedia Chromium otomatis kembali ke DXGI/GDI.
+app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer,PlatformHEVCEncoderSupport,MediaRecorderEnableMp4Muxer,AllowWgcScreenCapturer,AllowWgcWindowCapturer');
 app.commandLine.appendSwitch('force_high_performance_gpu');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-gpu-rasterization');
@@ -448,6 +450,7 @@ function smokeTest() {
       await wait(5000);
       const st = await js('JSON.stringify({ avail: KM.utc.avail, on: KM.utc.onAir(), frames: KM.utc.frames, fps: KM.engine.fps, px: KM.utc.coverage() })');
       log('status UTC: ' + st);
+      log('zero-copy GPU: mixer ' + await js('JSON.stringify(KM.utc.zc)') + ' • utama ' + JSON.stringify(utcOsr && utcOsr.zc ? utcOsr.zc() : '?') + ' • Electron ' + process.versions.electron + ' / Chromium ' + process.versions.chrome);
       const s = JSON.parse(st);
       if (!s.avail || !s.frames) { fail++; log('GAGAL: tidak ada frame overlay offscreen'); }
       if (!(s.px > 0.002)) { fail++; log('GAGAL: lapisan UTC kosong di Program'); }

@@ -7,13 +7,13 @@
   const fmtMB = (b) => (b / 1048576).toFixed(b > 104857600 ? 0 : 1) + ' MB';
   let dlg = null, auto = false, timer = 0;
 
-  const call = (ch) => window.klm.invoke(ch).catch((e) => ({ state: 'error', message: e.message }));
+  const call = (ch, ...a) => window.klm.invoke(ch, ...a).catch((e) => ({ state: 'error', message: e.message }));
   U.supported = isEl;
   U.check = async function (manual) {
     if (!isEl()) { if (manual) KM.toast('Update otomatis hanya ada di versi PC (.exe)', 'info'); return null; }
     auto = !manual;
     if (manual) KM.toast('Memeriksa update…', 'info', 2000);
-    const s = await call('update:check');
+    const s = await call('update:check', { beta: KM.settings.updateBeta === true });
     if (manual && s) {
       if (s.state === 'latest') KM.toast('✓ KLM sudah versi terbaru (v' + KM.version + ')', 'ok', 4000);
       else if (s.state === 'error' || s.state === 'unsupported') KM.toast(s.message || 'Gagal memeriksa update', 'warn', 6000);
@@ -110,7 +110,8 @@
         h('div', 'Versi terpasang: ', h('b', 'v' + KM.version), ' — ', h('span.muted', line)),
         isEl() ? h('div.row', { style: { marginTop: '8px', gap: '8px', display: 'flex', alignItems: 'center', flexWrap: 'wrap' } },
           h('button.btn.pri', { onclick: () => (['available', 'downloading', 'downloaded'].includes(U.status.state) ? show() : U.check(true)) }, ['available', 'downloaded'].includes(st) ? 'Lihat update' : 'Periksa update'),
-          h('label', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, h('input', { type: 'checkbox', checked: KM.settings.autoUpdate !== false, onchange: (e) => { KM.settings.autoUpdate = e.target.checked; KM.saveSettings(); schedule(); } }), 'Periksa update otomatis saat KLM dibuka')) : null);
+          h('label', { style: { display: 'flex', gap: '6px', alignItems: 'center' } }, h('input', { type: 'checkbox', checked: KM.settings.autoUpdate !== false, onchange: (e) => { KM.settings.autoUpdate = e.target.checked; KM.saveSettings(); schedule(); } }), 'Periksa update otomatis saat KLM dibuka'),
+          h('label', { style: { display: 'flex', gap: '6px', alignItems: 'center' }, title: 'Versi uji berisi fitur terbaru yang belum dirilis untuk semua pengguna. Bisa kurang stabil.' }, h('input', { type: 'checkbox', checked: KM.settings.updateBeta === true, onchange: (e) => { KM.settings.updateBeta = e.target.checked; KM.saveSettings(); } }), 'Ikut versi uji (beta)')) : null);
     };
     U._render = render; render();
     return box;

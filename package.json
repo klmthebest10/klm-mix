@@ -1,7 +1,7 @@
 {
   "name": "klm-mix",
   "productName": "KLM",
-  "version": "1.17.4",
+  "version": "1.18.0-beta.1",
   "description": "KLM - Studio produksi live dengan KLMCAM & UTC KLM Acara terintegrasi",
   "author": "KLM",
   "license": "UNLICENSED",
@@ -21,7 +21,7 @@
     "electron-updater": "^6.3.9"
   },
   "devDependencies": {
-    "electron": "^33.2.1",
+    "electron": "^43.7.0",
     "electron-builder": "^25.1.8"
   },
   "build": {

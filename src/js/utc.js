@@ -77,9 +77,31 @@
   }
   const boxUnion = (a, b) => { if (!a) return b; if (!b) return a; const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y); return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y }; };
 
+  // ---------- zero-copy: tekstur GPU dari lapisan offscreen ----------
+  // Proses utama mengirim tekstur GPU (tanpa salinan CPU); di sini menjadi VideoFrame dan digambar langsung ke Program.
+  // Frame lama dilepas begitu frame baru datang → kolam tekstur lapisan tidak pernah habis.
+  if (KM.settings.utcZeroCopy == null) KM.settings.utcZeroCopy = true;
+  U.zc = { on: false, why: '', frames: 0, recv: false };
+  function dropZC(L) { const z = L.zc; if (!z) return; L.zc = null; try { z.vf.close(); } catch (e) {} try { z.imp.release(); } catch (e) {} }
+  U.pushZC = function (imp, id, meta) {
+    const L = LY[id];
+    if (!L || L.paused || !L.started) { try { imp.release(); } catch (e) {} return; }
+    const vf = imp.getVideoFrame();
+    dropZC(L);
+    L.zc = { imp, vf };
+    const W = (meta && meta.W) || vf.displayWidth, H = (meta && meta.H) || vf.displayHeight;
+    if (L.texW !== W || L.texH !== H) { L.texW = W; L.texH = H; }
+    L.bbox = { x: 0, y: 0, w: W, h: H };
+    L.has = true; L.frames++; U.frames++; U.zc.frames++;
+    const now = KM.now();
+    U.lastFrameAt = now; L.idleUntil = now + 1500;
+  };
+  U.setZeroCopy = (on) => { KM.settings.utcZeroCopy = !!on; KM.saveSettings(); if (isEl()) window.klm.send('utc:zc-set', { on: !!on }); };
+
   /** terima potongan frame {L,x,y,w,h,W,H,buf} (BGRA premultiplied) */
   U.pushFrame = function (f) {
     const L = LY[f.L || 'main']; if (!L) return;
+    if (L.zc) { dropZC(L); L.texW = 0; } // lapisan pindah ke jalur salinan CPU
     if (!L.gl && !initGL(L)) return;
     const gl = L.gl, cv = L.cv;
     if (f.W !== L.texW || f.H !== L.texH) {
@@ -104,7 +126,7 @@
   // ---------- running text native ----------
   function onTk(m) {
     const L = LY[m.L]; if (!L) return;
-    if (m.k === 'reset') { L.native = L.nextNative = null; return; }
+    if (m.k === 'reset') { L.native = L.nextNative = null; dropZC(L); return; }
     if (m.k === 'live') { if (!m.id || (L.native && L.native.id === m.id) || (L.nextNative && L.nextNative.id === m.id)) { L.native = L.nextNative = null; } return; }
     if (m.k === 'geo') { for (const n of [L.native, L.nextNative]) if (n && n.id === m.id) n.vp = m.vp; return; }
     if (m.k === 'strip') {
@@ -164,8 +186,8 @@
     return anyKey(L.id) || KM.now() < L.idleUntil;
   }
   function drawLayer(ctx, L, W, H) {
-    const sx = W / L.texW, sy = H / L.texH, b = L.bbox;
-    if (b && b.w > 0 && b.h > 0) { try { ctx.drawImage(L.cv, b.x, b.y, b.w, b.h, b.x * sx, b.y * sy, b.w * sx, b.h * sy); } catch (e) {} }
+    const sx = W / L.texW, sy = H / L.texH, b = L.bbox, src = L.zc ? L.zc.vf : L.cv;
+    if (b && b.w > 0 && b.h > 0) { try { ctx.drawImage(src, b.x, b.y, b.w, b.h, b.x * sx, b.y * sy, b.w * sx, b.h * sy); } catch (e) {} }
     if (L.native || L.nextNative) drawNative(ctx, L, sx, sy);
   }
   /** dipanggil engine setelah overlay 1–4, sebelum FTB */
@@ -219,10 +241,11 @@
   function startLayer(id) {
     const L = LY[id];
     if (!L.gl && !initGL(L)) return;
+    dropZC(L);
     L.started = true; L.paused = false; L.usedAt = KM.now(); L.native = L.nextNative = null; L.has = false; L.bbox = null;
     window.klm.send('utc:start', { L: id, w: KM.settings.width, h: KM.settings.height, fps: fpsOsr() });
   }
-  function pauseLayer(id) { const L = LY[id]; if (L.started && !L.paused) { L.paused = true; L.native = L.nextNative = null; window.klm.send('utc:pause', { L: id }); } }
+  function pauseLayer(id) { const L = LY[id]; if (L.started && !L.paused) { L.paused = true; L.native = L.nextNative = null; dropZC(L); L.has = false; window.klm.send('utc:pause', { L: id }); } }
   function resumeLayer(id) { const L = LY[id]; L.usedAt = KM.now(); if (!L.started) startLayer(id); else if (L.paused) { L.paused = false; window.klm.send('utc:resume', { L: id }); } }
   U.started = false; U.paused = false;
   // lapisan dinyalakan satu per satu & hanya yang menampilkan sesuatu (tidak membebani saat aplikasi dibuka)
@@ -262,6 +285,17 @@
   if (isEl() && window.klm.on) {
     window.klm.on('utc:frame', (f) => { try { U.pushFrame(f); } catch (e) { console.warn('utc frame', e); } window.klm.send('utc:ack', { L: f.L || 'main' }); });
     window.klm.on('utc:tk', (m) => { try { onTk(m); } catch (e) { console.warn('utc tk', e); } });
+    window.klm.on('utc:zc', (m) => {
+      U.zc.on = !!(m && m.on); U.zc.why = (m && m.why) || '';
+      if (!U.zc.on) ORDER.forEach((id) => dropZC(LY[id]));
+      KM.changed('utc');
+    });
+    // penerima tekstur GPU dipasang sekali; proses utama baru mengirim tekstur setelah "zc-ready"
+    if (window.klm.zcReceiver && window.klm.zcReceiver((imp, id, meta) => U.pushZC(imp, id, meta))) {
+      U.zc.recv = true;
+      window.klm.send('utc:zc-ready', {});
+      if (KM.settings.utcZeroCopy === false) window.klm.send('utc:zc-set', { on: false });
+    } else U.zc.why = 'Electron versi ini belum mendukung tekstur bersama';
   }
   U.reload = () => { if (U.avail) { ORDER.forEach((id) => { LY[id].native = LY[id].nextNative = null; }); window.klm.send('utc:reload'); } };
   let lastSig = KM.settings.width + 'x' + KM.settings.height + '@' + fpsOsr();

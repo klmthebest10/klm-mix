@@ -76,7 +76,10 @@ function create({ getWin, beforeInstall, log = () => {} }) {
     } catch (e) { return emit({ state: 'error', message: friendly(e) }); }
   }
 
-  async function check() {
+  // versi uji (beta): pra-rilis GitHub hanya diunduh bila pengguna memilih "Ikut versi uji"
+  function setBeta(on) { if (au) { au.allowPrerelease = !!on; au.allowDowngrade = false; } }
+  async function check(opts) {
+    if (opts && typeof opts.beta === 'boolean') setBeta(opts.beta);
     if (mode === 'off') return emit({ state: 'unsupported', message: 'Update otomatis hanya tersedia di versi PC yang dipasang dengan installer' });
     if (mode === 'manual') return checkManual();
     if (['downloading', 'downloaded'].includes(last.state)) return last;
@@ -101,7 +104,7 @@ function create({ getWin, beforeInstall, log = () => {} }) {
   }
 
   ipcMain.handle('update:info', () => last);
-  ipcMain.handle('update:check', () => check());
+  ipcMain.handle('update:check', (e, opts) => check(opts));
   ipcMain.handle('update:download', () => download());
   ipcMain.handle('update:install', () => install());
   return { check, download, install, info: () => last, mode };

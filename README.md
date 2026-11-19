@@ -140,6 +140,13 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.1
+Versi uji (beta). Hanya diterima KLM yang mencentang **Pengaturan → Tentang → Ikut versi uji (beta)**.
+- **UTC Acara zero-copy GPU.** Grafis UTC dirender langsung ke tekstur GPU bersama (D3D11) dan dikirim ke mixer tanpa disalin ke CPU. Mixer menggambarnya langsung ke Program sebagai VideoFrame. Bila GPU / driver tidak mendukung, KLM otomatis kembali ke jalur lama (grafis tetap tampil). Bisa dimatikan di Pengaturan → Performa → Grafis UTC (GPU).
+- **Tangkap Layar / Jendela memakai Windows Graphics Capture** (API native Windows 10 1903+), untuk layar maupun jendela, dengan cadangan otomatis ke DXGI/GDI.
+- Mesin aplikasi diperbarui ke Electron 43 (Chromium baru, perbaikan keamanan, dukungan tekstur bersama).
+- Opsi baru **Ikut versi uji (beta)** di Pengaturan → Tentang.
+
 ### Baru di v1.17.4
 - **Daftar input semulus Program.** Kartu input yang sedang tampil di Preview atau Program (UTC Acara, title, layer, gabungan) kini menyalin hasil gambar mixer setiap frame (1 salinan GPU, tanpa menggambar ulang). Hasilnya 60 fps saat output 60 fps; dulu maksimal 30 fps. Kamera, KLMCAM, layar, dan video yang diputar tetap tampil langsung dari stream-nya. Mode Hemat tetap memakai jadwal hemat.
 

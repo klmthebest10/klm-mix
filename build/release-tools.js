@@ -14,8 +14,9 @@ const ROOT = path.join(__dirname, '..');
 const [cmd, arg] = process.argv.slice(2);
 
 if (cmd === 'fix-latest') {
-  const yml = path.join(ROOT, 'dist', 'latest.yml');
-  if (!fs.existsSync(yml)) { console.log('dist/latest.yml tidak ada — lewati'); process.exit(0); }
+  // latest.yml (rilis) atau beta.yml (versi uji, mis. 1.18.0-beta.1)
+  const yml = ['latest.yml', 'beta.yml', 'alpha.yml'].map((n) => path.join(ROOT, 'dist', n)).find((f) => fs.existsSync(f));
+  if (!yml) { console.log('dist/latest.yml tidak ada — lewati'); process.exit(0); }
   let t = fs.readFileSync(yml, 'utf8');
   const name = (t.match(/^path:\s*(.+)$/m) || [])[1];
   const file = name && path.join(ROOT, 'dist', name.trim().replace(/^['"]|['"]$/g, ''));

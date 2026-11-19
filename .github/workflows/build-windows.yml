@@ -33,9 +33,20 @@ jobs:
           V=$(node -p "require('./package.json').version")
           echo "VERSION=$V" >> "$GITHUB_ENV"
           if [[ "$GITHUB_REF" == refs/tags/v* ]] || { [[ "$GITHUB_REF" == refs/heads/main ]] && [[ "$MSG" == *"[rilis]"* ]]; }; then echo "RELEASE=1" >> "$GITHUB_ENV"; echo "RILIS v$V"; else echo "RELEASE=0" >> "$GITHUB_ENV"; echo "bukan rilis"; fi
+          # [beta] = versi uji (pra-rilis GitHub, versi mis. 1.18.0-beta.1): hanya diterima KLM yang mencentang "Ikut versi uji"
+          if [[ "$GITHUB_REF" == refs/heads/main ]] && [[ "$MSG" == *"[beta]"* ]] && [[ "$V" == *-* ]]; then echo "RELEASE=1" >> "$GITHUB_ENV"; echo "PRERELEASE=1" >> "$GITHUB_ENV"; echo "VERSI UJI v$V"; fi
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
+      # Electron ≥ 42 tidak lagi mengunduh dirinya saat npm install → unduh biner untuk uji (node_modules/electron/dist/electron.exe)
+      - name: Unduh biner Electron
+        shell: pwsh
+        run: |
+          npx --no-install install-electron --no
+          if (-not (Test-Path node_modules/electron/dist/electron.exe)) { node node_modules/electron/install.js }
+          if (-not (Test-Path node_modules/electron/dist/electron.exe)) { throw "electron.exe tidak terunduh" }
+          node -e "console.log('Electron', require('electron/package.json').version)"
 
       # sumber update di dalam aplikasi: repo ini, atau repo rilis publik terpisah (variabel RELEASE_REPO, mis. "akun/klm-releases")
       - name: Sumber update aplikasi
@@ -271,7 +282,8 @@ jobs:
           if (Test-Path dist/win-unpacked/resources/app-update.yml) { Write-Host "app-update.yml:"; Get-Content dist/win-unpacked/resources/app-update.yml } else { Write-Host "::error::app-update.yml tidak ada (update di aplikasi tidak akan jalan)"; exit 1 }
           $eu = node -e "const a=require('@electron/asar'); console.log(a.listPackage('dist/win-unpacked/resources/app.asar').filter(f=>/node_modules[\\/]electron-updater[\\/]package\.json$/.test(f)).length)"
           if ($eu -ne '1') { Write-Host "::error::electron-updater tidak ikut dipaketkan"; exit 1 } else { Write-Host "electron-updater ikut dipaketkan" }
-          if (Test-Path dist/latest.yml) { Write-Host "latest.yml:"; Get-Content dist/latest.yml } else { Write-Host "::error::dist/latest.yml tidak dibuat"; exit 1 }
+          $yml = @('dist/latest.yml', 'dist/beta.yml') | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($yml) { Write-Host "$($yml):"; Get-Content $yml } else { Write-Host "::error::dist/latest.yml / beta.yml tidak dibuat"; exit 1 }
           if (Test-Path dist/win-unpacked/resources/airplay/klm-airplay.exe) { Get-ChildItem dist/win-unpacked/resources/airplay | ForEach-Object { Write-Host ("airplay: {0} {1:N0} KB" -f $_.Name, ($_.Length / 1KB)) } } else { Write-Host "::error::klm-airplay.exe tidak ada di paket"; exit 1 }
 
       - name: Upload artifact
@@ -280,7 +292,7 @@ jobs:
           name: KLM-Windows
           path: |
             dist/*.exe
-            dist/latest.yml
+            dist/*.yml
           if-no-files-found: error
 
       - name: Catatan rilis (dari README "Baru di vX")
@@ -297,7 +309,9 @@ jobs:
           tag_name: v${{ env.VERSION }}
           name: KLM v${{ env.VERSION }}
           body_path: dist/release-notes.md
+          prerelease: ${{ env.PRERELEASE == '1' }}
           files: |
             dist/*.exe
             dist/latest.yml
+            dist/beta.yml
             dist/*.blockmap

@@ -9,14 +9,27 @@
  * Area yang berubah (dirty rect) per lapisan tidak saling menggabung → yang disalin hanya potongan kecil,
  * tidak lagi satu layar penuh setiap frame. Potongan diambil langsung (crop) sebelum disalin.
  * Kontrol aliran per lapisan: frame berikutnya dikirim setelah mixer membalas "ack" (tidak menumpuk).
+ *
+ * ZERO-COPY (Windows, Electron ≥ 40): lapisan dirender langsung ke tekstur GPU bersama (D3D11, offscreen.useSharedTexture).
+ * Tekstur itu diimpor (sharedTexture.importSharedTexture) dan dikirim ke mixer (sendSharedTexture) TANPA disalin ke CPU;
+ * mixer menerimanya sebagai VideoFrame dan menggambarnya langsung ke Program. Bila tekstur GPU tidak tersedia / gagal,
+ * semua lapisan otomatis kembali ke jalur salinan CPU di bawah (grafis tidak pernah hilang).
  */
 'use strict';
 const path = require('path');
-const { BrowserWindow, ipcMain } = require('electron');
+const electron = require('electron');
+const { BrowserWindow, ipcMain } = electron;
+const sharedTexture = electron.sharedTexture; // Electron ≥ 40 (eksperimental)
 
 module.exports = function setupUtcOsr(o) {
   const layers = new Map(); // id → layer
   let target = null; // webContents mixer
+  const zc = {
+    on: !!(sharedTexture && sharedTexture.importSharedTexture && sharedTexture.sendSharedTexture) && process.platform === 'win32' && !process.env.KLM_NO_ZC,
+    ready: false, why: '', sent: 0, fails: 0, frames: 0,
+  };
+  if (!zc.on) zc.why = !sharedTexture ? 'Electron tanpa sharedTexture' : process.platform !== 'win32' ? 'hanya Windows' : 'dimatikan (KLM_NO_ZC)';
+  const graveyard = []; // jendela offscreen lama: tidak di-destroy (lihat catatan di create)
 
   // Tiap lapisan dimuat dari nama host SENDIRI (klm-lt.localhost, klm-tt.localhost, …; *.localhost selalu = komputer ini).
   // Chromium hanya membuka 6 sambungan HTTP sekaligus per host; tiap lapisan memegang 1 sambungan event (SSE). Dulu semua
@@ -45,15 +58,18 @@ module.exports = function setupUtcOsr(o) {
   // Catatan: jendela offscreen TIDAK pernah di-destroy (di Windows destroy OSR bisa membekukan proses utama).
   // Jendela dipakai ulang; "stop" cukup menghentikan painting & mengosongkan halaman.
   function create(L) {
+    const gpu = zc.on;
     const win = new BrowserWindow({
       show: false, width: 1920, height: 1080, useContentSize: true, frame: false, transparent: true, backgroundColor: '#00000000',
       skipTaskbar: true, focusable: false,
-      webPreferences: { offscreen: true, backgroundThrottling: false, contextIsolation: true, nodeIntegration: false, spellcheck: false, preload: path.join(__dirname, 'osr-preload.js') }
+      webPreferences: { offscreen: gpu ? { useSharedTexture: true, deviceScaleFactor: 1 } : true, backgroundThrottling: false, contextIsolation: true, nodeIntegration: false, spellcheck: false, preload: path.join(__dirname, 'osr-preload.js') }
     });
     const wc = win.webContents;
-    L.win = win; L.wc = wc;
+    L.win = win; L.wc = wc; L.gpu = gpu; L.zFly = false; L.zPend = null;
     wc.setAudioMuted(true); // suara video opening/closing diputar oleh mixer audio KLM (ikut rekam/stream)
     wc.on('paint', (e, dirty, image) => {
+      if (L.gpu) { if (L.wc === wc) paintGpu(L, e, dirty); else if (e && e.texture) { try { e.texture.release(); } catch (er) {} } return; }
+      if (L.wc !== wc) return;
       const t = L.t; if (!t || L.paused) return;
       const sz = image.getSize();
       if (!sz.width || !sz.height) return;
@@ -70,15 +86,62 @@ module.exports = function setupUtcOsr(o) {
       L.pend = union(L.pend, r);
       pump(L);
     });
-    wc.on('render-process-gone', () => { setTimeout(() => { if (L.t && !wc.isDestroyed()) { L.sentFull = false; tell(L, { k: 'reset' }); wc.loadURL(L.t.url).catch(() => {}); } }, 1000); });
+    wc.on('render-process-gone', () => { setTimeout(() => { if (L.t && L.wc === wc && !wc.isDestroyed()) { L.sentFull = false; tell(L, { k: 'reset' }); wc.loadURL(L.t.url).catch(() => {}); } }, 1000); });
     wc.on('did-fail-load', (e, code, desc, url) => {
-      if (url === 'about:blank' || code === -3) return;
+      if (url === 'about:blank' || code === -3 || L.wc !== wc) return;
       // nama klm-*.localhost tidak bisa dibuka di PC ini → semua lapisan kembali ke 127.0.0.1
       if (altHosts && /^http:\/\/klm-[a-z]+\.localhost:/.test(url)) { altHosts = false; console.warn('[UTC] host klm-*.localhost gagal (' + desc + '), kembali ke 127.0.0.1'); }
       setTimeout(() => { if (L.t && !wc.isDestroyed()) { const u2 = urlFor(L.id, L.t); if (u2) L.t.url = u2; wc.loadURL(L.t.url).catch(() => {}); } }, altHosts ? 1500 : 300);
     });
-    wc.on('did-start-navigation', (e, url, inPage, isMain) => { const mf = e && e.isMainFrame != null ? e.isMainFrame : isMain, same = e && e.isSameDocument != null ? e.isSameDocument : inPage; if (mf && !same) tell(L, { k: 'reset' }); });
+    wc.on('did-start-navigation', (e, url, inPage, isMain) => { const mf = e && e.isMainFrame != null ? e.isMainFrame : isMain, same = e && e.isSameDocument != null ? e.isSameDocument : inPage; if (mf && !same && L.wc === wc) tell(L, { k: 'reset' }); });
   }
+  // ---------- zero-copy: tekstur GPU → mixer ----------
+  function relTex(x) { if (x && x.tex) { try { x.tex.release(); } catch (e) {} } }
+  function paintGpu(L, e, dirty) {
+    const tex = e && e.texture;
+    if (!tex) { if (L.t && !L.paused) fallback('Electron tidak memberi tekstur GPU (akselerasi GPU mati?)'); return; }
+    if (!L.t || L.paused || !zc.ready || !target || target.isDestroyed()) { relTex({ tex }); return; }
+    const ti = tex.textureInfo || {}, cs = ti.codedSize || {};
+    const meta = { W: cs.width | 0, H: cs.height | 0, seq: ++L.seq };
+    if (!meta.W || !meta.H) { relTex({ tex }); return; }
+    // kontrol aliran: satu kiriman per lapisan; yang menunggu hanya frame TERBARU (frame lama langsung dikembalikan ke kolam)
+    if (L.zFly) { relTex(L.zPend); L.zPend = { tex, meta }; return; }
+    sendGpu(L, tex, meta);
+  }
+  function sendGpu(L, tex, meta) {
+    let imp;
+    try {
+      imp = sharedTexture.importSharedTexture({ textureInfo: tex.textureInfo, allReferencesReleased: () => relTex({ tex }) });
+    } catch (err) { relTex({ tex }); failGpu('impor tekstur: ' + (err && err.message)); return; }
+    L.zFly = true;
+    const done = () => {
+      try { imp.release(); } catch (e) {}
+      L.zFly = false;
+      const p = L.zPend; L.zPend = null;
+      if (p) { if (L.gpu && L.t && !L.paused && zc.ready && target && !target.isDestroyed()) sendGpu(L, p.tex, p.meta); else relTex(p); }
+    };
+    let fr = null; try { fr = target.mainFrame; } catch (e) {}
+    if (!fr) { done(); return; }
+    sharedTexture.sendSharedTexture({ frame: fr, importedSharedTexture: imp }, L.id, meta)
+      .then(() => { zc.sent++; zc.fails = 0; })
+      .catch((err) => failGpu('kirim tekstur: ' + (err && err.message)))
+      .finally(done);
+  }
+  function failGpu(why) { zc.fails++; if (zc.fails >= 5) fallback(why); }
+  /** jalur GPU tidak bisa dipakai di PC ini → semua lapisan dibuat ulang dengan jalur salinan CPU */
+  function fallback(why) { if (!zc.on) return; zc.on = false; zc.why = why; console.warn('[UTC] zero-copy dimatikan: ' + why); rebuild(); }
+  function rebuild() {
+    if (target && !target.isDestroyed()) target.send('utc:zc', { on: zc.on, why: zc.why });
+    for (const L of layers.values()) {
+      if (!L.win || L.gpu === zc.on) continue;
+      const t = L.t;
+      relTex(L.zPend); L.zPend = null; L.zFly = false;
+      try { L.wc.stopPainting(); L.wc.loadURL('about:blank').catch(() => {}); } catch (e) {}
+      graveyard.push(L.win); L.win = null; L.wc = null;
+      if (t) start(L.id, { w: t.w, h: t.h, fps: t.fps });
+    }
+  }
+
   function layer(id) {
     let L = layers.get(id);
     if (!L) { L = { id, win: null, wc: null, t: null, last: null, pend: null, inflight: false, inflightAt: 0, sentFull: false, seq: 0, fixed: false, paused: false }; layers.set(id, L); }
@@ -101,7 +164,7 @@ module.exports = function setupUtcOsr(o) {
   function stop(id) {
     const list = id ? [layers.get(id)].filter(Boolean) : [...layers.values()];
     for (const L of list) {
-      L.t = null; L.last = null; L.pend = null; L.inflight = false; L.sentFull = false;
+      L.t = null; L.last = null; L.pend = null; L.inflight = false; L.sentFull = false; relTex(L.zPend); L.zPend = null;
       if (L.wc && !L.wc.isDestroyed()) { try { L.wc.stopPainting(); L.wc.loadURL('about:blank').catch(() => {}); } catch (e) {} }
     }
   }
@@ -144,6 +207,14 @@ module.exports = function setupUtcOsr(o) {
     if (!e.sender.__klmOsrHook) { e.sender.__klmOsrHook = true; e.sender.once('destroyed', () => { if (target === e.sender) { stop(); target = null; } }); }
   });
   ipcMain.on('utc:stop', (e, a) => stop(L_of(a)));
+  // mixer sudah memasang penerima tekstur GPU (zero-copy) / pengguna menyalakan-mematikan zero-copy
+  ipcMain.on('utc:zc-ready', (e) => { target = e.sender; zc.ready = true; e.sender.send('utc:zc', { on: zc.on, why: zc.why }); });
+  ipcMain.on('utc:zc-set', (e, a) => {
+    const want = !!(a && a.on);
+    if (!want && zc.on) { zc.on = false; zc.why = 'dimatikan di Pengaturan'; rebuild(); }
+    else if (want && !zc.on && sharedTexture && sharedTexture.importSharedTexture && process.platform === 'win32') { zc.on = true; zc.why = ''; zc.fails = 0; rebuild(); }
+    else e.sender.send('utc:zc', { on: zc.on, why: zc.why });
+  });
   ipcMain.on('utc:reload', (e, a) => { for (const L of layers.values()) if ((!L_of(a) || L.id === L_of(a)) && L.t && L.wc && !L.wc.isDestroyed()) { L.sentFull = false; tell(L, { k: 'reset' }); L.wc.reloadIgnoringCache(); } });
   ipcMain.on('utc:full', (e, a) => { for (const L of layers.values()) if ((!L_of(a) || L.id === L_of(a)) && L.wc && !L.wc.isDestroyed()) { L.sentFull = false; L.wc.invalidate(); } });
   ipcMain.on('utc:ack', (e, a) => { const L = layers.get(L_of(a) || 'main'); if (L) { L.inflight = false; pump(L); } });
@@ -154,5 +225,5 @@ module.exports = function setupUtcOsr(o) {
   ipcMain.on('osr:msg', (e, msg) => {
     for (const L of layers.values()) if (L.wc && !L.wc.isDestroyed() && L.wc.id === e.sender.id) { if (L.t && msg && typeof msg === 'object') tell(L, msg); return; }
   });
-  return { stop: () => stop(), active: () => [...layers.values()].some((L) => !!L.t), hosts: () => [...layers.values()].filter((L) => L.t).map((L) => L.id + '@' + (String(L.t.url).match(/\/\/([^/:]+)/) || [])[1]) };
+  return { stop: () => stop(), zc: () => Object.assign({}, zc, { layers: [...layers.values()].filter((L) => L.t).map((L) => L.id + (L.gpu ? ':gpu' : ':cpu')) }), active: () => [...layers.values()].some((L) => !!L.t), hosts: () => [...layers.values()].filter((L) => L.t).map((L) => L.id + '@' + (String(L.t.url).match(/\/\/([^/:]+)/) || [])[1]) };
 };
