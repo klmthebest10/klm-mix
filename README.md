@@ -140,6 +140,11 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.5
+Versi uji (beta).
+- **Mesin video native Fase 2: grafis UTC ON AIR di monitor Program.** Lower third, title, lokasi, sosmed, logo, opening/closing dan Scoreboard kini ikut digambar mesin native (Direct3D 11) di atas Program. Tekstur GPU lapisan grafis yang sama dikirim ke mesin native lewat handle bersama Windows, tanpa salinan CPU. Running text digulir langsung oleh mesin native, sama seperti di mesin utama. Bila zero-copy UTC mati (jalur CPU), monitor Program otomatis memakai tampilan biasa.
+- Nyalakan di Pengaturan → Performa → Mesin video native (masih eksperimen, mati secara bawaan). Sumber kamera, KLMCAM, video, overlay dan efek masih memakai tampilan biasa.
+
 ### Baru di v1.18.0-beta.4
 Versi uji (beta).
 - **Mesin video native (Direct3D 11) — Fase 1, eksperimen, mati secara bawaan.** Nyalakan di Pengaturan → Performa → Mesin video native. Monitor Preview & Program digambar langsung oleh GPU (program terpisah `klm-engine.exe`, swapchain DirectX) di atas kanvas monitor, dan kanvas monitor biasa berhenti dicat selama itu. Fase 1 baru mendukung sumber Warna/Gradien, Color Bars dan Tangkap Layar (DXGI Desktop Duplication, tanpa salinan CPU), transisi Cut/Fade dan T-bar. Monitor yang menampilkan sumber lain (kamera, KLMCAM, video, grafis UTC ON AIR, overlay, efek), atau yang sedang tertutup menu/dialog, otomatis memakai tampilan biasa tanpa kedip. Rekam, streaming dan output tetap dari mesin utama.
