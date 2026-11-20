@@ -2856,7 +2856,7 @@ static int selftest(bool warp) {
       command("pgm a"); run(1);
       // ---- Fase 10: kartu daftar input native — jendela anak per kartu, terpotong bila kartu tergulir sebagian
       command("card t1 b 20 30 256 144 20 60 256 114 - 0.6 0.4 1"); for (int r = 0; r < 4; r++) run(1);
-      { auto it = g_cards.find("t1"); RECT wr{}; bool vis = false; if (it != g_cards.end() && it->second->b.hwnd) { vis = IsWindowVisible(it->second->b.hwnd) != 0; GetWindowRect(it->second->b.hwnd, &wr); MapWindowPoints(HWND_DESKTOP, g_parent, (POINT*)&wr, 2); }
+      { auto it = g_cards.find("t1"); RECT wr{}; bool vis = false; if (it != g_cards.end() && it->second->b.hwnd) { vis = (GetWindowLongW(it->second->b.hwnd, GWL_STYLE) & WS_VISIBLE) != 0; // induk uji bisa tersembunyi GetWindowRect(it->second->b.hwnd, &wr); MapWindowPoints(HWND_DESKTOP, g_parent, (POINT*)&wr, 2); }
         const bool pass = it != g_cards.end() && it->second->b.shown && vis && wr.left == 20 && wr.top == 60 && wr.right - wr.left == 256 && wr.bottom - wr.top == 114;
         emit("  %s kartu input native: jendela %ld,%ld %ldx%ld (harap 20,60 256x114 — bagian atas tergulir)", pass ? "OK " : "GAGAL", wr.left, wr.top, wr.right - wr.left, wr.bottom - wr.top); if (!pass) ok = 0; }
       command("card t1 - 0 0 0 0 0 0 0 0 - -1 -1 1"); run(2);
