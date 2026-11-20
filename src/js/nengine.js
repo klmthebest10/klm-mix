@@ -11,7 +11,9 @@
  * Fase 3: kamera USB / capture card dibuka mesin native lewat Media Foundation (dekode & konversi warna di GPU). Frame
  * kamera tampil langsung di monitor native dan dikirim ke mesin JS sebagai tekstur GPU bersama (VideoFrame) untuk
  * Program/rekam/streaming — perangkat hanya dibuka sekali, tanpa salinan CPU.
- * Bila monitor menampilkan hal lain (KLMCAM, video, overlay, efek, transisi selain fade/cut,
+ * Fase 4a: KLMCAM — frame H.264 terenkode dari WebRTC disalin (RTCRtpScriptTransform, tanpa dekode ulang di JS) ke
+ * mesin native → didekode GPU (DXVA) → tampil di monitor native. Jalur JS tetap berjalan seperti biasa (rekam dll).
+ * Bila monitor menampilkan hal lain (video, overlay, efek, transisi selain fade/cut,
  * mode grid) atau ada menu/dialog di atas monitor, monitor itu otomatis kembali ke tampilan JS — tanpa kedip.
  */
 'use strict';
@@ -20,6 +22,7 @@
   const el = () => !!(window.klm && window.klm.isElectron && window.klm.send);
   if (KM.settings.nativeEngine == null) KM.settings.nativeEngine = false;
   if (KM.settings.nativeCam == null) KM.settings.nativeCam = true; // berlaku hanya bila mesin native menyala
+  if (KM.settings.nativeKlmcam == null) KM.settings.nativeKlmcam = true;
 
   let running = false, ready = false, frameN = 0;
   const srcSent = new Map();   // id native → spesifikasi terakhir
@@ -55,6 +58,7 @@
     }
     if (inp.type === 'bars') return 'bars';
     if (inp.type === 'camera') { const c = inp.rt.ncam && cams.get(inp.rt.ncam); return c && c.frames > 0 ? 'cam' : null; }
+    if (inp.type === 'klmcam') { const k = kcams.get(kidOf(inp)); return k && k.ok && !k.err && Date.now() - k.last < 3000 ? 'cam' : null; }
     if (inp.type === 'screen') {
       if (!o.sourceId || !/^screen:/.test(o.sourceId) || !inp.rt || !inp.rt.ready) return null;
       if (!scr.has(o.sourceId)) { resolveScreen(o.sourceId); return null; }
@@ -121,7 +125,7 @@
     // sumber yang dipakai Preview / Program / transisi
     const need = new Map();
     // kamera native: id mesin = id kamera (sudah dibuka lewat camOpen, tidak dikirim sebagai "src")
-    const eid = (i) => (i.type === 'camera' && i.rt.ncam ? i.rt.ncam : nid(i));
+    const eid = (i) => (i.type === 'camera' && i.rt.ncam ? i.rt.ncam : i.type === 'klmcam' ? kidOf(i) : nid(i));
     const add = (id) => { const i = id && KM.getInput(id); const s = i && spec(i); if (s) need.set(eid(i), s); };
     add(S.previewId); add(S.programId); if (S.trans) { add(S.trans.fromId); add(S.trans.toId); }
     for (const [k, s] of need) if (s !== 'cam' && srcSent.get(k) !== s) { srcSent.set(k, s); cmd('src ' + k + ' ' + s); }
@@ -174,15 +178,18 @@
 
   function onEv(s) {
     const sp = s.indexOf(' '), t = sp < 0 ? s : s.slice(0, sp), rest = sp < 0 ? '' : s.slice(sp + 1);
-    if (t === 'ready') { ready = true; N.state = 'ready'; N.adapter = rest; resetSent(); KM.changed('nengine'); camReopen(); }
+    if (t === 'ready') { ready = true; N.state = 'ready'; N.adapter = rest; resetSent(); KM.changed('nengine'); camReopen(); for (const k of kcams.values()) k.ok = false; kSync(); }
     else if (t === 'shown' && bus[rest]) { bus[rest].shown = true; N[rest] = bus[rest].want; }
     else if (t === 'hidden' && bus[rest]) { bus[rest].shown = false; N[rest] = false; }
     else if (t === 'srcerr') { const id = rest.split(' ')[0]; srcErr.add(id); srcSent.delete(id); KM.log && KM.log('mesin native: ' + rest); }
-    else if (t === 'stats') { const m = /fps=(\d+) ms=([\d.]+) mem=(\d+)/.exec(rest); if (m) { N.fps = +m[1]; N.ms = +m[2]; N.mem = +m[3]; } const u = /utex=(\d+)/.exec(rest); if (u) N.utex = +u[1]; const cm = /cams=(\S+)/.exec(rest); N.camStat = cm ? cm[1] : '-'; }
+    else if (t === 'stats') { const m = /fps=(\d+) ms=([\d.]+) mem=(\d+)/.exec(rest); if (m) { N.fps = +m[1]; N.ms = +m[2]; N.mem = +m[3]; } const u = /utex=(\d+)/.exec(rest); if (u) N.utex = +u[1]; const cm = /cams=(\S+)/.exec(rest); N.camStat = cm ? cm[1] : '-';
+      // dekoder KLMCAM masih menghasilkan frame? (jumlah frame per id dari statistik mesin)
+      if (cm) for (const part of cm[1].split(',')) { const [id, f] = part.split(':'); const k = kcams.get(id); if (k) { if (+f !== k.n) k.last = Date.now(); k.n = +f; } } }
     else if (t === 'probe') { const f = probeWait.shift(); if (f) f(rest.split(' ').map(Number)); }
     else if (t === 'click') clickFwd(rest.split(' '));
     else if (t === 'uready') uready.add(rest);
     else if (t === 'camok' || t === 'camerr') camEv(t, rest);
+    else if (t === 'kok' || t === 'kerr' || t === 'kneedkey') kEv(t, rest);
     else if (t === 'uerr') { utcErr = rest.replace(/^\S+ /, '').slice(0, 80); KM.log && KM.log('mesin native UTC: ' + rest); }
     else if (t === 'exit' || t === 'restart') { ready = false; N.pvw = N.pgm = false; N.state = t === 'exit' ? 'berhenti' : 'memulai ulang'; resetSent(); camLost(); KM.changed('nengine'); }
   }
@@ -196,6 +203,60 @@
     if (btn === 2) { cv.dispatchEvent(new MouseEvent('contextmenu', o)); return; }
     cv.dispatchEvent(new MouseEvent('mousedown', o)); cv.dispatchEvent(new MouseEvent('mouseup', o)); cv.dispatchEvent(new MouseEvent('click', o));
     if (dbl) cv.dispatchEvent(new MouseEvent('dblclick', o));
+  }
+
+  // ---------- KLMCAM native (Fase 4a): frame H.264 terenkode → dekoder GPU mesin native ----------
+  const kcams = new Map(); // id dekoder → { ok, err, w, h, dxva, last, codec, n }
+  N.kcams = kcams;
+  const kidOf = (inp) => 'k' + String(inp.id).replace(/[^\w]/g, '').slice(0, 30);
+  N.kWant = () => el() && running && ready && KM.settings.nativeEngine === true && KM.settings.nativeKlmcam !== false && !!window.RTCRtpScriptTransform;
+  let kWorker = null;
+  const KW = `const fwd = new Set(), tf = new Map();
+onmessage = (e) => { const m = e.data || {}; if (m.fwd) fwd.add(m.fwd); if (m.unfwd) fwd.delete(m.unfwd);
+  if (m.kf) { const t = tf.get(m.kf); if (t && t.sendKeyFrameRequest) t.sendKeyFrameRequest().catch(() => {}); } };
+onrtctransform = (ev) => {
+  const t = ev.transformer, id = t.options && t.options.id; if (id) tf.set(id, t);
+  const r = t.readable.getReader(), w = t.writable.getWriter(); let n = 0;
+  (async () => { for (;;) {
+    const x = await r.read(); if (x.done) break; const f = x.value;
+    if (id && fwd.has(id) && tf.get(id) === t) { try { const md = f.getMetadata ? f.getMetadata() : {}; const buf = f.data.slice(0); postMessage({ id, key: f.type === 'key', n: n++, mime: md.mimeType || '', buf }, [buf]); } catch (e) {} }
+    try { await w.write(f); } catch (e) {}
+  } })();
+};`;
+  function kw() {
+    if (kWorker) return kWorker;
+    kWorker = new Worker(URL.createObjectURL(new Blob([KW], { type: 'text/javascript' })));
+    kWorker.onmessage = (e) => {
+      const m = e.data, k = kcams.get(m.id); if (!k) return;
+      if (m.mime && !/h264/i.test(m.mime)) { if (k.codec !== m.mime) { k.codec = m.mime; k.err = 'codec ' + m.mime.replace(/^video\//, '') + ' (butuh H.264)'; kWorker.postMessage({ unfwd: m.id }); } return; }
+      if (!N.kWant()) return;
+      window.klm.send('nengine:kenc', m.id, m.key, m.n, m.buf);
+    };
+    return kWorker;
+  }
+  // dipanggil link.js untuk tiap penerima video KLMCAM (juga saat menyambung ulang)
+  N.kAttach = function (inp, receiver) {
+    if (!el() || !window.RTCRtpScriptTransform || !receiver || KM.settings.nativeEngine !== true || KM.settings.nativeKlmcam === false) return;
+    const id = kidOf(inp);
+    try { receiver.transform = new RTCRtpScriptTransform(kw(), { id }); receiver.__klmK = id; } catch (e) { console.warn('KLMCAM transform', e); return; }
+    let k = kcams.get(id); if (!k) { k = { ok: false, err: '', last: 0, n: 0 }; kcams.set(id, k); }
+    k.err = ''; k.codec = '';
+    if (N.kWant()) { kw().postMessage({ fwd: id }); setTimeout(() => kw().postMessage({ kf: id }), 300); }
+  };
+  function kSync() { // nyalakan / matikan penerusan sesuai keadaan mesin
+    if (!kWorker) return;
+    for (const [id, k] of kcams) {
+      const inp = KM.state.inputs.find((i) => i.type === 'klmcam' && kidOf(i) === id);
+      if (!inp) { kWorker.postMessage({ unfwd: id }); cmd('kdecoff ' + id); kcams.delete(id); continue; }
+      if (N.kWant() && !k.codec) { kWorker.postMessage({ fwd: id }); kWorker.postMessage({ kf: id }); } else kWorker.postMessage({ unfwd: id });
+    }
+  }
+  N.kSync = kSync;
+  function kEv(t, rest) {
+    const a = rest.split(' '), k = kcams.get(a[0]); if (!k) return;
+    if (t === 'kok') { k.ok = true; k.w = +a[1]; k.h = +a[2]; k.dxva = a[3] === '1'; k.last = Date.now(); }
+    else if (t === 'kerr') { k.err = rest.slice(a[0].length + 1); }
+    else if (t === 'kneedkey' && kWorker) kWorker.postMessage({ kf: a[0] });
   }
 
   // ---------- kamera native (Fase 3) ----------
@@ -259,12 +320,22 @@
   function camReopen() { if (!N.camUsable()) return; for (const inp of KM.state.inputs) if (inp.type === 'camera' && !inp.rt.ncam && inp.rt.reopen && !(inp.rt.nfail >= 3)) inp.rt.reopen(); }
   N.camReopenAll = () => { for (const inp of KM.state.inputs) if (inp.type === 'camera' && inp.rt.reopen) { inp.rt.nfail = 0; inp.rt.reopen(); } };
 
+  // mesin dinyalakan saat KLMCAM sudah tersambung → pasang penerus di penerima yang sudah ada (tanpa menyambung ulang HP)
+  function kAttachAll() {
+    if (!KM.link || !KM.link.peers) return;
+    for (const p of KM.link.peers.values()) {
+      const inp = p.inputId && KM.getInput(p.inputId);
+      if (!inp || inp.type !== 'klmcam' || !p.pc) continue;
+      for (const r of p.pc.getReceivers()) if (r.track && r.track.kind === 'video' && r.__klmK !== kidOf(inp)) N.kAttach(inp, r);
+    }
+  }
+
   N.start = async function () {
     if (!el() || running) return;
     running = true; ready = false; N.state = 'memulai';
     const r = await window.klm.invoke('nengine:start').catch((e) => ({ state: 'error', msg: e.message }));
     if (r && r.state === 'error') { running = false; N.state = 'gagal: ' + (r.msg || '?'); KM.toast('Mesin video native tidak bisa dimulai: ' + (r.msg || '?'), 'warn', 7000); }
-    else if (r && r.state === 'ready') { ready = true; N.state = 'ready'; N.adapter = r.adapter || ''; resetSent(); camReopen(); }
+    else if (r && r.state === 'ready') { ready = true; N.state = 'ready'; N.adapter = r.adapter || ''; resetSent(); camReopen(); kAttachAll(); kSync(); }
     KM.changed('nengine');
   };
   N.stop = function () {
@@ -274,6 +345,7 @@
     for (const k in bus) cmd('rect ' + k + ' 0 0 0 0 0');
     running = false; ready = false; N.state = 'off';
     camLost(); // kamera kembali dibuka jalur biasa
+    for (const k of kcams.values()) k.ok = false; kSync();
     window.klm.invoke('nengine:stop').catch(() => {});
     KM.changed('nengine');
   };

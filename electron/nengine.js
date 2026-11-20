@@ -16,7 +16,7 @@ function findExe() {
   return c.find((p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }) || '';
 }
 // hanya perintah yang dikenal mesin, tanpa baris baru / karakter kendali (perintah utex/utk/ublob hanya dari proses utama)
-const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist)( [\w.,\- ]{0,600})?$/;
+const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff)( [\w.,\- ]{0,600})?$/;
 
 // DuplicateHandle (kernel32) lewat koffi: handle NT tekstur lapisan UTC → disalin ke proses klm-engine
 let K = null;
@@ -186,6 +186,15 @@ function setup({ win, log = () => {} }) {
   ipcMain.handle('nengine:stop', () => { stop(); return true; });
   ipcMain.handle('nengine:status', () => Object.assign({ available: !!findExe(), utc: utcOn, utcErr, koffi: !!k32() }, st));
   ipcMain.on('nengine:utc', (e, on) => setUtc(on));
+  // Fase 4a: frame H.264 KLMCAM (dari WebRTC di mixer) → dekoder GPU mesin native
+  ipcMain.on('nengine:kenc', (e, id, key, n, data) => {
+    if (!P || st.state !== 'ready' || !P.stdin.writable || !/^\w{1,40}$/.test(String(id))) return;
+    const b = Buffer.isBuffer(data) ? data : data instanceof ArrayBuffer ? Buffer.from(data) : ArrayBuffer.isView(data) ? Buffer.from(data.buffer, data.byteOffset, data.byteLength) : null;
+    if (!b || !b.length || b.length > 8 * 1024 * 1024) return;
+    if (P.stdin.writableLength > 32 * 1024 * 1024) return; // mesin tertinggal → jangan menumpuk memori (dekoder minta frame kunci sendiri)
+    P.stdin.write('kenc ' + id + ' ' + (key ? 1 : 0) + ' ' + Math.round((+n || 0) * 333333) + ' ' + b.length + '\n');
+    P.stdin.write(b);
+  });
   ipcMain.on('nengine:cmd', (e, lines) => {
     for (const l of [].concat(lines || [])) if (typeof l === 'string' && OK.test(l)) write(l);
   });

@@ -42,7 +42,7 @@
 // Foundation) lalu dikonversi warna dengan D3D11 Video Processor → bisa tampil di monitor native & Program native:
 //   kenc <id> <key 0|1> <ts> <n>          + n byte H.264 Annex-B (satu frame) langsung sesudah baris ini (khusus KLM)
 //   kdecoff <id>                          hentikan dekoder
-//   Keluaran: kok <id> <w> <h> <dxva 0|1> (frame pertama) | kerr <id> <pesan>
+//   Keluaran: kok <id> <w> <h> <dxva 0|1> (frame pertama) | kerr <id> <pesan> | kneedkey <id> (minta frame kunci)
 //
 // Keluaran stdout (satu baris per kejadian): ready <adapter> | shown <bus> | hidden <bus> | click <bus> <x> <y> <btn> <dbl>
 //   | srcerr <id> <pesan> | srcok <id> <w> <h> | stats fps=.. ms=.. mem=.. utex=.. | err <pesan>
@@ -790,7 +790,7 @@ struct KDec {
   UINT vpInW = 0, vpInH = 0; ID3D11Texture2D* ovTex = nullptr;
   std::map<std::pair<ID3D11Texture2D*, UINT>, ComPtr<ID3D11VideoProcessorInputView>> iv;
   ComPtr<ID3D11Texture2D> nv12; // jalur CPU
-  int errs = 0;
+  int errs = 0; bool waitKey = false;
 };
 static std::map<std::string, std::shared_ptr<KDec>> g_kdec;
 static bool kSetOutput(KDec& k) {
@@ -817,6 +817,7 @@ static bool kInit(KDec& k) {
   ComPtr<IMFAttributes> a;
   if (SUCCEEDED(k.mft->GetAttributes(&a)) && a) { a->SetUINT32(CODECAPI_AVLowLatencyMode, TRUE); a->SetUINT32(MF_LOW_LATENCY, TRUE); }
   g_dev.As(&k.vdev); g_ctx.As(&k.vctx);
+  if (!k.vdev || !k.vctx) { k.vdev.Reset(); k.vctx.Reset(); emit("kerr %s GPU tanpa D3D11 Video Processor — konversi warna di CPU", k.id.c_str()); }
   if (g_mfMgr && k.vdev) k.d3d = SUCCEEDED(k.mft->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)g_mfMgr.Get()));
   ComPtr<IMFMediaType> in; MFCreateMediaType(&in);
   in->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video); in->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
@@ -872,7 +873,26 @@ static void kDeliver(KDec& k, IMFSample* smp) {
   if (SUCCEEDED(mb.As(&db))) {
     ComPtr<ID3D11Texture2D> t; UINT sub = 0;
     if (SUCCEEDED(db->GetResource(IID_PPV_ARGS(&t))) && SUCCEEDED(db->GetSubresourceIndex(&sub))) ok = kBlit(k, t.Get(), sub);
-  } else if (k.vdev) { // dekoder perangkat lunak: NV12 di memori → tekstur NV12 → Video Processor
+  } else if (!k.vdev) { // GPU tanpa Video Processor (mis. WARP): konversi NV12 → BGRA di CPU (jalur darurat)
+    BYTE* p = nullptr; LONG pitch = 0; DWORD mx = 0, cur = 0; ComPtr<IMF2DBuffer> b2; bool l2 = false;
+    if (SUCCEEDED(mb.As(&b2)) && SUCCEEDED(b2->Lock2D(&p, &pitch))) l2 = true;
+    else if (SUCCEEDED(mb->Lock(&p, &mx, &cur))) pitch = k.stride ? k.stride : (LONG)k.cw;
+    else return;
+    if (pitch > 0 && (l2 || cur >= (DWORD)(pitch * k.ch * 3 / 2))) {
+      const UINT W = k.dw & ~1u, H = k.dh & ~1u; std::vector<uint32_t> px((size_t)W * H);
+      const BYTE* yp = p; const BYTE* uvp = p + (size_t)pitch * k.ch;
+      const double kr = k.hd ? 0.2126 : 0.299, kb = k.hd ? 0.0722 : 0.114, kg = 1 - kr - kb;
+      for (UINT y = 0; y < H; y++) for (UINT x = 0; x < W; x++) {
+        double Y = (yp[(size_t)y * pitch + x] - 16) * (255.0 / 219), U = (uvp[(size_t)(y / 2) * pitch + (x & ~1u)] - 128) * (255.0 / 224), V = (uvp[(size_t)(y / 2) * pitch + (x & ~1u) + 1] - 128) * (255.0 / 224);
+        double R = Y + 2 * (1 - kr) * V, B = Y + 2 * (1 - kb) * U, G = (Y - kr * R - kb * B) / kg;
+        auto c8 = [](double v) { return (uint32_t)(v < 0 ? 0 : v > 255 ? 255 : std::lround(v)); };
+        px[(size_t)y * W + x] = 0xFF000000u | (c8(R) << 16) | (c8(G) << 8) | c8(B);
+      }
+      Cam& c = *k.cam; std::lock_guard<std::mutex> l(c.mx);
+      if (camTex(c, W, H, DXGI_FORMAT_B8G8R8A8_UNORM, false)) { g_ctx->UpdateSubresource(c.tex.Get(), 0, nullptr, px.data(), W * 4, 0); c.got = true; ok = true; }
+    }
+    if (l2) b2->Unlock2D(); else mb->Unlock();
+  } else { // dekoder perangkat lunak: NV12 di memori → tekstur NV12 → Video Processor
     BYTE* p = nullptr; LONG pitch = 0; DWORD mx = 0, cur = 0; ComPtr<IMF2DBuffer> b2; bool l2 = false;
     if (SUCCEEDED(mb.As(&b2)) && SUCCEEDED(b2->Lock2D(&p, &pitch))) l2 = true;
     else if (SUCCEEDED(mb->Lock(&p, &mx, &cur))) pitch = k.stride ? k.stride : (LONG)k.cw;
@@ -940,10 +960,15 @@ static void kOff(const std::string& id) {
   { std::lock_guard<std::mutex> l(it->second->qmx); it->second->stop = true; } it->second->cv.notify_all();
   g_kdec.erase(it); g_cams.erase(id);
 }
+static std::map<std::string, double> g_kneed;
+static void kNeedKey(const std::string& id) { // minta HP mengirim frame kunci (lewat KLM → WebRTC), maksimal 1×/detik
+  double t = nowMs(); double& last = g_kneed[id];
+  if (t - last > 1000) { last = t; emit("kneedkey %s", id.c_str()); }
+}
 static void kFeed(const std::string& id, bool key, LONGLONG ts, std::vector<uint8_t>&& data) {
   auto it = g_kdec.find(id);
   if (it == g_kdec.end()) {
-    if (!key) return; // mulai dari frame kunci
+    if (!key) { kNeedKey(id); return; } // mulai dari frame kunci
     auto k = std::make_shared<KDec>(); k->id = id;
     k->cam = std::make_shared<Cam>(); k->cam->id = id;
     g_cams[id] = k->cam; g_kdec[id] = k;
@@ -953,9 +978,9 @@ static void kFeed(const std::string& id, bool key, LONGLONG ts, std::vector<uint
   KDec& k = *it->second;
   if (k.stop) { kOff(id); return; }
   std::lock_guard<std::mutex> l(k.qmx);
-  if (k.q.size() > 12) { // dekoder tertinggal jauh → buang antrean, lanjut dari frame kunci berikutnya
-    if (!key) return;
-    k.q.clear();
+  if (k.q.size() > 12 || k.waitKey) { // dekoder tertinggal jauh → buang antrean, lanjut dari frame kunci berikutnya
+    if (!key) { k.waitKey = true; kNeedKey(id); return; }
+    k.q.clear(); k.waitKey = false;
   }
   k.q.emplace_back(std::move(data), ts);
   k.cv.notify_one();

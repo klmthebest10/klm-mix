@@ -177,6 +177,8 @@
       try { e.receiver.playoutDelayHint = tgt / 1000; } catch (x) {}
       try { e.receiver.jitterBufferTarget = tgt; } catch (x) {}
       ms.addTrack(e.track);
+      // mesin video native: salinan frame H.264 terenkode diteruskan ke dekoder GPU (tanpa mengganggu jalur biasa)
+      if (e.track.kind === 'video' && inp.type === 'klmcam' && KM.nengine && KM.nengine.kAttach) { try { KM.nengine.kAttach(inp, e.receiver); } catch (x) {} }
       clearTimeout(inp.rt.setT);
       inp.rt.setT = setTimeout(() => KM.inputTypes[inp.type].setStream(inp, ms), 50);
     };
