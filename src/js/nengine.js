@@ -830,7 +830,9 @@ onrtctransform = (ev) => {
       const rtp = (md.rtpTimestamp != null ? md.rtpTimestamp : f.timestamp) >>> 0; let c = clk.get(id);
       if (!c) { c = { last: rtp, ext: 900000 }; clk.set(id, c); } else { let d = (rtp - c.last) | 0; if (d < -180000 || d > 900000) d = 3000; c.ext = Math.max(0, c.ext + d); c.last = rtp; } // lompatan (HP menyambung ulang) → lanjut mulus
       const msg = { id, key: f.type === 'key', n: n++, ts: Math.round(c.ext * 1000 / 9), mime: md.mimeType || '', buf };
-      if (port && (!msg.mime || /h264/i.test(msg.mime))) port.postMessage(msg, [buf]); else postMessage(msg, [buf]);
+      let sent = false;
+      if (port && (!msg.mime || /h264/i.test(msg.mime))) { try { port.postMessage(msg); sent = true; } catch (e) { port = null; } } // disalin (proses utama tidak menerima transfer ArrayBuffer)
+      if (!sent) postMessage(msg, [buf]);
     } catch (e) {} }
     try { await w.write(f); } catch (e) {}
   } })();

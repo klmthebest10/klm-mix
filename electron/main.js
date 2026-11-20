@@ -917,7 +917,7 @@ function smokeTest() {
           else {
             await wait(6000);
             const ks = JSON.parse(await js(`JSON.stringify((() => { const i = KM.getInput(window.__kinp); const id = 'k' + String(i.id).replace(/[^\\w]/g, '').slice(0, 30); const k = KM.nengine.kcams.get(id); return { id, k: k || null, scriptTransform: !!window.RTCRtpScriptTransform, stat: KM.nengine.camStat }; })())`));
-            log('KLMCAM native: ' + JSON.stringify(ks));
+            log('KLMCAM native: ' + JSON.stringify(ks) + ' • jalur frame ' + JSON.stringify(nEngine.kstats ? nEngine.kstats() : {}));
             if (!ks.k || !ks.k.ok) { fail++; log('GAGAL: frame H.264 KLMCAM tidak terdekode mesin native'); }
             else {
               await js('KM.engine.setPreview(window.__kinp)'); await wait(1500);
@@ -1105,6 +1105,7 @@ function smokeTest() {
               log('Fase 8 koreksi warna native: ' + JSON.stringify(r5));
               if (!r5.pgm || !near(r5.p[0], [54, 54, 54], 5)) { fail++; log('GAGAL: koreksi warna tidak native'); } else log('Koreksi warna native: OK');
               // --- Fase 10: kartu daftar input digambar mesin native (jendela per kartu)
+              await js('(() => { const a = KM.getInput(window.__f8a); if (a && a.rt.card) a.rt.card.scrollIntoView({ block: "nearest" }); return 1; })()');
               await wait(1500);
               const c10 = JSON.parse(await js(`JSON.stringify((() => { const N = KM.nengine, a = KM.getInput(window.__f8a), id = 'q' + String(a.id).replace(/[^\\w]/g, '').slice(0, 30), c = N.cards.get(id) || {};
                 return { on: N.cardOn(a), shown: [...N.cards.values()].filter((x) => x.shown).length, total: KM.state.inputs.length, line: c.line || '', cov: !!c.cov, live: !!(a.rt.card && a.rt.card._live) }; })())`));
