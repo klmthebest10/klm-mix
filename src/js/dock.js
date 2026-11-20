@@ -208,6 +208,13 @@
       const zr = L.zoomRange(inp);
       const z = h('input', { type: 'range', min: zr.min, max: zr.max, step: 0.05, value: inp.rt.zoom || zr.min, title: zr.hw ? 'Zoom lensa HP' : 'Zoom digital', oninput: () => { L.zoomTo(inp, +z.value); zv.textContent = (+z.value).toFixed(1) + '×'; } });
       const q = h('select', { title: 'Kualitas video HP', onchange: () => { o.quality = q.value; L.camControl(inp, 'quality', q.value); } }, QS.map(([v, l]) => h('option', { value: v, selected: v === o.quality }, l)));
+      // stabilisasi (EIS) & shutter diatur di HP; nilai yang tampil = nilai yang sedang dipakai HP
+      const po = (peer && peer.info && peer.info.opt) || null;
+      const ES = [['off', 'Mati'], ['low', 'Ringan'], ['mid', 'Sedang'], ['high', 'Kuat']];
+      const SS = [['auto', 'Otomatis tepat'], ['cam', 'Bawaan HP'], ['50', '1/50'], ['60', '1/60'], ['100', '1/100'], ['120', '1/120'], ['250', '1/250'], ['500', '1/500'], ['1000', '1/1000']];
+      const es = h('select', { title: po && po.eisOk === false ? 'Stabilisasi tidak didukung aplikasi/peramban HP ini' : 'Stabilisasi gambar digital (EIS) di HP', disabled: !po, onchange: () => L.camControl(inp, 'camopt', { eis: es.value }) }, ES.map(([v, l]) => h('option', { value: v, selected: po && v === po.eis }, l)));
+      const ss = h('select', { title: po && po.shutterOk === false ? 'HP ini tidak mengizinkan shutter diatur (memakai otomatis HP)' : 'Shutter speed kamera HP (Otomatis tepat: ±1/(2×fps), tanpa kedip lampu)', disabled: !po, onchange: () => L.camControl(inp, 'camopt', { shutter: ss.value }) }, SS.map(([v, l]) => h('option', { value: v, selected: po && v === po.shutter }, l)));
+      const ex = peer && peer.info ? [peer.info.shutter ? peer.info.shutter + (peer.info.iso ? ' ISO ' + peer.info.iso : '') : '', peer.info.eis ? 'EIS ' + (peer.info.eis.mode === 'gyro' ? 'giroskop' : 'gambar') : ''].filter(Boolean).join(' • ') : '';
       return fold('cam-' + inp.id, KM.inputNum(inp) + '. ' + inp.title, {
         cls: 'camq' + (tl === 'program' ? '.pgm' : tl === 'preview' ? '.pvw' : ''),
         badge: h('span.pill' + (peer ? '.ok' : '.warn'), peer ? 'Terhubung' : 'Slot ' + o.slot + ' menunggu'),
@@ -220,7 +227,8 @@
           h('button.btn.sm', { onclick: () => L.camControl(inp, 'focus', 'auto'), title: 'Fokus otomatis' }, '🎯 Fokus'),
           h('button.btn.sm', { onclick: () => L.restartCam(inp), title: 'Sambung ulang' }, '↻ Ulang'),
           h('button.btn.sm', { onclick: () => KM.dialogs.inputSettings(inp), title: 'Pengaturan lengkap' }, '⚙ Atur')),
-        h('div.kv2', h('span.muted', 'Zoom'), h('div.row', z, zv), h('span.muted', 'Kualitas'), q));
+        h('div.kv2', h('span.muted', 'Zoom'), h('div.row', z, zv), h('span.muted', 'Kualitas'), q, h('span.muted', 'Stabil'), es, h('span.muted', 'Shutter'), ss),
+        ex ? h('p.muted.cinfo', ex) : null);
     };
     box.replaceChildren(h('div.sidep.utcq',
       phead('phone', 'KLMCAM', cams.length + ' kamera • ' + on + ' terhubung', h('button.btn.pri', { onclick: () => KM.dialogs.addInput('klmcam') }, KI.el('plus'), 'Kamera')),

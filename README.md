@@ -140,6 +140,13 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.16
+Versi uji (beta) + APK KLM HP baru.
+- **Stabilisasi gambar KLMCAM (EIS)** — Mati / Ringan / Sedang (bawaan) / Kuat, diatur di HP atau dari panel KLMCAM di PC. Frame sedikit diperbesar (6/10/16 %) lalu digeser & diputar berlawanan arah goyangan. Gerak kamera diukur dari **giroskop HP** (halus, tidak tertipu orang yang bergerak); arah, sumbu, skala dan jeda giroskop terhadap gambar dikalibrasi otomatis dari gerak gambar ±2–5 detik setelah HP bergerak, jadi tidak bergantung pada merek HP, kamera depan/belakang, atau arah layar. Sebelum terkalibrasi (atau tanpa giroskop) dipakai gerak gambar. Diam di tripod: gambar tetap diam (tidak ada getar tambahan). **OIS** (stabilisasi optik) adalah lensa di dalam HP: bekerja otomatis di HP yang memilikinya dan tidak bisa diatur dari aplikasi web/WebView.
+- **Shutter speed KLMCAM** — *Otomatis tepat* (bawaan): ±1/(2×fps) yang juga kelipatan kedip lampu → 30 fps: 1/50 (listrik 50 Hz) atau 1/60 (60 Hz); 60 fps: 1/100 atau 1/120. Gerak tampak natural (tidak patah-patah/strobo), tanpa garis/kedip lampu, dan fps tidak bisa turun karena shutter tidak pernah lebih lambat dari 1/fps. ISO diatur otomatis (titik tengah lebih berbobot); di tempat sangat terang shutter dipercepat. Pilihan lain: Bawaan HP (AE kamera + kunci FPS), 1/50 … 1/1000 (gerak cepat lebih tajam, perlu cahaya). Ada pilihan **listrik 50/60 Hz** (otomatis dari zona waktu) dan **kecerahan** −1…+1.
+- Kunci FPS kini memakai shutter kelipatan kedip lampu (dulu 0,95/fps bisa menimbulkan garis lampu).
+- Panel KLMCAM di PC menampilkan shutter/ISO & mode EIS dan bisa mengubah Stabil/Shutter dari PC.
+
 ### Baru di v1.18.0-beta.15
 Versi uji (beta) + **APK KLM HP baru**.
 - **Perbaikan fps KLMCAM kini sampai ke aplikasi HP.** Aplikasi KLM HP (APK) membawa salinan halaman kamera sendiri, sehingga perbaikan fps di beta.13/beta.14 (kunci FPS, format kamera sanggup fps pilihan, bitrate, zoom HP) belum ikut di HP yang memakai APK v1.17 — kamera tetap tertahan ±24 fps lalu turun di ruangan redup. APK ini (KLM-HP.apk di halaman rilis) memuat semuanya. Halaman kamera yang dibuka lewat browser dari alamat PC sudah otomatis terbaru.

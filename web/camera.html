@@ -95,6 +95,18 @@
     <label><input type="checkbox" id="sMirror" style="width:auto"> Cermin preview kamera depan</label>
     <label><input type="checkbox" id="sFpsLock" style="width:auto"> Kunci FPS saat cahaya redup (kecerahan diatur otomatis, gerakan tetap mulus)</label>
   </div>
+  <div class="card">
+    <label>Stabilisasi gambar (EIS)</label>
+    <select id="sEis"><option value="off">Mati</option><option value="low">Ringan — gambar diperbesar 6%</option><option value="mid">Sedang — diperbesar 10% (disarankan)</option><option value="high">Kuat — diperbesar 16% (dipegang sambil berjalan)</option></select>
+    <label>Shutter speed</label>
+    <select id="sShutter"><option value="auto">Otomatis tepat — gerak natural & tanpa kedip lampu (disarankan)</option><option value="cam">Bawaan HP</option><option value="50">1/50</option><option value="60">1/60</option><option value="100">1/100</option><option value="120">1/120</option><option value="250">1/250 — gerak cepat lebih tajam</option><option value="500">1/500 — olahraga (perlu cahaya terang)</option><option value="1000">1/1000 — sangat cepat (perlu cahaya sangat terang)</option></select>
+    <label>Listrik lampu di lokasi</label>
+    <select id="sHz"><option value="50">50 Hz — Indonesia, Malaysia, Eropa, Australia</option><option value="60">60 Hz — Korea, Amerika, Filipina, Taiwan</option></select>
+    <label>Kecerahan</label>
+    <select id="sBright"><option value="-1">−1 (lebih gelap)</option><option value="-0.5">−½</option><option value="0">Normal</option><option value="0.5">+½</option><option value="1">+1 (lebih terang)</option></select>
+    <p class="muted" id="sShutNote" style="margin:8px 0 0"></p>
+    <p class="muted" style="margin:6px 0 0">OIS (stabilisasi optik) bekerja otomatis di lensa HP yang memilikinya. EIS menambah kehalusan secara digital: memakai giroskop HP bila tersedia (dikalibrasi otomatis dari gambar, ±2–5 detik setelah HP bergerak), selain itu dari gerak gambar.</p>
+  </div>
   <div class="row" style="margin-top:14px"><button id="sCancel">Batal</button><button class="pri" id="sSave">Simpan & sambung</button></div>
   <p class="muted" style="margin-top:16px">Tips latensi rendah & halus: Wi-Fi 5 GHz, HP dekat router, tutup aplikasi lain, colok charger. Lewat internet: pakai sinyal 4G/5G yang kuat; bila jaringan berat, KLMCAM otomatis menurunkan ketajaman agar gerakan tetap mulus.</p>
 </div></div>
@@ -102,6 +114,7 @@
 <script src="icons.js"></script>
 <script src="common.js"></script>
 <script src="netlink.js"></script>
+<script src="cam-stab.js"></script>
 <script src="camera.js"></script>
 </body>
 </html>
