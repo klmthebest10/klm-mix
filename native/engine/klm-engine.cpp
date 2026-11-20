@@ -2721,7 +2721,13 @@ static int selftest(bool warp) {
               for (int y = H / 8; y < H - H / 8 && px < 0; y += 4) for (int x = W / 8; x < W - W / 8; x += 4) if (ref[(size_t)y * W + x] >= 0.97f && ref[(size_t)(y + 3) * W + x] >= 0.97f && ref[(size_t)y * W + x + 3] >= 0.97f) { px = x; py = y; break; }
               for (int k = 0; k < 4 && bx < 0; k++) { const int x = k & 1 ? W - 10 : 9, y = k & 2 ? H - 10 : 9; if (ref[(size_t)y * W + x] <= 0.02f) { bx = x; by = y; } }
               auto sx = [&](int x) { return ox + (UINT)((x + 0.5) * side / W); }; auto sy = [&](int y) { return (UINT)((y + 0.5) * side / H); };
-              if (px >= 0) { const size_t q = ((size_t)py * W + px) * 3; chk(g_pgm, sx(px), sy(py), (int)std::lround(img[q] * 255), (int)std::lround(img[q + 1] * 255), (int)std::lround(img[q + 2] * 255), 12, "Latar AI native: orang tetap (titik yakin menurut TensorFlow)"); }
+              if (px >= 0) {
+                int mv = -1; // nilai mask native di titik itu (baca balik tekstur mask)
+                if (sgn.nTex) { D3D11_TEXTURE2D_DESC md{}; sgn.nTex->GetDesc(&md); md.Usage = D3D11_USAGE_STAGING; md.BindFlags = 0; md.CPUAccessFlags = D3D11_CPU_ACCESS_READ; ComPtr<ID3D11Texture2D> st;
+                  if (SUCCEEDED(g_dev->CreateTexture2D(&md, nullptr, &st))) { g_ctx->CopyResource(st.Get(), sgn.nTex.Get()); D3D11_MAPPED_SUBRESOURCE m; if (SUCCEEDED(g_ctx->Map(st.Get(), 0, D3D11_MAP_READ, 0, &m))) { mv = ((const uint8_t*)m.pData)[(size_t)py * m.RowPitch + px]; g_ctx->Unmap(st.Get(), 0); } } }
+                emit("  %s Latar AI native: mask di titik orang = %d/255 (TensorFlow %.3f)", mv >= 230 ? "OK " : "GAGAL", mv, ref[(size_t)py * W + px]); if (mv < 230) ok = 0;
+                const size_t q = ((size_t)py * W + px) * 3; chk(g_pgm, sx(px), sy(py), (int)std::lround(img[q] * 255), (int)std::lround(img[q + 1] * 255), (int)std::lround(img[q + 2] * 255), 28, "Latar AI native: orang tetap (titik yakin menurut TensorFlow)");
+              }
               else emit("  (info) referensi tidak menemukan titik orang yakin — cek piksel orang dilewati");
               if (bx >= 0) chk(g_pgm, sx(bx), sy(by), 0, 0, 255, 12, "Latar AI native: latar diganti warna");
               command("seg sgimg -"); command("del sgimg"); command("pgm a"); run(1);
