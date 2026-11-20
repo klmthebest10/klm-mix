@@ -18,6 +18,8 @@ const ON = ['utc:frame', 'utc:tk', 'utc:zc', 'vst:event', 'airplay:status', 'pro
 // port audio plugin VST (MessagePort ke broker) diteruskan ke dunia halaman → AudioWorklet
 ipcRenderer.on('vst:port', (e, d) => { window.postMessage({ klmVstPort: d && d.id }, '*', e.ports); });
 
+// jalur langsung frame KLMCAM: halaman mengirim MessagePort lewat window.postMessage → diteruskan ke proses utama
+window.addEventListener('message', (e) => { if (e.source === window && e.data === 'klm-kport' && e.ports && e.ports[0]) ipcRenderer.postMessage('nengine:kport', null, [e.ports[0]]); });
 contextBridge.exposeInMainWorld('klm', {
   isElectron: true,
   invoke: (ch, ...a) => (INVOKE.includes(ch) ? ipcRenderer.invoke(ch, ...a) : Promise.reject(new Error('channel ' + ch))),

@@ -87,6 +87,8 @@
     const p = inp.pos || {};
     const pos = plainPos(p) ? '-' : [p.fit === 'fill' ? 0 : p.fit === 'stretch' ? 2 : 1, num(p.zoom == null ? 1 : p.zoom), num(p.x || 0), num(p.y || 0), num(p.cropL || 0), num(p.cropR || 0), num(p.cropT || 0), num(p.cropB || 0), num(p.rot || 0, 2)].join(' ');
     if (pos !== a.pos) { a.pos = pos; cmd('ipos ' + k + ' ' + pos); }
+    const dz = inp.type === 'klmcam' && inp.rt.dzoom > 1.001 ? num(inp.rt.dzoom, 3) : '1'; // zoom digital dari HP
+    if (dz !== a.dz) { a.dz = dz; cmd('szoom ' + k + ' ' + dz); }
     let fx = '-';
     if (KM.fx && KM.fx.needs(inp)) {
       const c = inp.cc || {}, y = inp.key || {}, on = !!c.on, d = (v, def) => (v == null ? def : v);
@@ -345,6 +347,92 @@
     return x + ' ' + y + ' ' + w + ' ' + h;
   }
 
+  // ---------- kartu daftar input native (Fase 10) ----------
+  // Tiap kartu yang sumbernya bisa digambar mesin native mendapat jendela kecil di atas thumbnail-nya, digambar mesin native
+  // setiap frame (semulus Preview/Program, tanpa beban thread utama KLM). Lencana kartu dikirim sebagai gambar raster.
+  const cards = new Map(); // id kartu → { want, shown, hideAt, line, cov, ovl, ovlSig, mv, mAt }
+  N.cards = cards;
+  const cidOf = (inp) => 'q' + String(inp.id).replace(/[^\w]/g, '').slice(0, 30);
+  N.cardOn = (inp) => { const c = inp && cards.get(cidOf(inp)); return !!(c && c.shown && c.want); };
+  function scrollBox(el) { for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) { const o = getComputedStyle(p).overflowY; if (o === 'auto' || o === 'scroll' || o === 'hidden') return p; } return null; }
+  function cardCovered(th, L, T, R, B) { // menu / dialog / tooltip besar di atas kartu → kartu kembali ke tampilan biasa
+    for (const fx of [0.08, 0.5, 0.92]) for (const fy of [0.1, 0.5, 0.9]) {
+      const t = document.elementFromPoint(L + (R - L) * fx, T + (B - T) * fy);
+      if (!t || !(t === th || th.contains(t))) return true;
+    }
+    return false;
+  }
+  const iconImg = new Map(); // ikon jenis input (SVG kartu) → gambar untuk lencana raster
+  function iconOf(svg, color) {
+    const key = svg.outerHTML + color; let e = iconImg.get(key); if (e) return e;
+    e = { ok: false, img: new Image() }; iconImg.set(key, e);
+    const x = svg.cloneNode(true); x.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); x.setAttribute('width', '26'); x.setAttribute('height', '26');
+    e.img.onload = () => { e.ok = true; }; e.img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(x.outerHTML.replace(/currentColor/g, color));
+    return e;
+  }
+  function rrect(g, x, y, w, h, r) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); }
+  // lencana kartu (gradasi atas, nomor, LIVE/PVW, ikon jenis) persis dari tata letak DOM kartu → raster ke mesin native
+  function cardOverlay(c, card, w, h, d) {
+    const th = card._th, tr = th.getBoundingClientRect(), els = [...th.querySelectorAll('.num,.tly,.typ')];
+    const parts = els.map((el) => { const cs = getComputedStyle(el); if (cs.display === 'none') return null; const r = el.getBoundingClientRect(); return { el, cs, r, cls: el.className }; }).filter(Boolean);
+    let pend = false;
+    const sig = w + 'x' + h + '|' + parts.map((p) => {
+      const ic = p.cls.includes('typ') && p.el.querySelector('svg'); const io = ic ? iconOf(ic, p.cs.color) : null; if (io && !io.ok) pend = true;
+      return p.cls + ':' + p.el.textContent + ':' + p.cs.backgroundColor + ':' + Math.round(p.r.left - tr.left) + ',' + Math.round(p.r.top - tr.top) + ',' + Math.round(p.r.width) + ':' + (io && io.ok ? 1 : 0);
+    }).join('|');
+    if (sig === c.ovlSig) { const m = media.get(c.ovl); return m && m.ok ? c.ovl : (c.ovlPrev || '-'); }
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const g = cv.getContext('2d');
+    const sx = w / tr.width, sy = h / tr.height; g.scale(sx, sy);
+    const gr = g.createLinearGradient(0, 0, 0, tr.height * 0.3); gr.addColorStop(0, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, tr.width, tr.height * 0.3);
+    for (const p of parts) {
+      const x = p.r.left - tr.left, y = p.r.top - tr.top, bw = p.r.width, bh = p.r.height;
+      g.fillStyle = p.cs.backgroundColor; rrect(g, x, y, bw, bh, parseFloat(p.cs.borderTopLeftRadius) || 0); g.fill();
+      g.fillStyle = p.cs.color; g.textAlign = 'center'; g.textBaseline = 'middle';
+      if (p.cls.includes('typ')) { const ic = p.el.querySelector('svg'); const io = ic && iconOf(ic, p.cs.color); if (io && io.ok) { const s = Math.min(bw, bh) * 0.65; g.drawImage(io.img, x + (bw - s) / 2, y + (bh - s) / 2, s, s); } else { g.font = p.cs.font; g.fillText(p.el.textContent || '', x + bw / 2, y + bh / 2 + 0.5); } continue; }
+      let t = p.el.textContent || ''; if (!t && p.cls.includes('tly')) { const a = getComputedStyle(p.el, '::after').content; t = a && a !== 'none' ? a.replace(/^["']|["']$/g, '') : ''; g.font = '800 ' + (parseFloat(p.cs.fontSize) || 9.5) + 'px ' + p.cs.fontFamily; }
+      else g.font = p.cs.fontWeight + ' ' + p.cs.fontSize + ' ' + p.cs.fontFamily;
+      g.fillText(t, x + bw / 2, y + bh / 2 + 0.5);
+    }
+    const id = hashId('cv', c.id + '|' + sig);
+    try { const dd = g.getImageData(0, 0, w, h); window.klm.send('nengine:raster', id, w, h, dd.data.buffer); } catch (e) { return '-'; }
+    if (c.ovl && c.ovl !== id && media.get(c.ovl) && media.get(c.ovl).ok) c.ovlPrev = c.ovl; // lencana lama tetap tampil sampai yang baru siap
+    const prev = c.ovlPrev;
+    media.set(id, { sig: 'card', kind: 'raster', owner: '', ok: false, err: '', keep: true, onok: () => { if (prev && prev !== id) { cmd('del ' + prev); media.delete(prev); if (c.ovlPrev === prev) c.ovlPrev = ''; } } });
+    c.ovl = id; c.ovlSig = pend ? '' : sig; // ikon belum termuat → dibuat ulang saat siap
+    return c.ovlPrev || '-';
+  }
+  function cardSync(geo) {
+    const on = KM.settings.nativeCards !== false && !document.hidden, d = window.devicePixelRatio || 1, seen = new Set();
+    const px = (v) => Math.round(v * d);
+    for (const inp of KM.state.inputs) {
+      const card = inp.rt.card, cid = cidOf(inp); seen.add(cid);
+      let c = cards.get(cid); if (!c) { c = { id: cid, want: false, shown: false, hideAt: -1, line: '', cov: false, ovl: '', ovlSig: '', mv: -1, mAt: 0 }; cards.set(cid, c); }
+      let line = '';
+      if (on && card && card.isConnected && card._th && spec(inp)) {
+        const r = card._th.getBoundingClientRect();
+        const sb = card._sbox || (card._sbox = scrollBox(card)), br = sb ? sb.getBoundingClientRect() : { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+        const L = Math.max(r.left, br.left, 0), T = Math.max(r.top, br.top, 0), R = Math.min(r.right, br.right, innerWidth), B = Math.min(r.bottom, br.bottom, innerHeight);
+        if (r.width >= 8 && r.height >= 8 && R - L >= 4 && B - T >= 4) {
+          if (geo || !c.want) c.cov = cardCovered(card._th, L, T, R, B);
+          if (!c.cov) {
+            const x = px(r.left), y = px(r.top), w = px(r.right) - x, h = px(r.bottom) - y, cx = px(L), cy = px(T), cw = px(R) - cx, ch = px(B) - cy;
+            const ov = cardOverlay(c, card, w, h, d);
+            if (frameN - c.mAt >= 3) { // meter audio (±20×/detik) — sama dengan meter kartu biasa
+              c.mAt = frameN; const st = KM.audio && KM.audio.strips && KM.audio.strips.get(inp.id);
+              if (st && KM.inputs.hasAudio(inp)) { const m = KM.audio.readMeter(st.meter); const db = KM.audio.toDb(Math.max(m.peakL, m.peakR)); c.mv = Math.round(KM.clamp((db + 60) / 60, 0, 1) * 50) / 50; } else c.mv = -1;
+            }
+            const md = KM.inputs.media(inp); const pv = md && md.duration && isFinite(md.duration) ? num(md.currentTime / md.duration, 3) : -1;
+            line = ['card', cid, eidOf(inp), x, y, w, h, cx, cy, cw, ch, ov || '-', c.mv, pv, num(d, 2)].join(' ');
+          }
+        }
+      }
+      if (line) { c.hideAt = -1; if (line !== c.line) { c.line = line; cmd(line); } c.want = true; }
+      else if (c.want) { c.want = false; c.hideAt = frameN + 2; if (inp.rt) inp.rt.thumbAt = 0; } // tampilan biasa digambar dulu, jendela native disembunyikan 2 frame kemudian
+      if (c.hideAt >= 0 && frameN >= c.hideAt) { c.hideAt = -1; c.line = ''; cmd('card ' + cid + ' - 0 0 0 0 0 0 0 0 - -1 -1 1'); }
+    }
+    for (const [cid, c] of cards) if (!seen.has(cid)) { cmd('cardoff ' + cid); if (c.ovl) { cmd('del ' + c.ovl); media.delete(c.ovl); } cards.delete(cid); }
+  }
+
   // ---------- sinkron tiap frame mesin JS ----------
   function sync() {
     if (!running || !ready) return;
@@ -425,6 +513,7 @@
       }
       if (b.hideAt >= 0 && frameN >= b.hideAt) { b.hideAt = -1; b.rect = ''; cmd('rect ' + k + ' 0 0 0 0 0'); }
     }
+    try { cardSync(geo); } catch (e) { console.warn('[nengine] kartu', e); }
   }
 
   function onEv(s) {
@@ -433,6 +522,8 @@
     else if (t === 'ready') { ready = true; N.segNative = false; N.state = 'ready'; N.adapter = rest; resetSent(); KM.changed('nengine'); camReopen(); for (const k of kcams.values()) k.ok = false; kSync(); }
     else if (t === 'shown' && bus[rest]) { bus[rest].shown = true; N[rest] = bus[rest].want; }
     else if (t === 'hidden' && bus[rest]) { bus[rest].shown = false; N[rest] = false; }
+    else if ((t === 'shown' || t === 'hidden') && rest.startsWith('c:')) { const c = cards.get(rest.slice(2)); if (c) { c.shown = t === 'shown'; if (c.shown) UI_cardLive(rest.slice(2)); } }
+    else if (t === 'wheel') { const a = rest.split(' '); if (a[0].startsWith('c:')) { const inp = cardInp(a[0].slice(2)), card = inp && inp.rt.card, sb = card && (card._sbox || scrollBox(card)); if (sb) sb.scrollBy({ top: -(+a[1] || 0) / 120 * 80 }); } }
     else if (t === 'srcerr') { const id = rest.split(' ')[0]; const m = media.get(id); if (m) { m.ok = false; m.err = rest.slice(id.length + 1); } else { srcErr.add(id); srcSent.delete(id); } KM.log && KM.log('mesin native: ' + rest); }
     else if (t === 'stats') { const m = /fps=(\d+) ms=([\d.]+) mem=(\d+)/.exec(rest); if (m) { N.fps = +m[1]; N.ms = +m[2]; N.mem = +m[3]; } const u = /utex=(\d+)/.exec(rest); if (u) N.utex = +u[1]; const cm = /cams=(\S+)/.exec(rest); N.camStat = cm ? cm[1] : '-';
       // dekoder KLMCAM masih menghasilkan frame? (jumlah frame per id dari statistik mesin)
@@ -448,9 +539,22 @@
     else if (t === 'uerr') { utcErr = rest.replace(/^\S+ /, '').slice(0, 80); KM.log && KM.log('mesin native UTC: ' + rest); }
     else if (t === 'exit' || t === 'restart') { if (t === 'exit') N.restarts = (N.restarts || 0) + 1; for (const x of outs.values()) { x.err = 'mesin native berhenti'; if (x.wait) x.wait.rej(new Error(x.err)); if (x.stopWait) x.stopWait(); else if (x.onEnd) x.onEnd(x); } outs.clear(); audStop(); ready = false; N.pvw = N.pgm = false; N.state = t === 'exit' ? 'berhenti' : 'memulai ulang'; resetSent(); camLost(); KM.changed('nengine'); }
   }
-  function resetSent() { wready.clear(); comps.clear(); labels.clear(); ovlSent = ''; for (const [id, m] of media) if (m.aud) pcmStop(m.owner, id); media.clear(); avSent = null; srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; ftbSent = ''; bsizeSent = ''; gridSent = ''; gridLabels.clear(); stPlaying = -1; for (const st of sting) { st.src = ''; st.ok = false; } attrSent.clear(); uready.clear(); ulaySent = null; if (utcWant) { utcWant = false; if (el()) window.klm.send('nengine:utc', false); } for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
+  function resetSent() { wready.clear(); comps.clear(); labels.clear(); ovlSent = ''; for (const [id, m] of media) if (m.aud) pcmStop(m.owner, id); media.clear(); avSent = null; srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; ftbSent = ''; bsizeSent = ''; gridSent = ''; gridLabels.clear(); cards.clear(); stPlaying = -1; for (const st of sting) { st.src = ''; st.ok = false; } attrSent.clear(); uready.clear(); ulaySent = null; if (utcWant) { utcWant = false; if (el()) window.klm.send('nengine:utc', false); } for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
   // klik di jendela native diteruskan ke kanvas di bawahnya (pilih kotak grid, klik kanan menu monitor, dll.)
+  const cardInp = (cid) => KM.state.inputs.find((i) => cidOf(i) === cid);
+  // kartu baru tampil native → <video> thumbnail live di kartu itu dilepas (tidak perlu didekode dua kali)
+  function UI_cardLive() { try { KM.ui && KM.ui.syncLiveThumbs && KM.ui.syncLiveThumbs(); } catch (e) {} }
   function clickFwd(a) {
+    if (a[0].startsWith('c:')) { // klik di kartu native → diteruskan ke thumbnail kartu (Preview, Ctrl+klik Cut, dobel klik pengaturan, klik kanan menu)
+      const inp = cardInp(a[0].slice(2)), th = inp && inp.rt.card && inp.rt.card._th; if (!th) return;
+      const r = th.getBoundingClientRect(), o = { bubbles: true, cancelable: true, clientX: r.left + (+a[1]) * r.width, clientY: r.top + (+a[2]) * r.height, button: +a[3], ctrlKey: a[5] === '1', view: window };
+      // koordinat dari jendela kartu (bagian terlihat saja) → hitung ulang relatif kartu penuh
+      const c = cards.get(a[0].slice(2)); if (c && c.line) { const f = c.line.split(' '), d = window.devicePixelRatio || 1; o.clientX = (+f[7] + (+a[1]) * +f[9]) / d; o.clientY = (+f[8] + (+a[2]) * +f[10]) / d; }
+      if (+a[3] === 2) { th.dispatchEvent(new MouseEvent('contextmenu', o)); return; }
+      th.dispatchEvent(new MouseEvent('mousedown', o)); th.dispatchEvent(new MouseEvent('mouseup', o)); th.dispatchEvent(new MouseEvent('click', o));
+      if (a[4] === '1') th.dispatchEvent(new MouseEvent('dblclick', o));
+      return;
+    }
     const cv = document.getElementById(a[0]); if (!cv) return;
     const r = cv.getBoundingClientRect(), x = r.left + (+a[1]) * r.width, y = r.top + (+a[2]) * r.height;
     const btn = +a[3], dbl = a[4] === '1', ctrl = a[5] === '1';
@@ -710,26 +814,37 @@
   const kidOf = (inp) => 'k' + String(inp.id).replace(/[^\w]/g, '').slice(0, 30);
   N.kWant = () => el() && running && ready && KM.settings.nativeEngine === true && KM.settings.nativeKlmcam !== false && !!window.RTCRtpScriptTransform;
   let kWorker = null;
-  const KW = `const fwd = new Set(), tf = new Map();
-onmessage = (e) => { const m = e.data || {}; if (m.fwd) fwd.add(m.fwd); if (m.unfwd) fwd.delete(m.unfwd);
+  // Pekerja (worker) menyalin tiap frame H.264 dan — bila ada — mengirimnya LANGSUNG ke proses utama lewat MessagePort
+  // (tidak lewat thread utama KLM yang sibuk menggambar UI → tidak ada jeda/jitter tambahan). Cap waktu = cap waktu RTP
+  // dari HP (90 kHz, dibuka lilitannya) → mesin native menayangkan frame menurut irama aslinya, mulus.
+  const KW = `const fwd = new Set(), tf = new Map(), clk = new Map(); let port = null;
+onmessage = (e) => { const m = e.data || {}; if (m.port) port = m.port; if (m.fwd) fwd.add(m.fwd); if (m.unfwd) fwd.delete(m.unfwd);
   if (m.kf) { const t = tf.get(m.kf); if (t && t.sendKeyFrameRequest) t.sendKeyFrameRequest().catch(() => {}); } };
 onrtctransform = (ev) => {
   const t = ev.transformer, id = t.options && t.options.id; if (id) tf.set(id, t);
   const r = t.readable.getReader(), w = t.writable.getWriter(); let n = 0;
   (async () => { for (;;) {
     const x = await r.read(); if (x.done) break; const f = x.value;
-    if (id && fwd.has(id) && tf.get(id) === t) { try { const md = f.getMetadata ? f.getMetadata() : {}; const buf = f.data.slice(0); postMessage({ id, key: f.type === 'key', n: n++, mime: md.mimeType || '', buf }, [buf]); } catch (e) {} }
+    if (id && fwd.has(id) && tf.get(id) === t) { try {
+      const md = f.getMetadata ? f.getMetadata() : {}, buf = f.data.slice(0);
+      const rtp = (md.rtpTimestamp != null ? md.rtpTimestamp : f.timestamp) >>> 0; let c = clk.get(id);
+      if (!c) { c = { last: rtp, ext: 900000 }; clk.set(id, c); } else { let d = (rtp - c.last) | 0; if (d < -180000 || d > 900000) d = 3000; c.ext = Math.max(0, c.ext + d); c.last = rtp; } // lompatan (HP menyambung ulang) → lanjut mulus
+      const msg = { id, key: f.type === 'key', n: n++, ts: Math.round(c.ext * 1000 / 9), mime: md.mimeType || '', buf };
+      if (port && (!msg.mime || /h264/i.test(msg.mime))) port.postMessage(msg, [buf]); else postMessage(msg, [buf]);
+    } catch (e) {} }
     try { await w.write(f); } catch (e) {}
   } })();
 };`;
   function kw() {
     if (kWorker) return kWorker;
     kWorker = new Worker(URL.createObjectURL(new Blob([KW], { type: 'text/javascript' })));
+    // jalur langsung pekerja → proses utama (MessagePort): frame tidak menunggu thread utama KLM
+    try { const ch = new MessageChannel(); window.postMessage('klm-kport', '*', [ch.port2]); kWorker.postMessage({ port: ch.port1 }, [ch.port1]); } catch (e) {}
     kWorker.onmessage = (e) => {
       const m = e.data, k = kcams.get(m.id); if (!k) return;
       if (m.mime && !/h264/i.test(m.mime)) { if (k.codec !== m.mime) { k.codec = m.mime; k.err = 'codec ' + m.mime.replace(/^video\//, '') + ' (butuh H.264)'; kWorker.postMessage({ unfwd: m.id }); } return; }
       if (!N.kWant()) return;
-      window.klm.send('nengine:kenc', m.id, m.key, m.n, m.buf);
+      window.klm.send('nengine:kenc', m.id, m.key, m.ts != null ? m.ts : m.n * 333333, m.buf);
     };
     return kWorker;
   }

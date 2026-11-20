@@ -205,7 +205,8 @@
     const card = (inp) => {
       const peer = inp.rt.camId ? L.peers.get(inp.rt.camId) : null, tl = KM.engine.tallyOf(inp), o = inp.opts;
       const zv = h('span.muted.zv', (inp.rt.zoom || 1).toFixed(1) + '×');
-      const z = h('input', { type: 'range', min: 1, max: 10, step: 0.1, value: inp.rt.zoom || 1, title: 'Zoom', oninput: () => { inp.rt.zoom = +z.value; L.camControl(inp, 'zoom', +z.value); zv.textContent = (+z.value).toFixed(1) + '×'; } });
+      const zr = L.zoomRange(inp);
+      const z = h('input', { type: 'range', min: zr.min, max: zr.max, step: 0.05, value: inp.rt.zoom || zr.min, title: zr.hw ? 'Zoom lensa HP' : 'Zoom digital', oninput: () => { L.zoomTo(inp, +z.value); zv.textContent = (+z.value).toFixed(1) + '×'; } });
       const q = h('select', { title: 'Kualitas video HP', onchange: () => { o.quality = q.value; L.camControl(inp, 'quality', q.value); } }, QS.map(([v, l]) => h('option', { value: v, selected: v === o.quality }, l)));
       return fold('cam-' + inp.id, KM.inputNum(inp) + '. ' + inp.title, {
         cls: 'camq' + (tl === 'program' ? '.pgm' : tl === 'preview' ? '.pvw' : ''),

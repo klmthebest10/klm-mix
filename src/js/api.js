@@ -148,7 +148,7 @@
     NextPlayListEntry: () => { KM.playlist.next(); return true; }, PreviousPlayListEntry: () => { KM.playlist.prev(); return true; },
 
     // ---- KLMCAM ----
-    CamZoom: (p) => KM.link.camControl(need(inp(p)), 'zoom', num(p.Value, 1)),
+    CamZoom: (p) => { KM.link.zoomTo(need(inp(p)), num(p.Value, 1)); return true; },
     CamTorch: (p) => KM.link.camControl(need(inp(p)), 'torch', bool(p.Value)),
     CamSwitch: (p) => KM.link.camControl(need(inp(p)), 'switch', 1),
     CamFocus: (p) => KM.link.camControl(need(inp(p)), 'focus', p.Value || 'auto'),

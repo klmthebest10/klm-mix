@@ -450,6 +450,7 @@
     for (let k = 0; k < n; k++) {
       const inp = S.inputs[k];
       const cv = inp.rt.thumb; if (!cv || !cv.isConnected || E.liveThumb(inp)) continue;
+      if (KM.nengine && KM.nengine.cardOn && KM.nengine.cardOn(inp)) continue; // kartu digambar mesin native
       if (onAir && cv._vis !== false && onAir(inp)) { drawThumb(inp, cv, now); inp.rt.airAt = now; anim++; continue; }
       if (now - (inp.rt.compAt || 0) > 500) { inp.rt.compAt = now; inp.rt.comp = compMoving(inp); } // dicek 2×/detik, bukan tiap frame
       if (!inp.rt.comp || cv._vis === false) continue;
@@ -463,6 +464,7 @@
     for (let k = 0; k < n; k++) {
       const inp = S.inputs[(thumbCursor + k) % n];
       const cv = inp.rt.thumb; if (!cv || !cv.isConnected || inp.rt.comp || inp.rt.airAt === now || E.liveThumb(inp)) continue;
+      if (KM.nengine && KM.nengine.cardOn && KM.nengine.cardOn(inp)) continue;
       const moving = KM.inputs.isPlaying(inp) || inp.type === 'list' || inp.type === 'browser' || inp.type === 'utc' || inp.type === 'score' || inp.type === 'title' || inp.type === 'mirror' || inp.rt.anim;
       if (now - (inp.rt.thumbAt || 0) < (cv._vis === false ? 3000 : moving ? fast - 8 : slow)) continue;
       drawThumb(inp, cv, now);

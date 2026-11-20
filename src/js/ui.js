@@ -366,7 +366,8 @@
     const inp = card._inp; if (!inp) return;
     const th = card._th || (card._th = card.querySelector('.thumb')); if (!th) return;
     let v = card._live;
-    const st = KM.engine.liveStream(inp);
+    // kartu digambar mesin native → <video> live tidak diperlukan (hemat dekode & komposit)
+    const st = KM.nengine && KM.nengine.cardOn && KM.nengine.cardOn(inp) ? null : KM.engine.liveStream(inp);
     const trk = st && st.getVideoTracks().find((t) => t.readyState === 'live');
     if (!trk) { if (v) { keepFrame(inp, v); v.srcObject = null; v.remove(); card._live = null; } return; }
     if (!v) { v = card._live = document.createElement('video'); v.className = 'live'; v.muted = true; v.playsInline = true; v.autoplay = true; v.disablePictureInPicture = true; th.insertBefore(v, th.firstChild.nextSibling); }

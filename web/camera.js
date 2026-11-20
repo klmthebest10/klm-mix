@@ -91,7 +91,7 @@
       const snd = pc && pc.getSenders().find((x) => x.track && x.track.kind === 'video');
       if (snd) { try { await snd.replaceTrack(vTrack); } catch (e) { console.warn(e); } }
       await tuneSender();
-      updateCaps(); labels(); sendInfo();
+      hwVal = null; updateCaps(); labels(); sendInfo(); sendZoom(true);
     })().finally(() => { reopening = null; });
     return reopening;
   }
@@ -119,7 +119,7 @@
     let caps = {}; try { caps = vTrack.getCapabilities ? vTrack.getCapabilities() : {}; } catch (e) {}
     const z = $('zoom'), zc = zoomCaps();
     zoomHW = !!zc;
-    if (zc) { z.min = zc.min; z.max = zc.max; z.step = zc.step || 0.1; let cur = zc.min; try { cur = vTrack.getSettings().zoom || zc.min; } catch (e) {} z.value = cur; $('zoomV').textContent = (+cur).toFixed(1) + '×'; if (dz !== 1) setDigital(1); }
+    if (zc) { z.min = zc.min; z.max = zc.max; z.step = zc.step || 0.1; let cur = zc.min; try { cur = vTrack.getSettings().zoom || zc.min; } catch (e) {} hwVal = cur; z.value = cur; $('zoomV').textContent = (+cur).toFixed(1) + '×'; if (dz !== 1) setDigital(1); }
     else { z.min = 1; z.max = DZ_MAX; z.step = 0.1; z.value = dz; $('zoomV').textContent = dz.toFixed(1) + '×'; }
     z.disabled = false;
     $('torch').style.opacity = caps.torch ? 1 : 0.4;
@@ -129,10 +129,13 @@
     const m = cfg.facing === 'user' && cfg.mirror;
     video.style.transform = (m ? 'scaleX(-1) ' : '') + (dz > 1.001 ? 'scale(' + dz + ')' : '');
   }
+  // nilai zoom (hardware atau digital) dikirim ke PC → slider zoom di KLM selalu sama dengan HP; digital juga dipotong di PC
   function sendZoom(force) {
     if (!conn || !conn.open) return;
-    if (!force && dz === dzSent) return;
-    dzSent = dz; conn.send({ t: 'cam-zoom', z: +dz.toFixed(3) });
+    const z = currentZoom();
+    if (!force && z === dzSent) return;
+    dzSent = z; const zc = zoomCaps();
+    conn.send({ t: 'cam-zoom', z: +(+z).toFixed(3), hw: !!zc, min: zc ? zc.min : 1, max: zc ? zc.max : DZ_MAX });
   }
   function setDigital(v) {
     dz = Math.max(1, Math.min(DZ_MAX, +v || 1));
@@ -140,13 +143,26 @@
     previewTransform();
     clearTimeout(dzT); dzT = setTimeout(() => sendZoom(), 30); // digabung bila slider/cubit digeser cepat
   }
+  // zoom hardware: perintah beruntun (slider / cubit / dari PC) DIGABUNG — hanya satu applyConstraints berjalan, nilai terakhir
+  // yang dipakai. Dulu tiap geseran memanggil applyConstraints bersamaan → HP menolak (error) lalu malah jatuh ke zoom digital.
+  let hwBusy = false, hwWant = null, hwVal = null;
   async function applyZoom(v) {
     const zc = zoomCaps();
     if (!zc) return setDigital(v);
-    try { v = Math.max(zc.min, Math.min(zc.max, v)); await vTrack.applyConstraints({ advanced: [{ zoom: v }] }); $('zoom').value = v; $('zoomV').textContent = (+v).toFixed(1) + '×'; }
-    catch (e) { setDigital(v); }
+    v = Math.max(zc.min, Math.min(zc.max, +v || zc.min));
+    $('zoom').value = v; $('zoomV').textContent = (+v).toFixed(1) + '×';
+    hwWant = v; if (hwBusy) return;
+    hwBusy = true;
+    try {
+      while (hwWant != null) {
+        const x = hwWant; hwWant = null;
+        try { await vTrack.applyConstraints({ advanced: [{ zoom: x }] }); hwVal = x; }
+        catch (e) { try { await new Promise((r) => setTimeout(r, 60)); await vTrack.applyConstraints({ zoom: x }); hwVal = x; } catch (e2) { console.warn('zoom', e2); } }
+      }
+    } finally { hwBusy = false; }
+    clearTimeout(dzT); dzT = setTimeout(() => sendZoom(), 60);
   }
-  function currentZoom() { const zc = zoomCaps(); if (zc) { try { return vTrack.getSettings().zoom || zc.min; } catch (e) { return zc.min; } } return dz; }
+  function currentZoom() { const zc = zoomCaps(); if (zc) { if (hwVal != null) return hwVal; try { return vTrack.getSettings().zoom || zc.min; } catch (e) { return zc.min; } } return dz; }
   // cubit dua jari di layar untuk zoom
   (function pinch() {
     let d0 = 0, z0 = 1;
@@ -222,7 +238,7 @@
     offer.sdp = offer.sdp.replace(/(a=fmtp:\d+ .*profile-level-id=[0-9a-fA-F]+.*)/g, '$1;x-google-start-bitrate=' + Math.round((settings.bitrate || 6000) * 0.7) + ';x-google-min-bitrate=1000');
     await pc.setLocalDescription(offer);
     conn.send({ t: 'signal', data: { sdp: pc.localDescription } });
-    if (!zoomHW) setTimeout(() => sendZoom(true), 500);
+    setTimeout(() => sendZoom(true), 500); // PC langsung tahu jenis & rentang zoom HP ini
   }
 
   async function onMsg(m) {
@@ -299,7 +315,10 @@
     sendInfo();
   }, 2000);
   let lastInfo = {};
-  function sendInfo() { if (conn && conn.open) conn.send({ t: 'cam-info', info: Object.assign({}, lastInfo, { facing: cfg.facing, quality: cfg.quality }) }); }
+  function sendInfo() {
+    if (!conn || !conn.open) return; const zc = zoomCaps();
+    conn.send({ t: 'cam-info', info: Object.assign({}, lastInfo, { facing: cfg.facing, quality: cfg.quality, zoom: { hw: !!zc, min: zc ? zc.min : 1, max: zc ? zc.max : DZ_MAX, v: +(+currentZoom()).toFixed(2) } }) });
+  }
   if (navigator.getBattery) navigator.getBattery().then((b) => { const u = () => { battery = Math.round(b.level * 100); }; u(); b.addEventListener('levelchange', u); }).catch(() => {});
 
   // ---------- tombol ----------

@@ -579,12 +579,13 @@
     screen(inp) { return h('div.sec', h('button.btn', { onclick: () => { KM.inputs.remove(inp); D.addInput('screen'); } }, 'Pilih layar/jendela lain…')); },
     klmcam(inp) {
       const o = inp.opts, L = KM.link, peer = L.peers.get(inp.rt.camId);
-      const z = h('input', { type: 'range', min: 1, max: 10, step: 0.1, value: inp.rt.zoom || 1, oninput: () => { inp.rt.zoom = +z.value; L.camControl(inp, 'zoom', +z.value); } });
+      const zr = L.zoomRange(inp), zv = h('span.muted', (inp.rt.zoom || 1).toFixed(1) + '×' + (peer ? (zr.hw ? ' (lensa HP)' : ' (digital)') : ''));
+      const z = h('input', { type: 'range', min: zr.min, max: zr.max, step: 0.05, value: inp.rt.zoom || zr.min, oninput: () => { L.zoomTo(inp, +z.value); zv.textContent = (+z.value).toFixed(1) + '×' + (zr.hw ? ' (lensa HP)' : ' (digital)'); } });
       return h('div.sec', h('h4', '📱 KLMCAM ', peer ? h('span.pill.ok', 'Terhubung: ' + (peer.name || peer.ip)) : h('span.pill.warn', 'Menunggu HP slot ' + o.slot)),
         row('Slot', sel([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], o.slot, (v) => { o.slot = +v; inp.rt.camId = null; KM.inputTypes.klmcam.setStream(inp, null); L.bindCams(); })),
         row('Kualitas', sel([['720p30', '720p 30'], ['720p60', '720p 60'], ['1080p30', '1080p 30'], ['1080p60', '1080p 60']], o.quality, (v) => L.camControl(inp, 'quality', v)),
           h('label', 'Bitrate'), sel([[2500, '2.5 Mbps'], [4000, '4 Mbps'], [6000, '6 Mbps'], [8000, '8 Mbps'], [12000, '12 Mbps']], o.bitrate, (v) => { o.bitrate = +v; L.camControl(inp, 'quality', o.quality); })),
-        row('Zoom', z),
+        row('Zoom', z, zv),
         h('div.row', h('button.btn', { onclick: () => L.camControl(inp, 'switch') }, '🔄 Ganti kamera depan/belakang'),
           h('button.btn', { onclick: () => { inp.rt.torch = !inp.rt.torch; L.camControl(inp, 'torch', inp.rt.torch); } }, '🔦 Senter'),
           h('button.btn', { onclick: () => L.camControl(inp, 'focus', 'auto') }, '🎯 Fokus otomatis'),

@@ -1104,6 +1104,12 @@ function smokeTest() {
               const r5 = await pr([[0.5, 0.5]]);
               log('Fase 8 koreksi warna native: ' + JSON.stringify(r5));
               if (!r5.pgm || !near(r5.p[0], [54, 54, 54], 5)) { fail++; log('GAGAL: koreksi warna tidak native'); } else log('Koreksi warna native: OK');
+              // --- Fase 10: kartu daftar input digambar mesin native (jendela per kartu)
+              await wait(1500);
+              const c10 = JSON.parse(await js(`JSON.stringify((() => { const N = KM.nengine, a = KM.getInput(window.__f8a), id = 'q' + String(a.id).replace(/[^\\w]/g, '').slice(0, 30), c = N.cards.get(id) || {};
+                return { on: N.cardOn(a), shown: [...N.cards.values()].filter((x) => x.shown).length, total: KM.state.inputs.length, line: c.line || '', cov: !!c.cov, live: !!(a.rt.card && a.rt.card._live) }; })())`));
+              log('Fase 10 kartu input native: ' + JSON.stringify(c10));
+              if (!c10.on || !c10.line) { fail++; log('GAGAL: kartu input tidak digambar mesin native'); } else log('Kartu input native: OK');
               // --- Fase 9: grid Preview native (kotak + label + tally di ukuran panel Preview)
               await js('KM.getInput(window.__f8a).cc = null; window.__pg = KM.settings.pvGrid; KM.settings.pvGrid = { on: true, ids: [window.__f8a, window.__f8b] }; KM.engine.setPreview(window.__f8b); KM.changed("settings"); 1');
               await wait(2500);

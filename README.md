@@ -140,6 +140,18 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.13
+Versi uji (beta).
+- **KLMCAM jauh lebih mulus, tanpa bercak** (mesin video native):
+  - Frame yang hilang di jaringan atau datang terlambat kini dikenali (nomor urut frame H.264) dan **tidak didekode** — itulah penyebab bercak/kotak-kotak. Mesin langsung meminta frame kunci baru ke HP, dan gambar terakhir yang bersih tetap tampil sampai frame kunci datang.
+  - Frame ditayangkan menurut **cap waktu asli dari HP** dengan penyangga jitter adaptif yang sangat kecil (±12–120 ms, otomatis mengikuti kondisi WiFi) → gerakan rata, tidak patah-patah.
+  - Frame dari HP kini dikirim **langsung** ke mesin native tanpa menunggu tampilan KLM yang sedang sibuk → jeda & tersendat berkurang.
+- **Zoom KLMCAM diperbaiki:**
+  - Slider zoom di KLM mengikuti rentang zoom lensa HP sebenarnya (atau 1–5× untuk zoom digital) dan selalu sama dengan HP — termasuk saat zoom dicubit di HP.
+  - Perintah zoom beruntun dari slider tidak lagi membuat HP error / beralih sendiri ke zoom digital.
+  - Zoom digital kini juga berlaku di monitor & rekaman mesin native (sebelumnya hanya di tampilan biasa).
+- **Kartu daftar input native.** Gambar di kartu daftar input (semua jenis input yang didukung mesin native) kini digambar mesin native setiap frame — semulus Preview/Program — lengkap dengan nomor, label LIVE/PVW, ikon jenis, meter audio, dan progres video. Klik, Ctrl+klik, dobel klik, klik kanan, dan gulir tetap berfungsi. Seret untuk mengurutkan input dilakukan dari bagian judul kartu.
+
 ### Baru di v1.18.0-beta.12
 Versi uji (beta).
 - **Mesin video native Fase 9:**

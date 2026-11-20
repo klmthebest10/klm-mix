@@ -103,7 +103,7 @@
         break;
       }
       case 'signal': await onSignal(m); break;
-      case 'cam-info': { const p = L.peers.get(m.from); if (p) { p.info = m.info; KM.changed('peers'); } break; }
+      case 'cam-info': { const p = L.peers.get(m.from); if (p) { p.info = m.info; if (m.info && m.info.zoom) p.zoom = m.info.zoom; KM.changed('peers'); } break; }
       case 'cam-quality': { // kualitas diubah di HP → input KLMCAM di PC ikut, lalu HP menerima balik bitrate milik PC
         const inp = S.inputs.find((i) => i.rt.camId === m.from);
         if (inp && QUALITIES.includes(m.quality)) {
@@ -113,9 +113,16 @@
         }
         break;
       }
-      case 'cam-zoom': { // zoom digital dari HP (kamera tanpa zoom hardware, mis. aplikasi Android) → dipotong di PC
+      case 'cam-zoom': { // nilai zoom dari HP: hardware (lensa HP) → hanya slider; digital (tanpa zoom hardware) → dipotong di PC
         const inp = S.inputs.find((i) => i.rt.camId === m.from);
-        if (inp) { inp.rt.dzoom = Math.max(1, Math.min(8, +m.z || 1)); inp.rt.zoom = inp.rt.dzoom; KM.changed('input'); }
+        if (inp) {
+          const p = L.peers.get(m.from);
+          if (p && m.hw != null) { p.zoom = { hw: !!m.hw, min: +m.min || 1, max: +m.max || 5 }; }
+          if (m.hw) { inp.rt.dzoom = 1; inp.rt.zoom = +m.z || 1; }
+          else { inp.rt.dzoom = Math.max(1, Math.min(8, +m.z || 1)); inp.rt.zoom = inp.rt.dzoom; }
+          // slider yang sedang digeser tidak ditimpa (nilai HP datang sedikit terlambat)
+          if (Date.now() - (inp.rt.zoomUiAt || 0) > 600) KM.changed('input');
+        }
         break;
       }
       case 'fn': {
@@ -251,6 +258,16 @@
       if (value !== 'user' && value !== 'environment') value = cur === 'user' ? 'environment' : cur === 'environment' ? 'user' : 1;
     }
     send({ t: 'cam-ctl', to: inp.rt.camId, cmd, value }); return true;
+  };
+  // rentang zoom HP (hardware: sesuai lensa; digital: 1–5×) & pengiriman zoom yang dibatasi ±25×/detik (slider digeser cepat)
+  L.zoomRange = (inp) => { const p = inp && inp.rt.camId && L.peers.get(inp.rt.camId), z = p && p.zoom; return z ? { min: Math.max(0.1, +z.min || 1), max: Math.max((+z.min || 1) + 0.1, +z.max || 5), hw: !!z.hw } : { min: 1, max: 5, hw: false }; };
+  L.zoomTo = function (inp, v) {
+    inp = KM.getInput(inp); if (!inp) return;
+    const r = L.zoomRange(inp); v = Math.max(r.min, Math.min(r.max, +v || 1));
+    inp.rt.zoom = v; inp.rt.zoomUiAt = Date.now(); inp.rt.zoomWant = v;
+    if (inp.rt.zoomT) return;
+    const go = () => { inp.rt.zoomT = 0; const w = inp.rt.zoomWant; if (w == null) return; inp.rt.zoomWant = null; L.camControl(inp, 'zoom', +w.toFixed(3)); inp.rt.zoomT = setTimeout(go, 40); };
+    go();
   };
   L.camFacing = (inp) => { const p = inp && inp.rt.camId && L.peers.get(inp.rt.camId); return (p && p.info && p.info.facing) || ''; };
 
