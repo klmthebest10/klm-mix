@@ -140,6 +140,13 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.7
+Versi uji (beta).
+- **Mesin video native Fase 4a: KLMCAM.** Video H.264 dari HP disalin langsung dari WebRTC (tanpa dekode ulang di halaman), lalu didekode mesin native di GPU (DXVA lewat Media Foundation, konversi warna D3D11 Video Processor). KLMCAM kini bisa tampil di monitor Preview/Program native dan ikut dalam output native. Jalur biasa tetap berjalan seperti sebelumnya. KLMCAM yang memakai codec selain H.264 tetap tampil biasa.
+- **Mesin video native Fase 4b: output native.** Rekam (MP4 terfragmentasi, aman bila aplikasi/listrik mati) dan streaming (lewat ffmpeg tanpa encode ulang) kini bisa dikodekan langsung oleh mesin native dari Program native: H.264 lewat encoder hardware Windows (NVENC / QuickSync / AMF bila ada) dan AAC dari audio Program. Selama itu kanvas Program di halaman berhenti dicat sehingga beban CPU dan RAM turun.
+- Output native dipakai otomatis bila semua input yang dipakai didukung mesin native (kamera USB / capture card, KLMCAM H.264, tangkap layar, warna, color bars, grafis UTC); bila tidak, rekam & streaming memakai jalur biasa seperti sebelumnya. Bila saat merekam/siaran native ada sumber yang tidak didukung masuk Program, muncul peringatan karena bagian itu tidak ikut terekam.
+- Pilihan baru di Pengaturan → Performa → Mesin video native: "KLMCAM didekode mesin native" dan "Rekam & streaming lewat mesin native" (keduanya aktif bila mesin native menyala), beserta keterangan kenapa output native belum dipakai.
+
 ### Baru di v1.18.0-beta.6
 Versi uji (beta).
 - **Mesin video native Fase 3: kamera USB / capture card lewat Media Foundation.** Bila mesin video native menyala, input "Kamera / Capture Card" dibuka langsung oleh mesin native (dekode MJPG/NV12 dan konversi warna di GPU). Gambarnya tampil di monitor native dan dikirim ke mesin utama sebagai tekstur GPU bersama untuk Program, rekam, streaming dan output, tanpa salinan CPU. Perangkat hanya dibuka sekali walau dipakai beberapa input dengan pengaturan sama.
