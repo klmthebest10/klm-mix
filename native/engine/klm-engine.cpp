@@ -38,6 +38,12 @@
 //   Kamera bisa ditampilkan di monitor native dengan id-nya (pvw <id> / pgm <id>).
 //   Keluaran: camok <id> <w> <h> <fps> <namaHex> | camerr <id> <pesan>
 //
+// Fase 4a — KLMCAM: video H.264 dari HP (frame terenkode, diteruskan KLM dari WebRTC) didekode GPU (DXVA, Media
+// Foundation) lalu dikonversi warna dengan D3D11 Video Processor → bisa tampil di monitor native & Program native:
+//   kenc <id> <key 0|1> <ts> <n>          + n byte H.264 Annex-B (satu frame) langsung sesudah baris ini (khusus KLM)
+//   kdecoff <id>                          hentikan dekoder
+//   Keluaran: kok <id> <w> <h> <dxva 0|1> (frame pertama) | kerr <id> <pesan>
+//
 // Keluaran stdout (satu baris per kejadian): ready <adapter> | shown <bus> | hidden <bus> | click <bus> <x> <y> <btn> <dbl>
 //   | srcerr <id> <pesan> | srcok <id> <w> <h> | stats fps=.. ms=.. mem=.. utex=.. | err <pesan>
 //   | uack <layer> <seq> | uready <layer> | uerr <layer> <pesan>
@@ -53,6 +59,9 @@
 #include <mfidl.h>
 #include <mfreadwrite.h>
 #include <mferror.h>
+#include <wmcodecdsp.h>
+#include <codecapi.h>
+#include <condition_variable>
 #include <timeapi.h>
 #include <wrl/client.h>
 #include <atomic>
@@ -115,7 +124,7 @@ static void stdinThread() {
       char c = buf[i];
       if (c == '\n') {
         if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (line.compare(0, 6, "ublob ") == 0) {
+        if (line.compare(0, 6, "ublob ") == 0 || line.compare(0, 5, "kenc ") == 0) {
           size_t sp = line.find_last_of(' ');
           unsigned long long nb = strtoull(line.c_str() + sp + 1, nullptr, 10);
           if (nb > 0 && nb <= 64ull * 1024 * 1024) { blob.line = line; blob.data.clear(); blob.data.reserve((size_t)nb); need = (size_t)nb; }
@@ -770,6 +779,188 @@ static void camTick() {
   if (g_query) { g_ctx->End(g_query.Get()); g_ctx->Flush(); double t0 = nowMs(); while (g_ctx->GetData(g_query.Get(), nullptr, 0, 0) == S_FALSE && nowMs() - t0 < 50) YieldProcessor(); }
   for (auto& e : evs) emit("%s", e.c_str());
 }
+// ---- KLMCAM: dekoder H.264 (Fase 4a)
+struct KDec {
+  std::string id; std::shared_ptr<Cam> cam;
+  std::mutex qmx; std::condition_variable cv; std::deque<std::pair<std::vector<uint8_t>, LONGLONG>> q; std::atomic<bool> stop{ false };
+  ComPtr<IMFTransform> mft; bool d3d = false, provides = false, started = false, okSent = false; DWORD cb = 0;
+  UINT cw = 0, ch = 0, dw = 0, dh = 0; LONG stride = 0; bool hd = true;
+  ComPtr<ID3D11VideoDevice> vdev; ComPtr<ID3D11VideoContext> vctx;
+  ComPtr<ID3D11VideoProcessorEnumerator> ven; ComPtr<ID3D11VideoProcessor> vp; ComPtr<ID3D11VideoProcessorOutputView> ov;
+  UINT vpInW = 0, vpInH = 0; ID3D11Texture2D* ovTex = nullptr;
+  std::map<std::pair<ID3D11Texture2D*, UINT>, ComPtr<ID3D11VideoProcessorInputView>> iv;
+  ComPtr<ID3D11Texture2D> nv12; // jalur CPU
+  int errs = 0;
+};
+static std::map<std::string, std::shared_ptr<KDec>> g_kdec;
+static bool kSetOutput(KDec& k) {
+  for (DWORD i = 0;; i++) {
+    ComPtr<IMFMediaType> t; if (FAILED(k.mft->GetOutputAvailableType(0, i, &t))) return false;
+    GUID sub{}; t->GetGUID(MF_MT_SUBTYPE, &sub);
+    if (sub != MFVideoFormat_NV12) continue;
+    if (FAILED(k.mft->SetOutputType(0, t.Get(), 0))) return false;
+    UINT32 w = 0, h = 0; MFGetAttributeSize(t.Get(), MF_MT_FRAME_SIZE, &w, &h); k.cw = w; k.ch = h; k.dw = w; k.dh = h;
+    MFVideoArea ap{}; UINT32 sz = 0;
+    if (SUCCEEDED(t->GetBlob(MF_MT_MINIMUM_DISPLAY_APERTURE, (UINT8*)&ap, sizeof ap, &sz)) && ap.Area.cx > 0 && ap.Area.cy > 0) { k.dw = (UINT)ap.Area.cx; k.dh = (UINT)ap.Area.cy; }
+    UINT32 st = 0; k.stride = SUCCEEDED(t->GetUINT32(MF_MT_DEFAULT_STRIDE, &st)) ? (LONG)st : (LONG)w;
+    k.hd = k.dh >= 600;
+    MFT_OUTPUT_STREAM_INFO si{}; k.mft->GetOutputStreamInfo(0, &si);
+    k.provides = (si.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES) != 0; k.cb = si.cbSize;
+    k.iv.clear(); k.nv12.Reset();
+    return true;
+  }
+}
+static bool kInit(KDec& k) {
+  if (!initMF()) return false;
+  HRESULT hr = CoCreateInstance(CLSID_CMSH264DecoderMFT, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&k.mft));
+  if (FAILED(hr)) { emit("kerr %s dekoder H.264 Windows tidak ada (0x%08lx)", k.id.c_str(), (unsigned long)hr); return false; }
+  ComPtr<IMFAttributes> a;
+  if (SUCCEEDED(k.mft->GetAttributes(&a)) && a) { a->SetUINT32(CODECAPI_AVLowLatencyMode, TRUE); a->SetUINT32(MF_LOW_LATENCY, TRUE); }
+  g_dev.As(&k.vdev); g_ctx.As(&k.vctx);
+  if (g_mfMgr && k.vdev) k.d3d = SUCCEEDED(k.mft->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)g_mfMgr.Get()));
+  ComPtr<IMFMediaType> in; MFCreateMediaType(&in);
+  in->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video); in->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
+  in->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+  if (FAILED(hr = k.mft->SetInputType(0, in.Get(), 0))) { emit("kerr %s SetInputType 0x%08lx", k.id.c_str(), (unsigned long)hr); return false; }
+  kSetOutput(k);
+  k.mft->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0); k.mft->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
+  k.started = true;
+  return true;
+}
+// NV12 (tekstur dekoder / tekstur CPU) → BGRA tekstur kamera, dengan D3D11 Video Processor (GPU)
+static bool kBlit(KDec& k, ID3D11Texture2D* src, UINT sub) {
+  Cam& c = *k.cam;
+  std::lock_guard<std::mutex> l(c.mx);
+  if (!camTex(c, k.dw, k.dh, DXGI_FORMAT_B8G8R8A8_UNORM, true)) return false;
+  D3D11_TEXTURE2D_DESC sd{}; src->GetDesc(&sd);
+  if (!k.vp || k.vpInW != sd.Width || k.vpInH != sd.Height || k.ovTex != c.tex.Get()) {
+    k.vp.Reset(); k.ven.Reset(); k.ov.Reset(); k.iv.clear();
+    D3D11_VIDEO_PROCESSOR_CONTENT_DESC cd{}; cd.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
+    cd.InputWidth = sd.Width; cd.InputHeight = sd.Height; cd.OutputWidth = k.dw; cd.OutputHeight = k.dh; cd.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
+    cd.InputFrameRate = { 30, 1 }; cd.OutputFrameRate = { 30, 1 };
+    if (FAILED(k.vdev->CreateVideoProcessorEnumerator(&cd, &k.ven)) || FAILED(k.vdev->CreateVideoProcessor(k.ven.Get(), 0, &k.vp))) { emit("kerr %s Video Processor tidak tersedia", k.id.c_str()); return false; }
+    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC od{}; od.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
+    if (FAILED(k.vdev->CreateVideoProcessorOutputView(c.tex.Get(), k.ven.Get(), &od, &k.ov))) { emit("kerr %s output view", k.id.c_str()); k.vp.Reset(); return false; }
+    k.vpInW = sd.Width; k.vpInH = sd.Height; k.ovTex = c.tex.Get();
+    D3D11_VIDEO_PROCESSOR_COLOR_SPACE in{}; in.YCbCr_Matrix = k.hd ? 1 : 0; in.Nominal_Range = D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_16_235;
+    D3D11_VIDEO_PROCESSOR_COLOR_SPACE out{}; out.RGB_Range = 0; out.Nominal_Range = D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_0_255;
+    k.vctx->VideoProcessorSetStreamColorSpace(k.vp.Get(), 0, &in);
+    k.vctx->VideoProcessorSetOutputColorSpace(k.vp.Get(), &out);
+    k.vctx->VideoProcessorSetStreamFrameFormat(k.vp.Get(), 0, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
+    RECT sr{ 0, 0, (LONG)k.dw, (LONG)k.dh }; // buang bantalan (1080 dari 1088)
+    k.vctx->VideoProcessorSetStreamSourceRect(k.vp.Get(), 0, TRUE, &sr);
+    k.vctx->VideoProcessorSetStreamAutoProcessingMode(k.vp.Get(), 0, FALSE);
+  }
+  auto key = std::make_pair(src, sub);
+  auto it = k.iv.find(key);
+  if (it == k.iv.end()) {
+    if (k.iv.size() > 64) k.iv.clear();
+    D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC idd{}; idd.ViewDimension = D3D11_VPIV_DIMENSION_TEXTURE2D; idd.Texture2D.ArraySlice = sub;
+    ComPtr<ID3D11VideoProcessorInputView> v;
+    if (FAILED(k.vdev->CreateVideoProcessorInputView(src, k.ven.Get(), &idd, &v))) { emit("kerr %s input view", k.id.c_str()); return false; }
+    it = k.iv.emplace(key, v).first;
+  }
+  D3D11_VIDEO_PROCESSOR_STREAM st{}; st.Enable = TRUE; st.pInputSurface = it->second.Get();
+  if (FAILED(k.vctx->VideoProcessorBlt(k.vp.Get(), k.ov.Get(), 0, 1, &st))) return false;
+  c.got = true;
+  return true;
+}
+static void kDeliver(KDec& k, IMFSample* smp) {
+  ComPtr<IMFMediaBuffer> mb; if (FAILED(smp->GetBufferByIndex(0, &mb))) return;
+  bool ok = false;
+  ComPtr<IMFDXGIBuffer> db;
+  if (SUCCEEDED(mb.As(&db))) {
+    ComPtr<ID3D11Texture2D> t; UINT sub = 0;
+    if (SUCCEEDED(db->GetResource(IID_PPV_ARGS(&t))) && SUCCEEDED(db->GetSubresourceIndex(&sub))) ok = kBlit(k, t.Get(), sub);
+  } else if (k.vdev) { // dekoder perangkat lunak: NV12 di memori → tekstur NV12 → Video Processor
+    BYTE* p = nullptr; LONG pitch = 0; DWORD mx = 0, cur = 0; ComPtr<IMF2DBuffer> b2; bool l2 = false;
+    if (SUCCEEDED(mb.As(&b2)) && SUCCEEDED(b2->Lock2D(&p, &pitch))) l2 = true;
+    else if (SUCCEEDED(mb->Lock(&p, &mx, &cur))) pitch = k.stride ? k.stride : (LONG)k.cw;
+    else return;
+    if (!k.nv12) {
+      D3D11_TEXTURE2D_DESC d{}; d.Width = k.cw & ~1u; d.Height = k.ch & ~1u; d.MipLevels = 1; d.ArraySize = 1; d.Format = DXGI_FORMAT_NV12; d.SampleDesc.Count = 1;
+      d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+      if (FAILED(g_dev->CreateTexture2D(&d, nullptr, &k.nv12))) { emit("kerr %s tekstur NV12 tidak didukung", k.id.c_str()); }
+    }
+    if (k.nv12 && pitch > 0) {
+      // bidang Y lalu UV berurutan (tinggi buffer = tinggi kode)
+      std::vector<uint8_t> tmp((size_t)pitch * k.ch * 3 / 2);
+      memcpy(tmp.data(), p, std::min<size_t>(tmp.size(), l2 ? tmp.size() : (size_t)cur));
+      g_ctx->UpdateSubresource(k.nv12.Get(), 0, nullptr, tmp.data(), (UINT)pitch, 0);
+      ok = kBlit(k, k.nv12.Get(), 0);
+    }
+    if (l2) b2->Unlock2D(); else mb->Unlock();
+  }
+  if (!ok) return;
+  k.cam->fresh = true; k.cam->frames++;
+  if (!k.okSent) { k.okSent = true; emit("kok %s %u %u %d", k.id.c_str(), k.dw, k.dh, k.d3d ? 1 : 0); }
+}
+static void kDrain(KDec& k) {
+  for (int guard = 0; guard < 16; guard++) {
+    MFT_OUTPUT_DATA_BUFFER ob{}; ComPtr<IMFSample> own;
+    if (!k.provides) {
+      MFCreateSample(&own); ComPtr<IMFMediaBuffer> b;
+      MFCreateMemoryBuffer(k.cb ? k.cb : (DWORD)(k.cw * k.ch * 3 / 2 + 4096), &b); own->AddBuffer(b.Get()); ob.pSample = own.Get();
+    }
+    DWORD st = 0; HRESULT hr = k.mft->ProcessOutput(0, 1, &ob, &st);
+    if (ob.pEvents) ob.pEvents->Release();
+    if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) break;
+    if (hr == MF_E_TRANSFORM_STREAM_CHANGE) { kSetOutput(k); continue; }
+    if (FAILED(hr)) { if (++k.errs < 4) emit("kerr %s ProcessOutput 0x%08lx", k.id.c_str(), (unsigned long)hr); break; }
+    if (ob.pSample) kDeliver(k, ob.pSample);
+    if (k.provides && ob.pSample) ob.pSample->Release();
+  }
+}
+static void kThread(std::shared_ptr<KDec> k) {
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  if (!kInit(*k)) { k->stop = true; CoUninitialize(); return; }
+  while (!k->stop) {
+    std::pair<std::vector<uint8_t>, LONGLONG> f;
+    {
+      std::unique_lock<std::mutex> l(k->qmx);
+      k->cv.wait(l, [&] { return k->stop || !k->q.empty(); });
+      if (k->stop) break;
+      // tertinggal (GPU sibuk): buang sampai frame kunci terakhir tidak bisa di sini (butuh urutan) → antrean dibatasi di pengirim
+      f = std::move(k->q.front()); k->q.pop_front();
+    }
+    ComPtr<IMFSample> s; ComPtr<IMFMediaBuffer> b;
+    if (FAILED(MFCreateSample(&s)) || FAILED(MFCreateMemoryBuffer((DWORD)f.first.size(), &b))) continue;
+    BYTE* p = nullptr; b->Lock(&p, nullptr, nullptr); memcpy(p, f.first.data(), f.first.size()); b->Unlock(); b->SetCurrentLength((DWORD)f.first.size());
+    s->AddBuffer(b.Get()); s->SetSampleTime(f.second); s->SetSampleDuration(333333);
+    HRESULT hr = k->mft->ProcessInput(0, s.Get(), 0);
+    if (hr == MF_E_NOTACCEPTING) { kDrain(*k); hr = k->mft->ProcessInput(0, s.Get(), 0); }
+    kDrain(*k);
+  }
+  if (k->mft) { k->mft->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0); k->mft->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0); }
+  k->iv.clear(); k->ov.Reset(); k->vp.Reset(); k->ven.Reset(); k->mft.Reset();
+  CoUninitialize();
+}
+static void kOff(const std::string& id) {
+  auto it = g_kdec.find(id); if (it == g_kdec.end()) return;
+  { std::lock_guard<std::mutex> l(it->second->qmx); it->second->stop = true; } it->second->cv.notify_all();
+  g_kdec.erase(it); g_cams.erase(id);
+}
+static void kFeed(const std::string& id, bool key, LONGLONG ts, std::vector<uint8_t>&& data) {
+  auto it = g_kdec.find(id);
+  if (it == g_kdec.end()) {
+    if (!key) return; // mulai dari frame kunci
+    auto k = std::make_shared<KDec>(); k->id = id;
+    k->cam = std::make_shared<Cam>(); k->cam->id = id;
+    g_cams[id] = k->cam; g_kdec[id] = k;
+    std::thread(kThread, k).detach();
+    it = g_kdec.find(id);
+  }
+  KDec& k = *it->second;
+  if (k.stop) { kOff(id); return; }
+  std::lock_guard<std::mutex> l(k.qmx);
+  if (k.q.size() > 12) { // dekoder tertinggal jauh → buang antrean, lanjut dari frame kunci berikutnya
+    if (!key) return;
+    k.q.clear();
+  }
+  k.q.emplace_back(std::move(data), ts);
+  k.cv.notify_one();
+}
+
 static void camCommand(const std::string& c, std::istringstream& is) {
   if (c == "camlist") {
     for (auto& d : listCams()) emit("camdev %s %s", hexOf(narrow(d.name.c_str())).c_str(), hexOf(narrow(d.link.c_str())).c_str());
@@ -883,6 +1074,12 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
   std::istringstream is(line); std::string c; is >> c;
   if (c == "utex" || c == "ulay" || c == "uclear" || c == "ureset" || c == "utk" || c == "ublob" || c == "utkgeo" || c == "utklive") { utcCommand(c, is, data); return; }
   if (c == "cam" || c == "camtest" || c == "camoff" || c == "camexp" || c == "crel" || c == "camlist") { camCommand(c, is); return; }
+  if (c == "kenc") {
+    std::string id; int key = 0; long long ts = 0; size_t n = 0; is >> id >> key >> ts >> n;
+    if (!id.empty() && id.size() <= 64 && !data.empty()) kFeed(id, key != 0, (LONGLONG)ts, std::vector<uint8_t>(data.begin(), data.end()));
+    return;
+  }
+  if (c == "kdecoff") { std::string id; is >> id; kOff(id); return; }
   if (c == "probe") {
     std::string bn; double fx = 0, fy = 0; is >> bn >> fx >> fy; int px[3] = { -1, -1, -1 };
     Bus& b = bn == "pvw" ? g_pvw : g_pgm;
@@ -985,6 +1182,51 @@ static bool readPixel(Bus& b, UINT x, UINT y, int rgb[3]) {
   g_ctx->Unmap(st.Get(), 0);
   return true;
 }
+// uji: buat potongan H.264 (encoder perangkat lunak Windows) dari warna NV12 polos
+static bool hasSps(const std::vector<uint8_t>& b) { for (size_t i = 0; i + 3 < b.size(); i++) if (b[i] == 0 && b[i + 1] == 0 && b[i + 2] == 1 && (b[i + 3] & 0x1f) == 7) return true; return false; }
+static bool encTest(UINT W, UINT H, int n, uint8_t Y, uint8_t U, uint8_t V, std::vector<std::vector<uint8_t>>& out, std::string& why) {
+  ComPtr<IMFTransform> e;
+  HRESULT hr = CoCreateInstance(CLSID_CMSH264EncoderMFT, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&e));
+  if (FAILED(hr)) { why = "encoder H.264 tidak ada"; return false; }
+  ComPtr<IMFMediaType> ot; MFCreateMediaType(&ot);
+  ot->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video); ot->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264); ot->SetUINT32(MF_MT_AVG_BITRATE, 2000000);
+  MFSetAttributeSize(ot.Get(), MF_MT_FRAME_SIZE, W, H); MFSetAttributeRatio(ot.Get(), MF_MT_FRAME_RATE, 30, 1);
+  ot->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive); ot->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Base);
+  if (FAILED(hr = e->SetOutputType(0, ot.Get(), 0))) { why = "SetOutputType"; return false; }
+  ComPtr<IMFMediaType> it; MFCreateMediaType(&it);
+  it->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video); it->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
+  MFSetAttributeSize(it.Get(), MF_MT_FRAME_SIZE, W, H); MFSetAttributeRatio(it.Get(), MF_MT_FRAME_RATE, 30, 1); it->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
+  if (FAILED(hr = e->SetInputType(0, it.Get(), 0))) { why = "SetInputType"; return false; }
+  std::vector<uint8_t> seq;
+  { ComPtr<IMFMediaType> cur; UINT32 sz = 0; if (SUCCEEDED(e->GetOutputCurrentType(0, &cur)) && SUCCEEDED(cur->GetBlobSize(MF_MT_MPEG_SEQUENCE_HEADER, &sz)) && sz) { seq.resize(sz); cur->GetBlob(MF_MT_MPEG_SEQUENCE_HEADER, seq.data(), sz, nullptr); } }
+  e->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, 0); e->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0);
+  std::vector<uint8_t> fr((size_t)W * H * 3 / 2, Y);
+  for (size_t i = (size_t)W * H; i + 1 < fr.size(); i += 2) { fr[i] = U; fr[i + 1] = V; }
+  MFT_OUTPUT_STREAM_INFO si{}; e->GetOutputStreamInfo(0, &si);
+  auto drain = [&]() {
+    for (;;) {
+      ComPtr<IMFSample> os; ComPtr<IMFMediaBuffer> ob; MFCreateSample(&os); MFCreateMemoryBuffer(si.cbSize ? si.cbSize : W * H * 2, &ob); os->AddBuffer(ob.Get());
+      MFT_OUTPUT_DATA_BUFFER d{}; d.pSample = os.Get(); DWORD st = 0;
+      HRESULT h2 = e->ProcessOutput(0, 1, &d, &st); if (d.pEvents) d.pEvents->Release();
+      if (FAILED(h2)) break;
+      BYTE* p = nullptr; DWORD len = 0; ob->Lock(&p, nullptr, &len);
+      std::vector<uint8_t> v(p, p + len); ob->Unlock();
+      if (out.empty() && !seq.empty() && !hasSps(v)) v.insert(v.begin(), seq.begin(), seq.end());
+      if (!v.empty()) out.push_back(std::move(v));
+    }
+  };
+  for (int i = 0; i < n; i++) {
+    ComPtr<IMFSample> sm; ComPtr<IMFMediaBuffer> b; MFCreateSample(&sm); MFCreateMemoryBuffer((DWORD)fr.size(), &b);
+    BYTE* p = nullptr; b->Lock(&p, nullptr, nullptr); memcpy(p, fr.data(), fr.size()); b->Unlock(); b->SetCurrentLength((DWORD)fr.size());
+    sm->AddBuffer(b.Get()); sm->SetSampleTime((LONGLONG)i * 333333); sm->SetSampleDuration(333333);
+    if (FAILED(e->ProcessInput(0, sm.Get(), 0))) { drain(); e->ProcessInput(0, sm.Get(), 0); }
+    drain();
+  }
+  e->ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0); drain();
+  if (out.empty()) { why = "encoder tidak menghasilkan frame"; return false; }
+  return true;
+}
+
 static int selftest(bool warp) {
   if (!initD3D(warp)) return 2;
   registerClass();
@@ -1073,6 +1315,24 @@ static int selftest(bool warp) {
     emit("  (info) Media Foundation: %s, %d kamera, pengelola DXGI %s", g_mf ? "aktif" : "gagal", (int)devs.size(), g_mfMgr ? "ada" : "tidak ada");
     command("cam c2 1280 720 30 -"); run(1);
     if (g_cams.count("c2")) { Sleep(1500); run(3); emit("  (info) kamera nyata pertama: frame=%d", g_cams["c2"]->frames.load()); command("camoff c2"); }
+  }
+  // ---- Fase 4a: KLMCAM — frame H.264 terenkode → dekoder Media Foundation → Video Processor → monitor native
+  {
+    std::vector<std::vector<uint8_t>> h264; std::string why;
+    if (!initMF() || !encTest(640, 360, 20, 150, 128, 128, h264, why)) emit("  (info) uji dekoder KLMCAM dilewati: %s", why.c_str());
+    else {
+      size_t tot = 0; for (auto& f : h264) tot += f.size();
+      emit("  (info) potongan H.264 uji: %d frame, %zu byte, SPS di frame pertama=%d", (int)h264.size(), tot, hasSps(h264[0]) ? 1 : 0);
+      for (size_t i = 0; i < h264.size(); i++) { char b[96]; snprintf(b, sizeof b, "kenc kt %d %lld %zu", i == 0 ? 1 : 0, (long long)i * 333333, h264[i].size()); command(b, h264[i]); }
+      double t0 = nowMs(); while (nowMs() - t0 < 4000 && !(g_cams.count("kt") && g_cams["kt"]->frames > 5)) { run(1); Sleep(20); }
+      int fr = g_cams.count("kt") ? g_cams["kt"]->frames.load() : 0;
+      bool d3d = g_kdec.count("kt") && g_kdec["kt"]->d3d;
+      emit("  %s dekoder KLMCAM: %d frame terdekode (%s)", fr > 5 ? "OK " : "GAGAL", fr, d3d ? "DXVA GPU" : "perangkat lunak"); if (fr <= 5) ok = 0;
+      command("pgm kt"); run(3);
+      chk(g_pgm, 960, 540, 156, 156, 156, 8, "KLMCAM terdekode di Program (abu Y=150)");
+      command("kdecoff kt"); command("pgm a"); run(2);
+      emit("  %s dekoder KLMCAM dihentikan", !g_kdec.count("kt") ? "OK " : "GAGAL"); if (g_kdec.count("kt")) ok = 0;
+    }
   }
   command("src s screen 0 0 1024 768"); run(10);
   emit("  (info) tangkap layar DXGI: %s", g_src.count("s") && g_src["s"]->dup ? "tersedia" : "tidak tersedia di mesin ini (wajar di CI tanpa sesi desktop)");

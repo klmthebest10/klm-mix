@@ -9,4 +9,4 @@ target_compile_definitions(klm-engine PRIVATE _WIN32_WINNT=0x0A00 WINVER=0x0A00 
 if(MSVC)
   target_compile_options(klm-engine PRIVATE /W3 /utf-8 /O2)
 endif()
-target_link_libraries(klm-engine d3d11 dxgi d3dcompiler user32 gdi32 psapi winmm ole32 mfplat mf mfreadwrite mfuuid)
+target_link_libraries(klm-engine d3d11 dxgi d3dcompiler user32 gdi32 psapi winmm ole32 mfplat mf mfreadwrite mfuuid wmcodecdspuuid)
