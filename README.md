@@ -140,6 +140,12 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.8
+Versi uji (beta).
+- **Mesin video native Fase 5: file video & gambar.** Input Video (MP4/MOV/MKV/AVI dan format lain yang didukung Windows) didekode mesin native di GPU (DXVA lewat Media Foundation) dan posisinya mengikuti pemutar KLM (putar, jeda, lompat, laju, loop, mark in/out). Suara video tetap dari KLM seperti biasa. Input Gambar (PNG/JPG/BMP/TIFF/WebP) dimuat lewat Windows Imaging Component langsung ke GPU; gambar sangat besar diperkecil ke 4096 px.
+- File video & gambar dibuka mesin native sejak input ditambahkan, jadi sudah siap saat dipotong ke Program.
+- Karena video & gambar kini didukung, **rekam & streaming native** bisa dipakai pada lebih banyak acara (kamera, KLMCAM H.264, layar, video, gambar, warna, grafis UTC). Daftar putar, GIF bergerak, SVG dan sumber dari internet masih memakai jalur biasa.
+
 ### Baru di v1.18.0-beta.7
 Versi uji (beta).
 - **Mesin video native Fase 4a: KLMCAM.** Video H.264 dari HP disalin langsung dari WebRTC (tanpa dekode ulang di halaman), lalu didekode mesin native di GPU (DXVA lewat Media Foundation, konversi warna D3D11 Video Processor). KLMCAM kini bisa tampil di monitor Preview/Program native dan ikut dalam output native. Jalur biasa tetap berjalan seperti sebelumnya. KLMCAM yang memakai codec selain H.264 tetap tampil biasa.
