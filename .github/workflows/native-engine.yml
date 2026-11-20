@@ -20,9 +20,24 @@ jobs:
           cmake --build native/engine/build --config Release
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Get-Item native/engine/build/Release/klm-engine.exe | ForEach-Object { Write-Host ("klm-engine.exe: {0:N0} KB" -f ($_.Length / 1KB)) }
+      # Latar AI native: model yang sama dengan aplikasi + keluaran referensi dari TensorFlow Lite resmi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Model Latar AI + referensi TensorFlow Lite
+        shell: pwsh
+        run: |
+          $u = "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite"
+          Invoke-WebRequest -Uri $u -OutFile "$env:RUNNER_TEMP\seg.tflite" -MaximumRetryCount 3 -RetryIntervalSec 5
+          python -m pip install --quiet --disable-pip-version-check tensorflow-cpu==2.17.1 numpy
+          if ($LASTEXITCODE -ne 0) { python -m pip install --quiet --disable-pip-version-check tensorflow numpy }
+          python native/engine/tools/seg_ref.py "$env:RUNNER_TEMP\seg.tflite" "$env:RUNNER_TEMP\segref"
+          if ($LASTEXITCODE -ne 0) { Write-Host "::warning::referensi TensorFlow gagal dibuat" }
       - name: Uji mandiri (selftest)
         shell: pwsh
         run: |
+          $env:KLM_SEG_MODEL = "$env:RUNNER_TEMP\seg.tflite"
+          if (Test-Path "$env:RUNNER_TEMP\segref\out.bin") { $env:KLM_SEG_REF = "$env:RUNNER_TEMP\segref" }
           & native/engine/build/Release/klm-engine.exe --selftest
           if ($LASTEXITCODE -ne 0) { Write-Host "::error::selftest gagal (kode $LASTEXITCODE)"; exit 1 }
       - uses: actions/upload-artifact@v4

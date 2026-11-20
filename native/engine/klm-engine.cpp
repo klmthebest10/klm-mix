@@ -87,6 +87,9 @@
 //   trans <ms> <from> <to> stinger <sumber> <cut ms>   video stinger (sumber transparan) di atas, ganti sumber di titik cut
 //   ptex <id> <handle NT> <w> <h> <seq>  sumber tekstur bersama ber-alpha premultiplied (halaman video stinger offscreen)
 //   bsize <pvw|pgm> <w> <h>              ukuran gambar monitor (0 0 = output) — grid Preview memakai rasio panelnya
+//   segmodel <path>                      muat model Latar AI (.tflite) → "segmodel ok <info>" / "segmodel err <alasan>"
+//   seg … <nat> <edge> <inv> <follow> <fzoom> <hideEmpty>   nat 1 = mask dari model native (bingkai & sembunyikan dihitung mesin)
+//   segnorm <skala> <geser>              rentang masukan model (bawaan 1 0 = 0..1)
 //
 // Keluaran stdout (satu baris per kejadian): ready <adapter> | shown <bus> | hidden <bus> | click <bus> <x> <y> <btn> <dbl>
 //   | srcerr <id> <pesan> | srcok <id> <w> <h> | stats fps=.. ms=.. mem=.. utex=.. | err <pesan>
@@ -1175,9 +1178,14 @@ static void fillPx(const Rc& d, float r, float g, float b, float a, const Mask& 
 // ---- efek per sumber (Fase 8)
 struct FxN { float bri = 0, con = 1, sat = 1, hue = 0, gam = 1; bool cc = false, key = false, luma = false; float kc[3] = { 0, 1, 0 }; float sim = 0.4f, smo = 0.08f, spill = 0.1f, lo = 0.05f, hi = 0.15f; };
 static std::map<std::string, FxN> g_fx;
-// latar AI: mask orang dari model segmentasi KLM (kecil, per frame) + mode latar
+#include "klm-seg.inl"
+// latar AI: mask orang (dari model segmentasi native di GPU, atau dari KLM bila model native tidak tersedia) + mode latar
 struct SegN { int mode = 0; double feather = 3, blur = 14, cx = 0, cy = 0, cw = 1; float col[3] = { 0, 0.69f, 0.25f }; std::string bg; int bgFit = 0; bool hide = false;
-  ComPtr<ID3D11Texture2D> tex; ComPtr<ID3D11ShaderResourceView> srv; UINT mw = 0, mh = 0; };
+  ComPtr<ID3D11Texture2D> tex; ComPtr<ID3D11ShaderResourceView> srv; UINT mw = 0, mh = 0;
+  // model native (Fase 9): parameter sama dengan segment.js, bingkai otomatis & deteksi orang dihitung di sini
+  bool nat = false, inv = false, follow = false, hideEmpty = false, person = false; double edge = 0.5, fzoom = 1.6, lastInf = -1e9, box[4] = { 0, 0, 1, 1 }, F[3] = { 0, 0, 1 }; int infN = 0;
+  ComPtr<ID3D11Texture2D> nTex; ComPtr<ID3D11ShaderResourceView> nSrv; ComPtr<ID3D11UnorderedAccessView> nUav;
+  ComPtr<ID3D11Buffer> stB; ComPtr<ID3D11UnorderedAccessView> stU; ComPtr<ID3D11Texture2D> rb[2]; bool rbPend[2] = { false, false }; int rbK = 0; };
 static std::map<std::string, SegN> g_seg;
 // posisi input (Fase 8): fit / zoom / geser / pangkas / rotasi milik input — sama dengan drawInputRect di engine.js
 struct PosN { int fit = 1; double zoom = 1, x = 0, y = 0, cl = 0, cr = 0, ct = 0, cb = 0, rot = 0; };
@@ -1934,6 +1942,61 @@ static void utcCommand(const std::string& c, std::istringstream& is, const std::
 }
 
 static float ease(float p) { p = p < 0 ? 0 : p > 1 ? 1 : p; return p < 0.5f ? 4 * p * p * p : 1 - std::pow(-2 * p + 2, 3.0f) / 2; } // = KM.ease
+// ---- Latar AI native (Fase 9): model dijalankan untuk sumber yang sedang dipakai, ±30×/detik (sama dengan segment.js)
+static bool segEnsure(SegN& g) {
+  const UINT w = (UINT)segm::M.OW, h = (UINT)segm::M.OH;
+  if (g.nTex && g.mw == w && g.mh == h) return true;
+  g.nTex.Reset(); g.nSrv.Reset(); g.nUav.Reset(); g.stB.Reset(); g.stU.Reset(); g.rb[0].Reset(); g.rb[1].Reset(); g.rbPend[0] = g.rbPend[1] = false;
+  D3D11_TEXTURE2D_DESC d{}; d.Width = w; d.Height = h; d.MipLevels = 1; d.ArraySize = 1; d.Format = DXGI_FORMAT_R8_UNORM; d.SampleDesc.Count = 1;
+  d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
+  if (FAILED(g_dev->CreateTexture2D(&d, nullptr, &g.nTex)) || FAILED(g_dev->CreateShaderResourceView(g.nTex.Get(), nullptr, &g.nSrv)) || FAILED(g_dev->CreateUnorderedAccessView(g.nTex.Get(), nullptr, &g.nUav))) return false;
+  D3D11_TEXTURE2D_DESC r = d; r.Usage = D3D11_USAGE_STAGING; r.BindFlags = 0; r.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+  for (auto& t : g.rb) if (FAILED(g_dev->CreateTexture2D(&r, nullptr, &t))) return false;
+  std::vector<float> z((size_t)w * h, 0.f);
+  D3D11_BUFFER_DESC bd{}; bd.ByteWidth = w * h * 4; bd.Usage = D3D11_USAGE_DEFAULT; bd.BindFlags = D3D11_BIND_UNORDERED_ACCESS; bd.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED; bd.StructureByteStride = 4;
+  D3D11_SUBRESOURCE_DATA sd{ z.data(), 0, 0 };
+  if (FAILED(g_dev->CreateBuffer(&bd, &sd, &g.stB))) return false;
+  D3D11_UNORDERED_ACCESS_VIEW_DESC uv{}; uv.Format = DXGI_FORMAT_UNKNOWN; uv.ViewDimension = D3D11_UAV_DIMENSION_BUFFER; uv.Buffer.NumElements = w * h;
+  if (FAILED(g_dev->CreateUnorderedAccessView(g.stB.Get(), &uv, &g.stU))) return false;
+  g.mw = w; g.mh = h; return true;
+}
+static void segInfer(const std::string& id, SegN& g) {
+  SrcView v; if (!getSrv(id, v) || !segEnsure(g)) return;
+  const float lo = (float)std::max(0.02, g.edge - 0.22), hi = (float)std::min(0.98, g.edge + 0.22);
+  segm::feed(v.srv.Get()); segm::runOps(); segm::post(g.stU.Get(), g.nUav.Get(), g.inv, lo, hi);
+  g.srv = g.nSrv; g.infN++;
+  // deteksi orang & kotaknya (untuk bingkai otomatis / sembunyikan): baca balik mask sebelumnya (tidak menunggu GPU)
+  const int k = g.rbK, o = 1 - k;
+  if (g.rbPend[o]) {
+    D3D11_MAPPED_SUBRESOURCE m;
+    if (SUCCEEDED(g_ctx->Map(g.rb[o].Get(), 0, D3D11_MAP_READ, 0, &m))) {
+      const UINT w = g.mw, h = g.mh; size_t cnt = 0; UINT x0 = w, y0 = h, x1 = 0, y1 = 0;
+      for (UINT y = 0; y < h; y++) { const uint8_t* r = (const uint8_t*)m.pData + (size_t)y * m.RowPitch; for (UINT x = 0; x < w; x++) if (r[x] > 127) { cnt++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
+      g_ctx->Unmap(g.rb[o].Get(), 0);
+      g.person = cnt > (size_t)(0.015 * w * h); // orang terdeteksi bila ≥1,5% gambar (= segment.js)
+      if (g.person) { g.box[0] = (double)x0 / w; g.box[1] = (double)y0 / h; g.box[2] = (double)(x1 - x0 + 1) / w; g.box[3] = (double)(y1 - y0 + 1) / h; }
+    }
+    g.rbPend[o] = false;
+  }
+  g_ctx->CopyResource(g.rb[k].Get(), g.nTex.Get()); g.rbPend[k] = true; g.rbK = o;
+}
+static void segTick(double now, const std::set<std::string>& used) {
+  if (!segm::M.ok) return;
+  for (auto& kv : g_seg) {
+    SegN& g = kv.second; if (!g.nat) continue;
+    if (used.count(kv.first) && now - g.lastInf >= 33) { g.lastInf = now; segInfer(kv.first, g); }
+    // bingkai otomatis mengikuti orang (dihaluskan tiap frame) — rumus sama dengan segment.js
+    double tx = 0, ty = 0, tw = 1;
+    if (g.follow && g.person) {
+      const double* b = g.box; const double z = std::max(1.0, g.fzoom);
+      tw = std::min(1.0, std::max(1 / z, std::max(b[2] * 1.5, b[3] * 1.25))); tx = b[0] + b[2] / 2 - tw / 2; ty = b[1] + b[3] * 0.45 - tw / 2;
+      tx = std::max(0.0, std::min(1 - tw, tx)); ty = std::max(0.0, std::min(1 - tw, ty));
+    }
+    if (g.follow) { const double k = 0.07; g.F[0] += (tx - g.F[0]) * k; g.F[1] += (ty - g.F[1]) * k; g.F[2] += (tw - g.F[2]) * k; }
+    else { g.F[0] = 0; g.F[1] = 0; g.F[2] = 1; }
+    g.cx = g.F[0]; g.cy = g.F[1]; g.cw = g.F[2]; g.hide = g.hideEmpty && !g.person && g.infN > 1;
+  }
+}
 // ---- transisi (Fase 8): semua jenis transisi mesin JS kecuali stinger, rumus sama dengan drawTransition di engine.js
 struct TmpRT { ComPtr<ID3D11Texture2D> t; ComPtr<ID3D11ShaderResourceView> srv; ComPtr<ID3D11RenderTargetView> rtv; };
 static TmpRT g_tmp[2];
@@ -2176,6 +2239,11 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
     if (v == "off") { g_tr.on = false; return; }
     std::string a, b, ty; is >> a >> b >> ty;
     g_tr.on = true; g_tr.manual = true; g_tr.k = std::atoi(v.c_str()) / 1000.0; g_tr.from = a == "-" ? "" : a; g_tr.to = b == "-" ? "" : b; g_tr.type = trType(ty);
+  } else if (c == "segmodel") { // segmodel <path .tflite>: muat model Latar AI ke GPU
+    std::string path; std::getline(is, path); while (!path.empty() && (path[0] == ' ')) path.erase(0, 1);
+    std::wstring wp; { int n = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0); wp.resize(n > 0 ? n - 1 : 0); if (n > 1) MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, &wp[0], n); }
+    std::string info; if (segm::load(wp, info)) emit("segmodel ok %s", info.c_str()); else emit("segmodel err %s", segm::M.err.c_str());
+  } else if (c == "segnorm") { double sc = 1, off = 0; is >> sc >> off; segm::g_inScale = (float)sc; segm::g_inOff = (float)off;
   } else if (c == "bsize") { // bsize <pvw|pgm> <w> <h>: ukuran gambar monitor (0 0 = ukuran output). Mode grid Preview memakai rasio panelnya
     std::string n; int w = 0, h = 0; is >> n >> w >> h; Bus* b = n == "pvw" ? &g_pvw : n == "pgm" ? &g_pgm : nullptr; if (!b) return;
     if (w < 16 || h < 16 || w > 7680 || h > 4320) { b->cw = b->ch = 0; } else { b->cw = (UINT)w; b->ch = (UINT)h; }
@@ -2197,10 +2265,16 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
     SegN& g = g_seg[id]; std::string col, bg; int hide = 0; g.mode = atoi(md.c_str());
     is >> g.feather >> g.blur >> col >> bg >> g.bgFit >> g.cx >> g.cy >> g.cw >> hide;
     hexRgb(col, g.col); g.bg = bg == "-" ? "" : bg; g.hide = hide != 0; if (!(g.cw > 0.01) || g.cw > 1) { g.cx = g.cy = 0; g.cw = 1; }
+    int nat = 0, inv = 0, fol = 0, he = 0; double edge = 0.5, fz = 1.6;
+    if (is >> nat >> edge >> inv >> fol >> fz >> he) { // model native: bingkai & sembunyikan dihitung mesin sendiri
+      const bool was = g.nat; g.nat = nat != 0 && segm::M.ok; g.edge = edge; g.inv = inv != 0; g.follow = fol != 0; g.fzoom = fz; g.hideEmpty = he != 0;
+      if (g.nat && !was) { g.srv.Reset(); g.mw = g.mh = 0; g.lastInf = -1e9; }
+      if (g.nat) { g.cx = g.F[0]; g.cy = g.F[1]; g.cw = g.F[2]; g.hide = g.hideEmpty && !g.person; }
+    } else g.nat = false;
   } else if (c == "segm") { // mask latar AI: <id> <w> <h> <n> + n byte (8-bit, 1 = orang)
     std::string id; UINT w = 0, h = 0; size_t n = 0; is >> id >> w >> h >> n;
     auto it = g_seg.find(id); if (it == g_seg.end() || !w || !h || w > 2048 || h > 2048 || data.size() < (size_t)w * h) return;
-    SegN& g = it->second;
+    SegN& g = it->second; if (g.nat) return; // model native sudah menghasilkan mask sendiri
     if (!g.tex || g.mw != w || g.mh != h) {
       D3D11_TEXTURE2D_DESC d{}; d.Width = w; d.Height = h; d.MipLevels = 1; d.ArraySize = 1; d.Format = DXGI_FORMAT_R8_UNORM; d.SampleDesc.Count = 1;
       d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
@@ -2226,8 +2300,7 @@ static void frame(double now) {
     if (g_tr.k >= 1) { g_tr.on = false; g_pgm.id = g_tr.to; }
   }
   for (auto& kv : g_src) if (kv.second->kind == "window") tickWin(*kv.second); // jendela: ambil frame terbaru (murah)
-  bool anyScreen = false; for (auto& kv : g_src) if (kv.second->kind == "screen") { anyScreen = true; break; }
-  if (anyScreen) { // layar: hanya ditangkap bila dipakai (langsung, lewat komposisi / grid Preview, transisi, overlay)
+  { // sumber yang sedang dipakai (langsung, lewat komposisi / grid Preview, transisi, overlay): layar ditangkap & Latar AI native dijalankan hanya untuk ini
     std::set<std::string> used;
     std::function<void(const std::string&, int)> ref = [&](const std::string& id, int d) {
       if (id.empty() || d > 5 || !used.insert(id).second) return;
@@ -2236,6 +2309,7 @@ static void frame(double now) {
     };
     ref(g_pvw.id, 0); ref(g_pgm.id, 0); if (g_tr.on) { ref(g_tr.from, 0); ref(g_tr.to, 0); } for (auto& o : g_ovl) ref(o.src, 0);
     for (auto& kv : g_src) if (kv.second->kind == "screen" && used.count(kv.first)) tickScreen(*kv.second, kv.first, now);
+    segTick(now, used);
   }
   pipeline();
   camTick();
@@ -2614,6 +2688,42 @@ static int selftest(bool warp) {
           chk(g_pgm, 320, 180, 0, 128, 128, 3, "Stinger: sumber baru setelah titik cut");
           command("tbar off"); g_tr.on = false; command("pgm a"); run(1);
         } else { emit("  GAGAL membuat tekstur uji stinger"); ok = 0; }
+      }
+      { // ---- Fase 9: Latar AI native — model segmentasi .tflite dijalankan interpreter GPU sendiri, dibandingkan dengan TensorFlow Lite resmi
+        wchar_t mp[MAX_PATH] = L"", rp[MAX_PATH] = L"";
+        if (!GetEnvironmentVariableW(L"KLM_SEG_MODEL", mp, MAX_PATH)) emit("  (info) KLM_SEG_MODEL tidak diisi — uji Latar AI native dilewati");
+        else {
+          std::string info; const double t0 = nowMs(); const bool l = segm::load(mp, info);
+          emit("  %s Latar AI native: model dimuat %.0f ms — %s", l ? "OK " : "GAGAL", nowMs() - t0, l ? info.c_str() : segm::M.err.c_str()); if (!l) ok = 0;
+          if (l && GetEnvironmentVariableW(L"KLM_SEG_REF", rp, MAX_PATH)) {
+            auto rdf = [](const std::wstring& f, std::vector<float>& v) { FILE* fp = _wfopen(f.c_str(), L"rb"); if (!fp) return false; fseek(fp, 0, SEEK_END); long n = ftell(fp); fseek(fp, 0, SEEK_SET); v.resize(n / 4); size_t r = fread(v.data(), 4, v.size(), fp); fclose(fp); return r == v.size() && !v.empty(); };
+            std::vector<float> in, ref, got; const std::wstring dir = rp;
+            if (!rdf(dir + L"\\in.bin", in) || !rdf(dir + L"\\out.bin", ref)) { emit("  GAGAL membaca referensi Latar AI"); ok = 0; }
+            else {
+              segm::upload(segm::M.input, in); segm::runOps(); g_ctx->Flush();
+              const double t1 = nowMs(); for (int r = 0; r < 3; r++) segm::runOps(); segm::readBack(segm::M.output, got); const double per = (nowMs() - t1) / 3;
+              double mx = 0, mean = 0; size_t inter = 0, uni = 0; const size_t n = std::min(got.size(), ref.size());
+              for (size_t i = 0; i < n; i++) { const double dd = std::fabs(got[i] - ref[i]); mx = std::max(mx, dd); mean += dd; const bool a = got[i] > 0.5f, b = ref[i] > 0.5f; inter += a && b; uni += a || b; }
+              mean /= std::max<size_t>(1, n); const double iou = uni ? (double)inter / uni : 1.0;
+              const bool pass = n == ref.size() && mean < 0.01 && iou > 0.97;
+              emit("  %s Latar AI native = TensorFlow Lite: selisih rata-rata %.5f, maks %.4f, IoU orang %.4f (%zu nilai, %.1f ms/inferensi di %s)", pass ? "OK " : "GAGAL", mean, mx, iou, n, per, g_warp ? "WARP" : "GPU");
+              if (!pass) ok = 0;
+              // ujung ke ujung: gambar uji sebagai sumber → mask native → latar diganti warna biru di Program
+              const int H = segm::M.IH, W = segm::M.IW; std::vector<uint8_t> rgba((size_t)W * H * 4);
+              for (int i = 0; i < W * H; i++) { for (int c = 0; c < 3; c++) rgba[i * 4 + c] = (uint8_t)std::lround(std::min(1.f, std::max(0.f, in[i * 3 + c])) * 255); rgba[i * 4 + 3] = 255; }
+              char cmdl[96]; snprintf(cmdl, sizeof cmdl, "srcimg sgimg %d %d %zu", W, H, rgba.size()); command(cmdl, rgba);
+              command("seg sgimg 2 0 14 0000ff - 0 0 0 1 0 1 0.5 0 0 1.6 0"); command("pgm sgimg"); for (int r = 0; r < 14; r++) { run(1); Sleep(35); }
+              const SegN& sgn = g_seg["sgimg"];
+              const float rb = ref[(size_t)(H * 0.8) * W + W / 2], rc = ref[(size_t)8 * W + 8];
+              const UINT side = std::min(g_W, g_H), ox = (g_W - side) / 2; // gambar persegi di tengah (fit)
+              emit("  %s Latar AI native berjalan di frame: %d inferensi, orang=%d, kotak %.2f,%.2f %.2fx%.2f", sgn.infN > 0 ? "OK " : "GAGAL", sgn.infN, sgn.person ? 1 : 0, sgn.box[0], sgn.box[1], sgn.box[2], sgn.box[3]); if (sgn.infN <= 0) ok = 0;
+              if (rb > 0.9f) chk(g_pgm, ox + side / 2, (UINT)(side * 0.8), (int)std::lround(in[((size_t)(H * 0.8) * W + W / 2) * 3] * 255), (int)std::lround(in[((size_t)(H * 0.8) * W + W / 2) * 3 + 1] * 255), (int)std::lround(in[((size_t)(H * 0.8) * W + W / 2) * 3 + 2] * 255), 8, "Latar AI native: badan orang tetap");
+              else emit("  (info) referensi tidak menganggap badan uji sebagai orang (%.2f) — cek piksel badan dilewati", rb);
+              if (rc < 0.1f) chk(g_pgm, ox + (UINT)(8.0 * side / W), (UINT)(8.0 * side / H), 0, 0, 255, 8, "Latar AI native: latar diganti warna");
+              command("seg sgimg -"); command("del sgimg"); command("pgm a"); run(1);
+            }
+          }
+        }
       }
       { // jendela uji berwarna, ditangkap lewat Windows.Graphics.Capture
         WNDCLASSEXW wc{ sizeof wc }; wc.lpfnWndProc = DefWindowProcW; wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"KLMWgcTest"; wc.hbrBackground = CreateSolidBrush(RGB(30, 200, 90));
