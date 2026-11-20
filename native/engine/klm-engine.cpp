@@ -90,6 +90,9 @@
 //   segmodel <path>                      muat model Latar AI (.tflite) → "segmodel ok <info>" / "segmodel err <alasan>"
 //   seg … <nat> <edge> <inv> <follow> <fzoom> <hideEmpty>   nat 1 = mask dari model native (bingkai & sembunyikan dihitung mesin)
 //   segnorm <skala> <geser>              rentang masukan model (bawaan 1 0 = 0..1)
+// Fase 10 — KLMCAM mulus & kartu input native:
+//   kenc … <ts> : cap waktu RTP (100 ns) → jadwal tayang (jitter buffer adaptif); frame_num diperiksa, frame hilang → tunggu frame kunci
+//   szoom <id> <z>                       zoom digital sumber (KLMCAM dari HP)
 //
 // Keluaran stdout (satu baris per kejadian): ready <adapter> | shown <bus> | hidden <bus> | click <bus> <x> <y> <btn> <dbl>
 //   | srcerr <id> <pesan> | srcok <id> <w> <h> | stats fps=.. ms=.. mem=.. utex=.. | err <pesan>
@@ -167,7 +170,8 @@ static double nowMs() {
 }
 
 // ---------------------------------------------------------------- perintah dari stdin
-struct Cmd { std::string line; std::vector<uint8_t> data; };
+struct Cmd { std::string line; std::vector<uint8_t> data; double at = 0; }; // at = waktu tiba (ms, untuk jadwal tayang frame KLMCAM)
+static double g_cmdAt = 0;
 static std::mutex g_qMx;
 static std::deque<Cmd> g_q;
 static std::atomic<bool> g_quit{false};
@@ -181,7 +185,7 @@ static void stdinThread() {
         size_t take = std::min<size_t>(need, n - i);
         blob.data.insert(blob.data.end(), buf + i, buf + i + take);
         need -= take; i += (DWORD)take - 1;
-        if (!need) { std::lock_guard<std::mutex> l(g_qMx); g_q.push_back(std::move(blob)); blob = Cmd(); }
+        if (!need) { blob.at = nowMs(); std::lock_guard<std::mutex> l(g_qMx); g_q.push_back(std::move(blob)); blob = Cmd(); }
         continue;
       }
       char c = buf[i];
@@ -1190,6 +1194,7 @@ static std::map<std::string, SegN> g_seg;
 // posisi input (Fase 8): fit / zoom / geser / pangkas / rotasi milik input — sama dengan drawInputRect di engine.js
 struct PosN { int fit = 1; double zoom = 1, x = 0, y = 0, cl = 0, cr = 0, ct = 0, cb = 0, rot = 0; };
 static std::map<std::string, PosN> g_pos;
+static std::map<std::string, double> g_szoom; // zoom digital KLMCAM dari HP (potong tengah sumber, seperti digitalZoom di inputs.js)
 static void setFx(const FxN* f, const SegN* sg, bool mask, bool blur, double blurPx, UINT sw, UINT sh) {
   D3D11_MAPPED_SUBRESOURCE m;
   if (FAILED(g_ctx->Map(g_cbFx.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return;
@@ -1221,6 +1226,7 @@ static void quadFx(const Rc& d, float u0, float v0, float u1, float v1, ID3D11Sh
 static void drawView(const std::string& id, const Rc& box, int fit, double zoom, double px, double py, double cl, double cr, double ct, double cb, bool flip, float alpha, const Mask& m, int depth, double rot = 0);
 // satu sumber ke satu kotak tujuan: lewat efek / latar AI bila ada (urutan sama dengan getSource: latar AI → chroma key & koreksi warna)
 static void srcQuad(const std::string& id, const SrcView& v, const Rc& d, float u0, float v0, float u1, float v1, float alpha, const Mask& m, double rot, int depth) {
+  { auto zi = g_szoom.find(id); if (zi != g_szoom.end() && zi->second > 1.001) { const float z = (float)zi->second; auto f = [z](float u) { return 0.5f + (u - 0.5f) / z; }; u0 = f(u0); u1 = f(u1); v0 = f(v0); v1 = f(v1); } }
   auto fi = g_fx.find(id); const FxN* fx = fi == g_fx.end() ? nullptr : &fi->second;
   auto si = g_seg.find(id); SegN* sg = si == g_seg.end() || !si->second.srv ? nullptr : &si->second;
   if (!fx && !sg) { quadPx(d, u0, v0, u1, v1, v.srv.Get(), alpha, v.opaque, m, rot, v.pm); return; }
@@ -1488,7 +1494,8 @@ static void camTick() {
 // ---- KLMCAM: dekoder H.264 (Fase 4a)
 struct KDec {
   std::string id; std::shared_ptr<Cam> cam;
-  std::mutex qmx; std::condition_variable cv; std::deque<std::pair<std::vector<uint8_t>, LONGLONG>> q; std::atomic<bool> stop{ false };
+  struct QF { std::vector<uint8_t> d; LONGLONG ts = 0; double at = 0; };
+  std::mutex qmx; std::condition_variable cv; std::deque<QF> q; std::atomic<bool> stop{ false };
   ComPtr<IMFTransform> mft; bool d3d = false, provides = false, started = false, okSent = false; DWORD cb = 0;
   UINT cw = 0, ch = 0, dw = 0, dh = 0; LONG stride = 0; bool hd = true;
   ComPtr<ID3D11VideoDevice> vdev; ComPtr<ID3D11VideoContext> vctx;
@@ -1497,6 +1504,12 @@ struct KDec {
   std::map<std::pair<ID3D11Texture2D*, UINT>, ComPtr<ID3D11VideoProcessorInputView>> iv;
   ComPtr<ID3D11Texture2D> nv12; // jalur CPU
   int errs = 0; bool waitKey = false;
+  // urutan frame H.264 (frame_num) — frame hilang / terlambat → tunggu frame kunci, tidak pernah mendekode di atas referensi yang hilang (= bercak)
+  int log2MaxFn = 0; bool sepColour = false; int prevRefFn = -1; int gaps = 0, drops = 0;
+  // jadwal tayang (jitter buffer kecil): frame terdekode masuk cincin, ditayangkan menurut cap waktu RTP → gerakan rata
+  struct Slot { ComPtr<ID3D11Texture2D> t; ComPtr<ID3D11VideoProcessorOutputView> ov; double due = 0; LONGLONG ts = 0; int st = 0; }; // st: 0 kosong, 1 siap
+  std::mutex smx; Slot slot[6]; UINT slotW = 0, slotH = 0; std::map<LONGLONG, double> arr;
+  double base = 1e18, jit = 8, lastArr = 0; LONGLONG lastTs = -1; double lastDue = 0, shownDue = 0; int late = 0;
 };
 static std::map<std::string, std::shared_ptr<KDec>> g_kdec;
 static bool kSetOutput(KDec& k) {
@@ -1534,21 +1547,44 @@ static bool kInit(KDec& k) {
   k.started = true;
   return true;
 }
-// NV12 (tekstur dekoder / tekstur CPU) → BGRA tekstur kamera, dengan D3D11 Video Processor (GPU)
-static bool kBlit(KDec& k, ID3D11Texture2D* src, UINT sub) {
-  Cam& c = *k.cam;
-  std::lock_guard<std::mutex> l(c.mx);
-  if (!camTex(c, k.dw, k.dh, DXGI_FORMAT_B8G8R8A8_UNORM, true)) return false;
+// cincin frame terdekode (BGRA, ukuran tampilan) — ditulis thread dekoder, ditayangkan thread gambar (kPresent)
+static bool kSlots(KDec& k) { // dipanggil dengan k.smx terkunci
+  if (k.slotW == k.dw && k.slotH == k.dh && k.slot[0].t) return true;
+  for (auto& s : k.slot) { s.t.Reset(); s.ov.Reset(); s.st = 0; }
+  D3D11_TEXTURE2D_DESC d{}; d.Width = k.dw; d.Height = k.dh; d.MipLevels = 1; d.ArraySize = 1; d.Format = DXGI_FORMAT_B8G8R8A8_UNORM; d.SampleDesc.Count = 1;
+  d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+  for (auto& s : k.slot) if (FAILED(g_dev->CreateTexture2D(&d, nullptr, &s.t))) return false;
+  k.slotW = k.dw; k.slotH = k.dh; k.vp.Reset(); return true;
+}
+// pilih slot untuk frame baru: kosong, atau yang paling tua (frame itu dilewati)
+static int kSlotFree(KDec& k) {
+  int best = -1; LONGLONG bt = 0;
+  for (int i = 0; i < 6; i++) { if (k.slot[i].st == 0) return i; if (best < 0 || k.slot[i].ts < bt) { best = i; bt = k.slot[i].ts; } }
+  return best;
+}
+// jadwal tayang frame: waktu tiba vs cap waktu RTP → jeda adaptif sekecil mungkin yang tetap menyerap jitter jaringan
+static double kSchedule(KDec& k, LONGLONG ts, double at) {
+  const double m = ts / 10000.0, d = at - m;
+  if (k.lastTs < 0 || ts < k.lastTs - 900000000LL || ts > k.lastTs + 900000000LL) { k.base = d; k.jit = 8; } // awal / lompatan cap waktu (HP menyambung ulang)
+  if (d < k.base) k.base = d; else k.base += (d - k.base) * 0.002; // dasar = jalur tercepat, pelan-pelan mengikuti selisih jam
+  k.jit = k.jit * 0.96 + (d - k.base) * 0.04;
+  k.lastTs = ts;
+  const double delay = std::min(120.0, std::max(12.0, k.jit * 2.2 + 6));
+  return m + k.base + delay;
+}
+// NV12 (tekstur dekoder / tekstur CPU) → BGRA slot cincin, dengan D3D11 Video Processor (GPU)
+static bool kBlit(KDec& k, ID3D11Texture2D* src, UINT sub, LONGLONG ts, double due) {
+  std::lock_guard<std::mutex> l(k.smx);
+  if (!kSlots(k)) return false;
+  const int si = kSlotFree(k); KDec::Slot& S = k.slot[si];
   D3D11_TEXTURE2D_DESC sd{}; src->GetDesc(&sd);
-  if (!k.vp || k.vpInW != sd.Width || k.vpInH != sd.Height || k.ovTex != c.tex.Get()) {
-    k.vp.Reset(); k.ven.Reset(); k.ov.Reset(); k.iv.clear();
+  if (!k.vp || k.vpInW != sd.Width || k.vpInH != sd.Height) {
+    k.vp.Reset(); k.ven.Reset(); k.iv.clear(); for (auto& s : k.slot) s.ov.Reset();
     D3D11_VIDEO_PROCESSOR_CONTENT_DESC cd{}; cd.InputFrameFormat = D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE;
     cd.InputWidth = sd.Width; cd.InputHeight = sd.Height; cd.OutputWidth = k.dw; cd.OutputHeight = k.dh; cd.Usage = D3D11_VIDEO_USAGE_PLAYBACK_NORMAL;
     cd.InputFrameRate = { 30, 1 }; cd.OutputFrameRate = { 30, 1 };
     if (FAILED(k.vdev->CreateVideoProcessorEnumerator(&cd, &k.ven)) || FAILED(k.vdev->CreateVideoProcessor(k.ven.Get(), 0, &k.vp))) { emit("kerr %s Video Processor tidak tersedia", k.id.c_str()); return false; }
-    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC od{}; od.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
-    if (FAILED(k.vdev->CreateVideoProcessorOutputView(c.tex.Get(), k.ven.Get(), &od, &k.ov))) { emit("kerr %s output view", k.id.c_str()); k.vp.Reset(); return false; }
-    k.vpInW = sd.Width; k.vpInH = sd.Height; k.ovTex = c.tex.Get();
+    k.vpInW = sd.Width; k.vpInH = sd.Height;
     D3D11_VIDEO_PROCESSOR_COLOR_SPACE in{}; in.YCbCr_Matrix = k.hd ? 1 : 0; in.Nominal_Range = D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_16_235;
     D3D11_VIDEO_PROCESSOR_COLOR_SPACE out{}; out.RGB_Range = 0; out.Nominal_Range = D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_0_255;
     k.vctx->VideoProcessorSetStreamColorSpace(k.vp.Get(), 0, &in);
@@ -1557,6 +1593,10 @@ static bool kBlit(KDec& k, ID3D11Texture2D* src, UINT sub) {
     RECT sr{ 0, 0, (LONG)k.dw, (LONG)k.dh }; // buang bantalan (1080 dari 1088)
     k.vctx->VideoProcessorSetStreamSourceRect(k.vp.Get(), 0, TRUE, &sr);
     k.vctx->VideoProcessorSetStreamAutoProcessingMode(k.vp.Get(), 0, FALSE);
+  }
+  if (!S.ov) {
+    D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC od{}; od.ViewDimension = D3D11_VPOV_DIMENSION_TEXTURE2D;
+    if (FAILED(k.vdev->CreateVideoProcessorOutputView(S.t.Get(), k.ven.Get(), &od, &S.ov))) { emit("kerr %s output view", k.id.c_str()); return false; }
   }
   auto key = std::make_pair(src, sub);
   auto it = k.iv.find(key);
@@ -1568,34 +1608,44 @@ static bool kBlit(KDec& k, ID3D11Texture2D* src, UINT sub) {
     it = k.iv.emplace(key, v).first;
   }
   D3D11_VIDEO_PROCESSOR_STREAM st{}; st.Enable = TRUE; st.pInputSurface = it->second.Get();
-  if (FAILED(k.vctx->VideoProcessorBlt(k.vp.Get(), k.ov.Get(), 0, 1, &st))) return false;
-  c.got = true;
+  if (FAILED(k.vctx->VideoProcessorBlt(k.vp.Get(), S.ov.Get(), 0, 1, &st))) return false;
+  S.st = 1; S.ts = ts; S.due = due;
   return true;
+}
+static bool kPut(KDec& k, const void* px, UINT pitch, LONGLONG ts, double due) { // jalur CPU (tanpa Video Processor)
+  std::lock_guard<std::mutex> l(k.smx);
+  if (!kSlots(k)) return false;
+  const int si = kSlotFree(k); KDec::Slot& S = k.slot[si];
+  g_ctx->UpdateSubresource(S.t.Get(), 0, nullptr, px, pitch, 0);
+  S.st = 1; S.ts = ts; S.due = due; return true;
 }
 static void kDeliver(KDec& k, IMFSample* smp) {
   ComPtr<IMFMediaBuffer> mb; if (FAILED(smp->GetBufferByIndex(0, &mb))) return;
+  LONGLONG ts = 0; smp->GetSampleTime(&ts);
+  double at = nowMs(); { auto ai = k.arr.find(ts); if (ai != k.arr.end()) { at = ai->second; k.arr.erase(k.arr.begin(), std::next(ai)); } }
+  if (k.arr.size() > 64) k.arr.clear();
+  const double due = kSchedule(k, ts, at);
   bool ok = false;
   ComPtr<IMFDXGIBuffer> db;
   if (SUCCEEDED(mb.As(&db))) {
     ComPtr<ID3D11Texture2D> t; UINT sub = 0;
-    if (SUCCEEDED(db->GetResource(IID_PPV_ARGS(&t))) && SUCCEEDED(db->GetSubresourceIndex(&sub))) ok = kBlit(k, t.Get(), sub);
+    if (SUCCEEDED(db->GetResource(IID_PPV_ARGS(&t))) && SUCCEEDED(db->GetSubresourceIndex(&sub))) ok = kBlit(k, t.Get(), sub, ts, due);
   } else if (!k.vdev) { // GPU tanpa Video Processor (mis. WARP): konversi NV12 → BGRA di CPU (jalur darurat)
     BYTE* p = nullptr; LONG pitch = 0; DWORD mx = 0, cur = 0; ComPtr<IMF2DBuffer> b2; bool l2 = false;
     if (SUCCEEDED(mb.As(&b2)) && SUCCEEDED(b2->Lock2D(&p, &pitch))) l2 = true;
     else if (SUCCEEDED(mb->Lock(&p, &mx, &cur))) pitch = k.stride ? k.stride : (LONG)k.cw;
     else return;
     if (pitch > 0 && (l2 || cur >= (DWORD)(pitch * k.ch * 3 / 2))) {
-      const UINT W = k.dw & ~1u, H = k.dh & ~1u; std::vector<uint32_t> px((size_t)W * H);
+      const UINT W = k.dw & ~1u, H = k.dh & ~1u; std::vector<uint32_t> px((size_t)k.dw * k.dh, 0xFF000000u);
       const BYTE* yp = p; const BYTE* uvp = p + (size_t)pitch * k.ch;
       const double kr = k.hd ? 0.2126 : 0.299, kb = k.hd ? 0.0722 : 0.114, kg = 1 - kr - kb;
       for (UINT y = 0; y < H; y++) for (UINT x = 0; x < W; x++) {
         double Y = (yp[(size_t)y * pitch + x] - 16) * (255.0 / 219), U = (uvp[(size_t)(y / 2) * pitch + (x & ~1u)] - 128) * (255.0 / 224), V = (uvp[(size_t)(y / 2) * pitch + (x & ~1u) + 1] - 128) * (255.0 / 224);
         double R = Y + 2 * (1 - kr) * V, B = Y + 2 * (1 - kb) * U, G = (Y - kr * R - kb * B) / kg;
         auto c8 = [](double v) { return (uint32_t)(v < 0 ? 0 : v > 255 ? 255 : std::lround(v)); };
-        px[(size_t)y * W + x] = 0xFF000000u | (c8(R) << 16) | (c8(G) << 8) | c8(B);
+        px[(size_t)y * k.dw + x] = 0xFF000000u | (c8(R) << 16) | (c8(G) << 8) | c8(B);
       }
-      Cam& c = *k.cam; std::lock_guard<std::mutex> l(c.mx);
-      if (camTex(c, W, H, DXGI_FORMAT_B8G8R8A8_UNORM, false)) { g_ctx->UpdateSubresource(c.tex.Get(), 0, nullptr, px.data(), W * 4, 0); c.got = true; ok = true; }
+      ok = kPut(k, px.data(), k.dw * 4, ts, due);
     }
     if (l2) b2->Unlock2D(); else mb->Unlock();
   } else { // dekoder perangkat lunak: NV12 di memori → tekstur NV12 → Video Processor
@@ -1613,13 +1663,29 @@ static void kDeliver(KDec& k, IMFSample* smp) {
       std::vector<uint8_t> tmp((size_t)pitch * k.ch * 3 / 2);
       memcpy(tmp.data(), p, std::min<size_t>(tmp.size(), l2 ? tmp.size() : (size_t)cur));
       g_ctx->UpdateSubresource(k.nv12.Get(), 0, nullptr, tmp.data(), (UINT)pitch, 0);
-      ok = kBlit(k, k.nv12.Get(), 0);
+      ok = kBlit(k, k.nv12.Get(), 0, ts, due);
     }
     if (l2) b2->Unlock2D(); else mb->Unlock();
   }
   if (!ok) return;
-  k.cam->fresh = true; k.cam->frames++;
   if (!k.okSent) { k.okSent = true; emit("kok %s %u %u %d", k.id.c_str(), k.dw, k.dh, k.d3d ? 1 : 0); }
+}
+// thread gambar, tiap frame: tayangkan frame terbaru yang sudah jatuh tempo (yang lebih tua dilewati, bukan menumpuk jeda)
+static void kPresentAll(double now) {
+  for (auto& kv : g_kdec) {
+    KDec& k = *kv.second; if (k.stop || !k.cam) continue;
+    std::lock_guard<std::mutex> l(k.smx);
+    int pick = -1, ready = 0; double oldest = 1e18;
+    for (int i = 0; i < 6; i++) if (k.slot[i].st == 1) { ready++; oldest = std::min(oldest, k.slot[i].due); if (k.slot[i].due <= now && (pick < 0 || k.slot[i].ts > k.slot[pick].ts)) pick = i; }
+    // antrean menumpuk (jam HP/PC bergeser, atau tab sempat tertahan) → jangan menunggu lebih dari ±150 ms
+    if (pick < 0 && ready >= 4 && now - oldest > -150) for (int i = 0; i < 6; i++) if (k.slot[i].st == 1 && (pick < 0 || k.slot[i].ts < k.slot[pick].ts)) pick = i;
+    if (pick < 0) continue;
+    const LONGLONG pts = k.slot[pick].ts;
+    { Cam& c = *k.cam; std::lock_guard<std::mutex> lc(c.mx);
+      if (camTex(c, k.slotW, k.slotH, DXGI_FORMAT_B8G8R8A8_UNORM, true)) { g_ctx->CopyResource(c.tex.Get(), k.slot[pick].t.Get()); c.got = true; } }
+    for (int i = 0; i < 6; i++) if (k.slot[i].st == 1 && k.slot[i].ts <= pts) k.slot[i].st = 0;
+    k.cam->fresh = true; k.cam->frames++;
+  }
 }
 static void kDrain(KDec& k) {
   for (int guard = 0; guard < 16; guard++) {
@@ -1641,7 +1707,7 @@ static void kThread(std::shared_ptr<KDec> k) {
   CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   if (!kInit(*k)) { k->stop = true; CoUninitialize(); return; }
   while (!k->stop) {
-    std::pair<std::vector<uint8_t>, LONGLONG> f;
+    KDec::QF f;
     {
       std::unique_lock<std::mutex> l(k->qmx);
       k->cv.wait(l, [&] { return k->stop || !k->q.empty(); });
@@ -1650,15 +1716,17 @@ static void kThread(std::shared_ptr<KDec> k) {
       f = std::move(k->q.front()); k->q.pop_front();
     }
     ComPtr<IMFSample> s; ComPtr<IMFMediaBuffer> b;
-    if (FAILED(MFCreateSample(&s)) || FAILED(MFCreateMemoryBuffer((DWORD)f.first.size(), &b))) continue;
-    BYTE* p = nullptr; b->Lock(&p, nullptr, nullptr); memcpy(p, f.first.data(), f.first.size()); b->Unlock(); b->SetCurrentLength((DWORD)f.first.size());
-    s->AddBuffer(b.Get()); s->SetSampleTime(f.second); s->SetSampleDuration(333333);
+    if (FAILED(MFCreateSample(&s)) || FAILED(MFCreateMemoryBuffer((DWORD)f.d.size(), &b))) continue;
+    BYTE* p = nullptr; b->Lock(&p, nullptr, nullptr); memcpy(p, f.d.data(), f.d.size()); b->Unlock(); b->SetCurrentLength((DWORD)f.d.size());
+    s->AddBuffer(b.Get()); s->SetSampleTime(f.ts); s->SetSampleDuration(333333);
+    k->arr[f.ts] = f.at;
     HRESULT hr = k->mft->ProcessInput(0, s.Get(), 0);
     if (hr == MF_E_NOTACCEPTING) { kDrain(*k); hr = k->mft->ProcessInput(0, s.Get(), 0); }
     kDrain(*k);
   }
   if (k->mft) { k->mft->ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0); k->mft->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0); }
   k->iv.clear(); k->ov.Reset(); k->vp.Reset(); k->ven.Reset(); k->mft.Reset();
+  { std::lock_guard<std::mutex> l(k->smx); for (auto& sl : k->slot) { sl.ov.Reset(); sl.t.Reset(); sl.st = 0; } }
   CoUninitialize();
 }
 static void kOff(const std::string& id) {
@@ -1671,7 +1739,43 @@ static void kNeedKey(const std::string& id) { // minta HP mengirim frame kunci (
   double t = nowMs(); double& last = g_kneed[id];
   if (t - last > 1000) { last = t; emit("kneedkey %s", id.c_str()); }
 }
+// ---- pembaca header H.264 (cukup untuk frame_num): urutan frame referensi dicek sebelum didekode
+struct BitR { std::vector<uint8_t> b; size_t p = 0; bool bad = false;
+  BitR(const uint8_t* d, size_t n) { b.reserve(std::min<size_t>(n, 96)); int z = 0; for (size_t i = 0; i < n && b.size() < 96; i++) { if (z >= 2 && d[i] == 3) { z = 0; continue; } z = d[i] == 0 ? z + 1 : 0; b.push_back(d[i]); } } // buang byte pencegah emulasi
+  unsigned u(int n) { unsigned v = 0; while (n--) { if (p >= b.size() * 8) { bad = true; return v; } v = (v << 1) | ((b[p >> 3] >> (7 - (p & 7))) & 1); p++; } return v; }
+  unsigned ue() { int z = 0; while (!u(1)) { if (++z > 31 || bad) { bad = true; return 0; } } return z ? ((1u << z) - 1 + u(z)) : 0; }
+  int se() { unsigned v = ue(); return (v & 1) ? (int)((v + 1) / 2) : -(int)(v / 2); }
+};
+static void kParseSps(KDec& k, const uint8_t* d, size_t n) {
+  BitR r(d, n); const unsigned prof = r.u(8); r.u(16); r.ue();
+  if (prof == 100 || prof == 110 || prof == 122 || prof == 244 || prof == 44 || prof == 83 || prof == 86 || prof == 118 || prof == 128 || prof == 138 || prof == 139 || prof == 134 || prof == 135) {
+    const unsigned cf = r.ue(); if (cf == 3) k.sepColour = r.u(1) != 0; r.ue(); r.ue(); r.u(1);
+    if (r.u(1)) for (int i = 0; i < (cf != 3 ? 8 : 12); i++) if (r.u(1)) { int last = 8, next = 8; const int sz = i < 6 ? 16 : 64; for (int j = 0; j < sz; j++) { if (next) next = (last + r.se() + 256) % 256; last = next ? next : last; } }
+  }
+  const unsigned l = r.ue() + 4; if (!r.bad && l >= 4 && l <= 16) k.log2MaxFn = (int)l;
+}
+// isi satu frame (Annex B): frame_num & jenis slice pertama. kembali false bila tidak terbaca (pemeriksaan dilewati)
+static bool kParseAU(KDec& k, const std::vector<uint8_t>& d, int& fn, bool& idr, bool& ref) {
+  fn = -1; idr = false; ref = false; bool got = false;
+  for (size_t i = 0; i + 3 < d.size(); ) {
+    size_t sc = 0;
+    if (d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 1) sc = 3; else if (i + 4 < d.size() && d[i] == 0 && d[i + 1] == 0 && d[i + 2] == 0 && d[i + 3] == 1) sc = 4;
+    if (!sc) { i++; continue; }
+    const size_t s0 = i + sc; if (s0 >= d.size()) break;
+    size_t e = s0 + 1; while (e + 2 < d.size() && !(d[e] == 0 && d[e + 1] == 0 && (d[e + 2] == 1 || (d[e + 2] == 0 && e + 3 < d.size() && d[e + 3] == 1)))) e++;
+    if (e + 2 >= d.size()) e = d.size();
+    const uint8_t h = d[s0]; const int t = h & 31;
+    if (t == 7) kParseSps(k, d.data() + s0 + 1, e - s0 - 1);
+    else if ((t == 1 || t == 5) && !got && k.log2MaxFn) {
+      BitR r(d.data() + s0 + 1, std::min<size_t>(e - s0 - 1, 48)); r.ue(); r.ue(); r.ue(); if (k.sepColour) r.u(2);
+      const unsigned f = r.u(k.log2MaxFn); if (!r.bad) { fn = (int)f; idr = t == 5; ref = ((h >> 5) & 3) != 0; got = true; }
+    }
+    i = e;
+  }
+  return got;
+}
 static void kFeed(const std::string& id, bool key, LONGLONG ts, std::vector<uint8_t>&& data) {
+  const double at = g_cmdAt > 0 ? g_cmdAt : nowMs();
   auto it = g_kdec.find(id);
   if (it == g_kdec.end()) {
     if (!key) { kNeedKey(id); return; } // mulai dari frame kunci
@@ -1683,12 +1787,22 @@ static void kFeed(const std::string& id, bool key, LONGLONG ts, std::vector<uint
   }
   KDec& k = *it->second;
   if (k.stop) { kOff(id); return; }
+  // frame hilang di jaringan / tertinggal / datang terlambat → JANGAN didekode (itulah sumber bercak): tunggu frame kunci baru
+  int fn = -1; bool idr = false, ref = false; const bool parsed = kParseAU(k, data, fn, idr, ref);
+  if (parsed) {
+    const int mx = 1 << k.log2MaxFn;
+    if (idr || key) { k.prevRefFn = fn; if (k.waitKey) k.gaps++; k.waitKey = false; }
+    else if (k.waitKey || k.prevRefFn < 0) { k.drops++; kNeedKey(id); return; }
+    else if (fn != (k.prevRefFn + 1) % mx) { k.waitKey = true; k.gaps++; k.drops++; kNeedKey(id); return; }
+    else if (ref) k.prevRefFn = fn;
+  }
   std::lock_guard<std::mutex> l(k.qmx);
-  if (k.q.size() > 12 || k.waitKey) { // dekoder tertinggal jauh → buang antrean, lanjut dari frame kunci berikutnya
+  if (k.q.size() > 12 || (!parsed && k.waitKey)) { // dekoder tertinggal jauh → buang antrean, lanjut dari frame kunci berikutnya
     if (!key) { k.waitKey = true; kNeedKey(id); return; }
     k.q.clear(); k.waitKey = false;
   }
-  k.q.emplace_back(std::move(data), ts);
+  KDec::QF f; f.d = std::move(data); f.ts = ts; f.at = at;
+  k.q.push_back(std::move(f));
   k.cv.notify_one();
 }
 
@@ -2241,6 +2355,9 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
     if (v == "off") { g_tr.on = false; return; }
     std::string a, b, ty; is >> a >> b >> ty;
     g_tr.on = true; g_tr.manual = true; g_tr.k = std::atoi(v.c_str()) / 1000.0; g_tr.from = a == "-" ? "" : a; g_tr.to = b == "-" ? "" : b; g_tr.type = trType(ty);
+  } else if (c == "szoom") { // szoom <id> <zoom ≥1>: zoom digital sumber (potong tengah)
+    std::string id; double z = 1; is >> id >> z; if (id.empty() || id.size() > 64) return;
+    if (z > 1.001 && z <= 16) g_szoom[id] = z; else g_szoom.erase(id);
   } else if (c == "segmodel") { // segmodel <path .tflite>: muat model Latar AI ke GPU
     std::string path; std::getline(is, path); while (!path.empty() && (path[0] == ' ')) path.erase(0, 1);
     std::wstring wp; { int n = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0); wp.resize(n > 0 ? n - 1 : 0); if (n > 1) MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, &wp[0], n); }
@@ -2294,7 +2411,7 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
 static void frame(double now) {
   std::deque<Cmd> q;
   { std::lock_guard<std::mutex> l(g_qMx); q.swap(g_q); }
-  for (auto& l : q) command(l.line, l.data);
+  for (auto& l : q) { g_cmdAt = l.at; command(l.line, l.data); g_cmdAt = 0; }
   g_frameNo++;
   flushUtex();
   if (g_tr.on && !g_tr.manual) {
@@ -2314,6 +2431,7 @@ static void frame(double now) {
     segTick(now, used);
   }
   pipeline();
+  kPresentAll(now); // KLMCAM: frame yang jatuh tempo ke tekstur kamera (jitter buffer)
   camTick();
   if (g_pgm.want || !g_parent || !g_out.empty()) compose(g_pgm, true);
   oVideo(now);
@@ -2513,7 +2631,8 @@ static int selftest(bool warp) {
     else {
       size_t tot = 0; for (auto& f : h264) tot += f.size();
       emit("  (info) potongan H.264 uji: %d frame, %zu byte, SPS di frame pertama=%d", (int)h264.size(), tot, hasSps(h264[0]) ? 1 : 0);
-      for (size_t i = 0; i < h264.size(); i++) { char b[96]; snprintf(b, sizeof b, "kenc kt %d %lld %zu", i == 0 ? 1 : 0, (long long)i * 333333, h264[i].size()); command(b, h264[i]); }
+      // dikirim berirama seperti dari jaringan (±30 fps, sedikit jitter) → jadwal tayang menayangkan frame satu per satu
+      for (size_t i = 0; i < h264.size(); i++) { char b[96]; snprintf(b, sizeof b, "kenc kt %d %lld %zu", i == 0 ? 1 : 0, (long long)i * 333333, h264[i].size()); command(b, h264[i]); run(1); Sleep(i % 3 == 0 ? 20 : 30); }
       double t0 = nowMs(); while (nowMs() - t0 < 4000 && !(g_cams.count("kt") && g_cams["kt"]->frames > 5)) { run(1); Sleep(20); }
       int fr = g_cams.count("kt") ? g_cams["kt"]->frames.load() : 0;
       bool d3d = g_kdec.count("kt") && g_kdec["kt"]->d3d;
@@ -2522,6 +2641,14 @@ static int selftest(bool warp) {
       chk(g_pgm, 960, 540, 156, 156, 156, 8, "KLMCAM terdekode di Program (abu Y=150)");
       command("kdecoff kt"); command("pgm a"); run(2);
       emit("  %s dekoder KLMCAM dihentikan", !g_kdec.count("kt") ? "OK " : "GAGAL"); if (g_kdec.count("kt")) ok = 0;
+      { // frame hilang di tengah (paket jaringan hilang) → frame sesudahnya TIDAK didekode (tanpa bercak), mesin minta frame kunci
+        for (size_t i = 0; i < h264.size(); i++) { if (i == 6) continue; char b[96]; snprintf(b, sizeof b, "kenc kg %d %lld %zu", i == 0 ? 1 : 0, (long long)i * 333333, h264[i].size()); command(b, h264[i]); }
+        for (int r = 0; r < 20; r++) { run(1); Sleep(15); }
+        const bool has = g_kdec.count("kg") > 0; const int lg = has ? g_kdec["kg"]->log2MaxFn : 0, gp = has ? g_kdec["kg"]->gaps + (g_kdec["kg"]->waitKey ? 1 : 0) : 0, dr = has ? g_kdec["kg"]->drops : 0;
+        const bool pass = has && lg > 0 && gp > 0 && dr == (int)h264.size() - 7;
+        emit("  %s KLMCAM frame hilang terdeteksi (frame_num, log2 %d): %d frame sesudahnya tidak didekode, menunggu frame kunci", pass ? "OK " : "GAGAL", lg, dr); if (!pass) ok = 0;
+        command("kdecoff kg"); run(1);
+      }
     }
   }
   // ---- Fase 4b: output native — rekam MP4 terfragmentasi & MPEG-TS dari Program mesin native (H.264 + AAC)
@@ -2666,6 +2793,14 @@ static int selftest(bool warp) {
       chk(g_pgm, 80, 180, 0, 255, 0, 3, "Latar AI native: orang (mask) tetap");
       chk(g_pgm, 560, 180, 0, 0, 255, 3, "Latar AI native: latar diganti warna");
       command("seg gg -"); command("pgm a"); run(1);
+      // ---- Fase 10: zoom digital (potong tengah) — comp kiri merah / kanan hijau? pakai bars: zoom 4× → tengah bars saja
+      command("pgm b"); run(1);
+      { SrcView bv; getSrv("b", bv); command("szoom b 8"); run(2);
+        D3D11_TEXTURE2D_DESC d{}; g_pgm.rt->GetDesc(&d); int l[3] = { 0 }, l1[3] = { 0 }; readPixel(g_pgm, 2, d.Height / 2, l);
+        command("szoom b 1"); run(2); readPixel(g_pgm, 2, d.Height / 2, l1);
+        const bool pass = (l[0] != l1[0] || l[1] != l1[1] || l[2] != l1[2]);
+        emit("  %s zoom digital KLMCAM (szoom 8×): tepi kiri %d,%d,%d (tanpa zoom %d,%d,%d)", pass ? "OK " : "GAGAL", l[0], l[1], l[2], l1[0], l1[1], l1[2]); if (!pass) ok = 0; (void)bv; }
+      command("pgm a"); run(1);
       // ---- Fase 9: grid Preview (ukuran monitor khusus) & stinger transparan
       command("comp Gt - 1 0 - -,0,0,1,1,0,1,0,0,0,0,0,0,0,1,0,0,-,15181e,0,-,0,0,0,0 a,0.02,0.02,0.46,0.96,3,1,0,0,0,0,0,0,0,1,0,0,-,000000,0,-,0,0,0,0 gg,0.52,0.02,0.46,0.96,3,1,0,0,0,0,0,0,0,1,0,0,-,000000,0,-,0,0,0,0");
       command("bsize pvw 400 600"); command("pvw Gt"); run(2);
