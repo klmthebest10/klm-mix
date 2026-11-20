@@ -16,7 +16,7 @@ function findExe() {
   return c.find((p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }) || '';
 }
 // hanya perintah yang dikenal mesin, tanpa baris baru / karakter kendali (perintah utex/utk/ublob hanya dari proses utama)
-const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff|ostart|ostop)( [\w.,\- ]{0,2000})?$/;
+const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff|ostart|ostop|vt)( [\w.,\- ]{0,2000})?$/;
 
 // DuplicateHandle (kernel32) lewat koffi: handle NT tekstur lapisan UTC → disalin ke proses klm-engine
 let K = null;

@@ -827,6 +827,25 @@ function smokeTest() {
           log('streaming native → ' + (fs.existsSync(flv) ? fs.statSync(flv).size : 0) + ' byte, ffmpeg ' + ps.code + ' ' + ps.info + ' • mesin: ' + await js('KM.nengine.status().then((x) => JSON.stringify({ tsBytes: x && x.tsBytes, taps: x && x.taps }))') + ' • log hub: ' + await js('(window.__nlog || "").slice(-600)'));
           if (!/^ok/.test(sr) || ps.code !== 0 || !/h264/.test(ps.info)) { fail++; log('GAGAL: streaming native tidak menghasilkan H.264 yang valid'); }
           else log('streaming native: OK — MPEG-TS dari mesin native diteruskan ffmpeg (-c copy)');
+          // --- Fase 5: file video (rekaman native di atas) & gambar PNG dibuka mesin native ---
+          try {
+            const png = path.join(out, 'native-img.png');
+            { const W = 64, H = 32, bm = Buffer.alloc(W * H * 4); for (let i = 0; i < W * H; i++) { bm[i * 4] = 100; bm[i * 4 + 1] = 50; bm[i * 4 + 2] = 200; bm[i * 4 + 3] = 255; } fs.writeFileSync(png, require('electron').nativeImage.createFromBitmap(bm, { width: W, height: H }).toPNG()); }
+            await js(`(() => { const v = KM.inputs.create('video', { title: 'Video native', opts: { url: KM.fileUrl(${JSON.stringify(file || '')}) } }); const g = KM.inputs.create('image', { title: 'Gambar native', opts: { url: KM.fileUrl(${JSON.stringify(png)}) } }); window.__nvid = v.id; window.__nimg = g.id; return 1; })()`);
+            await wait(3500);
+            await js('(() => { const v = KM.getInput(window.__nvid); try { v.rt.el.currentTime = 1; } catch (e) {} KM.engine.cut(window.__nvid); KM.engine.setPreview(window.__nimg); return 1; })()');
+            await wait(2500);
+            const ms = JSON.parse(await js('JSON.stringify({ media: [...KM.nengine.media.values()].map((m) => ({ kind: m.kind, ok: m.ok, err: m.err, w: m.w, h: m.h })), pgm: KM.nengine.pgm, pvw: KM.nengine.pvw, why: KM.nengine.why })'));
+            const pp = await js(`KM.nengine.probe('pvw', 0.5, 0.5).then((p) => JSON.stringify(p))`);
+            const pg = await js(`Promise.all([KM.nengine.probe('pgm', 0.03, 0.5), KM.nengine.probe('pgm', 0.97, 0.5)]).then((p) => JSON.stringify(p))`);
+            log('video/gambar native: ' + JSON.stringify(ms) + ' • piksel gambar ' + pp + ' (harap 200,50,100) • piksel video ' + pg + ' (harap salah satu ±32,160,224)');
+            const ip = JSON.parse(pp || 'null'), vp = JSON.parse(pg || 'null') || [];
+            const near = (p, c, t) => p && c.every((v, i) => Math.abs(p[i] - v) <= t);
+            if (!ms.pvw || !near(ip, [200, 50, 100], 4)) { fail++; log('GAGAL: gambar native tidak tampil benar di monitor Preview'); }
+            else if (!ms.pgm || !(near(vp[0], [32, 160, 224], 16) || near(vp[1], [32, 160, 224], 16))) { fail++; log('GAGAL: file video native tidak tampil benar di monitor Program'); }
+            else log('video/gambar native: OK — file video & gambar digambar mesin native');
+            await js('KM.inputs.remove(window.__nvid); KM.inputs.remove(window.__nimg); 1');
+          } catch (e) { fail++; log('GAGAL video/gambar native: ' + e.message); }
           await js('KM.nengine.relaxInputs = false; KM.inputs.remove(window.__ocam); 1');
         } catch (e) { fail++; log('GAGAL output native: ' + e.message); }
         // --- Fase 2: grafis UTC ON AIR di atas Program, digambar mesin native dari tekstur GPU yang sama ---
