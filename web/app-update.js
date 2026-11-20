@@ -12,7 +12,14 @@
 
   const KEY_LAST = 'klmhp.update.last', EVERY = 6 * 3600e3;
   let busy = false, shownFor = '';
-  const cmp = (a, b) => { const x = String(a).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0), y = String(b).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0) ? 1 : -1; return 0; };
+  // urutan versi: 1.18.0 > 1.18.0-beta.15 > 1.18.0-beta.14 > 1.17.1
+  const cmp = (a, b) => {
+    const p = (v) => { const [m, pre] = String(v).replace(/^v/, '').split('-'); return { n: m.split('.').map((n) => parseInt(n, 10) || 0), pre: pre || '', pn: parseInt((/(\d+)$/.exec(pre || '') || [])[1], 10) || 0 }; };
+    const x = p(a), y = p(b);
+    for (let i = 0; i < 3; i++) if ((x.n[i] || 0) !== (y.n[i] || 0)) return (x.n[i] || 0) > (y.n[i] || 0) ? 1 : -1;
+    if (!x.pre !== !y.pre) return x.pre ? -1 : 1;
+    return x.pn === y.pn ? 0 : x.pn > y.pn ? 1 : -1;
+  };
   const esc = (s) => String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const mb = (b) => (b / 1048576).toFixed(1) + ' MB';
 
@@ -82,9 +89,12 @@
       localStorage.setItem(KEY_LAST, String(Date.now()));
       const info = await P.info();
       const cur = info && info.version; if (!cur) return;
-      const r = await fetch('https://api.github.com/repos/' + REPO + '/releases/latest', { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+      // versi uji (beta) terpasang → versi uji terbaru juga ditawarkan; versi stabil hanya ditawari rilis stabil
+      const beta = String(cur).includes('-');
+      const r = await fetch('https://api.github.com/repos/' + REPO + '/releases' + (beta ? '?per_page=15' : '/latest'), { headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store' });
       if (!r.ok) return;
-      const j = await r.json();
+      let j = await r.json();
+      if (beta) j = (Array.isArray(j) ? j : []).filter((x) => !x.draft && (x.assets || []).some((a) => /\.apk$/i.test(a.name))).sort((p, q) => cmp(q.tag_name, p.tag_name))[0] || {};
       const v = String(j.tag_name || '').replace(/^v/, '');
       const apk = (j.assets || []).find((a) => /\.apk$/i.test(a.name));
       if (!v || !apk || cmp(v, cur) <= 0 || v === shownFor) return;

@@ -140,10 +140,16 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.15
+Versi uji (beta) + **APK KLM HP baru**.
+- **Perbaikan fps KLMCAM kini sampai ke aplikasi HP.** Aplikasi KLM HP (APK) membawa salinan halaman kamera sendiri, sehingga perbaikan fps di beta.13/beta.14 (kunci FPS, format kamera sanggup fps pilihan, bitrate, zoom HP) belum ikut di HP yang memakai APK v1.17 — kamera tetap tertahan ±24 fps lalu turun di ruangan redup. APK ini (KLM-HP.apk di halaman rilis) memuat semuanya. Halaman kamera yang dibuka lewat browser dari alamat PC sudah otomatis terbaru.
+- **Kunci FPS lebih tangguh:** bila kunci exposure tidak dipatuhi HP (fps tetap rendah ±8 detik), dipakai cara kedua: target kecerahan AE (EV) diturunkan bertahap hingga −2 agar kamera menaikkan ISO alih-alih memperlambat diri. Di ruangan sangat gelap kunci **tidak lagi dilepas** (gerakan mulus diutamakan), cukup diberi tahu. Bila HP sama sekali tidak mengizinkan exposure diatur, muncul pemberitahuan untuk menambah cahaya.
+- **Update APK versi uji:** APK versi beta kini juga menawarkan APK beta yang lebih baru (APK versi stabil tetap hanya ditawari rilis stabil).
+
 ### Baru di v1.18.0-beta.14
 Versi uji (beta).
 - **KLMCAM kini mengikuti fps yang dipilih (30/60):**
-  - Penyebab utama "mentok di fps rendah": Chrome/WebView di Android sengaja membiarkan kamera memperlambat diri di ruangan redup (rentang 8–30 fps) agar gambar terang. Kini bila fps kamera terukur jauh di bawah pilihan, **exposure dikunci ≤ 1/fps** dan kecerahan diatur otomatis lewat ISO → gerakan tetap mulus. Bisa dimatikan di Pengaturan KLMCAM di HP ("Kunci FPS saat cahaya redup"); bila gambar terlalu gelap kunci dilepas otomatis.
+  - Penyebab utama "mentok di fps rendah": Chrome/WebView di Android sengaja membiarkan kamera memperlambat diri di ruangan redup (rentang 8–30 fps) agar gambar terang. Kini bila fps kamera terukur jauh di bawah pilihan, **exposure dikunci ≤ 1/fps** dan kecerahan diatur otomatis lewat ISO → gerakan tetap mulus. Bisa dimatikan di Pengaturan KLMCAM di HP ("Kunci FPS saat cahaya redup").
   - Kamera dibuka dengan format yang **sanggup** fps pilihan (dulu hanya "diusahakan", HP sering memilih format 30 fps walau 60 dipilih).
   - Batas bitrate awal/minimum kini benar-benar dibaca HP (dulu ditaruh di tempat yang diabaikan) → gambar langsung lancar tanpa masa "pemanasan". 60 fps otomatis mendapat bitrate minimal 9 Mbps (1080p) / 6 Mbps (720p).
   - Panel KLMCAM menampilkan fps nyata / fps pilihan, ikon 🔒 bila fps dikunci, dan penyebab bila masih rendah (HP berat / WiFi lemah / kamera HP lambat).

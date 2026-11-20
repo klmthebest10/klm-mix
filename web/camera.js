@@ -221,28 +221,55 @@
   // di ruangan redup → kamera memperlambat diri ke 10–15 fps: inilah "mentok di fps rendah". Bila fps kamera terukur jauh di
   // bawah pilihan, exposure dikunci ≤ 1/fps (kamera tidak bisa lagi memperlambat diri) dan kecerahan dijaga dengan ISO
   // secara otomatis di sini (AE perangkat lunak). Bisa dimatikan di Pengaturan.
-  const FG = { low: 0, on: false, iso: 0, t: 0, dark: 0, img: null, cv: null, busy: false, capFps: 0 };
-  function fpsGuardReset() { FG.low = 0; FG.on = false; FG.iso = 0; FG.dark = 0; FG.img = null; clearInterval(FG.t); FG.t = 0; }
-  function expCaps() { try { const c = vTrack.getCapabilities ? vTrack.getCapabilities() : {}; return (c.exposureMode || []).includes('manual') && c.exposureTime && c.iso ? c : null; } catch (e) { return null; } }
+  const FG = { low: 0, on: false, mode: '', iso: 0, t: 0, dark: 0, img: null, cv: null, busy: false, capFps: 0, after: 0, ev: 0, warned: false, noManual: false };
+  function fpsGuardReset() { FG.low = 0; FG.on = false; FG.mode = ''; FG.iso = 0; FG.dark = 0; FG.img = null; FG.after = 0; FG.ev = 0; FG.noManual = false; clearInterval(FG.t); FG.t = 0; }
+  function camCaps() { try { return (vTrack && vTrack.getCapabilities) ? vTrack.getCapabilities() || {} : {}; } catch (e) { return {}; } }
+  function expCaps() { const c = camCaps(); return (c.exposureMode || []).includes('manual') && c.exposureTime && c.iso ? c : null; }
+  function evCaps() { const c = camCaps(); return c.exposureCompensation && c.exposureCompensation.min < 0 ? c.exposureCompensation : null; }
   async function fpsGuardCheck(capFps) {
     FG.capFps = capFps;
     if (!cfg.fpsLock || !vTrack || !capFps) return;
-    const target = settings.fps || 30;
-    if (FG.on) return;
-    FG.low = capFps < target * 0.85 ? FG.low + 1 : 0;
+    const target = settings.fps || 30, low = capFps < target * 0.85;
+    if (FG.on && FG.mode === 'manual') {
+      // exposure sudah ≤ 1/fps tetapi fps kamera tetap rendah ±8 detik → HP mengabaikannya: pakai cara kedua (EV)
+      FG.after = low ? FG.after + 1 : 0;
+      if (FG.after >= 4) { await fpsGuardOff(''); FG.low = 0; FG.noManual = true; }
+      return;
+    }
+    FG.low = low ? FG.low + 1 : 0;
     if (FG.low < 2) return; // 2 pengukuran berturut-turut (±4 detik)
-    const c = expCaps(); if (!c) { FG.low = -1000; return; } // kamera/peramban tanpa exposure manual: tidak bisa dibantu
-    let iso = 0; try { iso = vTrack.getSettings().iso || 0; } catch (e) {}
-    FG.iso = Math.max(c.iso.min, Math.min(c.iso.max, iso || Math.min(c.iso.max, Math.max(c.iso.min, 800))));
-    const exp = Math.max(c.exposureTime.min, Math.min(c.exposureTime.max, Math.floor(10000 / target * 0.95))); // satuan 100 µs
-    try { await vTrack.applyConstraints({ advanced: [{ exposureMode: 'manual', exposureTime: exp, iso: FG.iso }] }); FG.on = true; }
-    catch (e) { FG.low = -1000; return; }
-    KMP.toast('Cahaya redup: FPS dikunci ' + target + ' — kecerahan diatur otomatis', 3500);
-    FG.t = setInterval(fpsGuardMeter, 450);
-    sendInfo();
+    FG.low = 0;
+    const c = FG.noManual ? null : expCaps();
+    if (c) {
+      let iso = 0; try { iso = vTrack.getSettings().iso || 0; } catch (e) {}
+      FG.iso = Math.max(c.iso.min, Math.min(c.iso.max, iso || Math.min(c.iso.max, Math.max(c.iso.min, 800))));
+      const exp = Math.max(c.exposureTime.min, Math.min(c.exposureTime.max, Math.floor(10000 / target * 0.95))); // satuan 100 µs
+      try {
+        await vTrack.applyConstraints({ advanced: [{ exposureMode: 'manual', exposureTime: exp, iso: FG.iso }] });
+        FG.on = true; FG.mode = 'manual'; FG.after = 0; FG.dark = 0;
+        KMP.toast('Cahaya redup: FPS dikunci ' + target + ' — kecerahan diatur otomatis', 3500);
+        clearInterval(FG.t); FG.t = setInterval(fpsGuardMeter, 450);
+        sendInfo(); return;
+      } catch (e) { FG.noManual = true; }
+    }
+    // cara kedua: turunkan target kecerahan AE (EV) sedikit demi sedikit → AE memilih ISO lebih tinggi, bukan memperlambat kamera
+    const ev = evCaps();
+    if (ev) {
+      const floor = Math.max(ev.min, -2), step = Math.max(ev.step || 0.5, 0.5), next = Math.max(floor, Math.round((FG.ev - step) * 100) / 100);
+      if (next < FG.ev - 0.01) {
+        try {
+          await vTrack.applyConstraints({ advanced: [{ exposureMode: 'continuous', exposureCompensation: next }] });
+          FG.ev = next; FG.on = true; FG.mode = 'ev';
+          KMP.toast('Cahaya redup: kecerahan diturunkan (EV ' + next + ') agar FPS ' + target + ' tetap terjaga', 3000);
+          sendInfo(); return;
+        } catch (e) {}
+      }
+    }
+    if (!FG.warned) { FG.warned = true; KMP.toast('FPS turun karena cahaya kurang. HP ini tidak mengizinkan exposure diatur dari aplikasi — tambah cahaya agar ' + target + ' fps tercapai', 6000); }
+    if (!FG.on) FG.low = -1000;
   }
   async function fpsGuardMeter() { // AE perangkat lunak: ukur kecerahan rata-rata, atur ISO menuju ±0,45
-    if (!FG.on || FG.busy || !vTrack || vTrack.readyState !== 'live') return;
+    if (!FG.on || FG.mode !== 'manual' || FG.busy || !vTrack || vTrack.readyState !== 'live') return;
     FG.busy = true;
     try {
       let src = null;
@@ -254,13 +281,15 @@
       const d = g.getImageData(0, 0, 32, 18).data; let y = 0; for (let i = 0; i < d.length; i += 4) y += d[i] * 0.2126 + d[i + 1] * 0.7152 + d[i + 2] * 0.0722;
       const luma = y / (d.length / 4) / 255, c = expCaps(); if (!c) return;
       const want = Math.max(c.iso.min, Math.min(c.iso.max, FG.iso * Math.max(0.75, Math.min(1.35, 0.45 / Math.max(0.02, luma)))));
-      if (luma < 0.06 && FG.iso >= c.iso.max * 0.98) { if (++FG.dark >= 6) { await fpsGuardOff('terlalu gelap'); return; } } else FG.dark = 0;
+      // sangat gelap & ISO sudah maksimal: kunci TETAP dipertahankan (gerakan mulus diutamakan), cukup beri tahu sekali
+      if (luma < 0.06 && FG.iso >= c.iso.max * 0.98) { if (++FG.dark === 8) KMP.toast('Ruangan sangat gelap — gambar akan gelap/berbintik. Tambah cahaya agar lebih jelas', 5000); }
       if (Math.abs(want - FG.iso) / FG.iso > 0.06) { FG.iso = Math.round(want); await vTrack.applyConstraints({ advanced: [{ exposureMode: 'manual', iso: FG.iso }] }).catch(() => {}); }
     } catch (e) {} finally { FG.busy = false; }
   }
   async function fpsGuardOff(why) {
-    clearInterval(FG.t); FG.t = 0; FG.on = false; FG.low = -1000;
-    try { await vTrack.applyConstraints({ advanced: [{ exposureMode: 'continuous' }] }); } catch (e) {}
+    clearInterval(FG.t); FG.t = 0; const was = FG.mode; FG.on = false; FG.mode = ''; FG.low = -1000;
+    try { await vTrack.applyConstraints({ advanced: [was === 'ev' || FG.ev ? { exposureMode: 'continuous', exposureCompensation: 0 } : { exposureMode: 'continuous' }] }); } catch (e) {}
+    FG.ev = 0;
     if (why) KMP.toast('Kunci FPS dilepas: ' + why, 3500);
     sendInfo();
   }

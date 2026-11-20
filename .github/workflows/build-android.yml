@@ -91,4 +91,6 @@ jobs:
           token: ${{ secrets.RELEASE_TOKEN }}
           tag_name: v${{ env.VERSION }}
           name: KLM v${{ env.VERSION }}
+          # versi uji (1.x.y-beta.n) tetap prarilis: tidak menjadi "rilis terbaru" bagi pembaruan otomatis versi stabil
+          prerelease: ${{ contains(env.VERSION, '-') }}
           files: KLM-HP.apk
