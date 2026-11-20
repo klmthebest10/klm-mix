@@ -139,6 +139,7 @@
     try { const d = g.getImageData(0, 0, c.width, c.height); window.klm.send('nengine:raster', id, c.width, c.height, d.data.buffer); media.set(id, { sig: 'label', kind: 'raster', owner: '', ok: false, err: '', keep: true, onok: () => { L.ok = true; } }); } catch (e) {}
     return null;
   }
+  N.debug = () => ({ comps: [...comps.values()], media: [...media.entries()].map(([k, m]) => k + ':' + m.kind + ':' + (m.ok ? 'ok' : m.err || '…')), pgm: bus.pgm.id, ovl: ovlSent, restarts: N.restarts || 0 });
   const vsSig = (o) => JSON.stringify([o.bgKind, o.bg, o.colour, o.caption]);
   const vsBgId = (inp) => hashId('vs', inp.id + '|' + vsSig(inp.opts || {}));
   // ---- overlay (Fase 7): sama dengan drawOverlays mesin JS, tanpa mengubah keadaan saluran
@@ -292,7 +293,7 @@
     else if (t === 'vok' || t === 'srcok') { const a = rest.split(' '), m = media.get(a[0]); if (m) { m.ok = true; m.w = +a[1]; m.h = +a[2]; m.err = ''; if (m.onok) m.onok(); } }
     else if (t === 'naok' || t === 'naerr') naEv(t, rest);
     else if (t === 'uerr') { utcErr = rest.replace(/^\S+ /, '').slice(0, 80); KM.log && KM.log('mesin native UTC: ' + rest); }
-    else if (t === 'exit' || t === 'restart') { for (const x of outs.values()) { x.err = 'mesin native berhenti'; if (x.wait) x.wait.rej(new Error(x.err)); if (x.stopWait) x.stopWait(); else if (x.onEnd) x.onEnd(x); } outs.clear(); audStop(); ready = false; N.pvw = N.pgm = false; N.state = t === 'exit' ? 'berhenti' : 'memulai ulang'; resetSent(); camLost(); KM.changed('nengine'); }
+    else if (t === 'exit' || t === 'restart') { if (t === 'exit') N.restarts = (N.restarts || 0) + 1; for (const x of outs.values()) { x.err = 'mesin native berhenti'; if (x.wait) x.wait.rej(new Error(x.err)); if (x.stopWait) x.stopWait(); else if (x.onEnd) x.onEnd(x); } outs.clear(); audStop(); ready = false; N.pvw = N.pgm = false; N.state = t === 'exit' ? 'berhenti' : 'memulai ulang'; resetSent(); camLost(); KM.changed('nengine'); }
   }
   function resetSent() { comps.clear(); labels.clear(); ovlSent = ''; for (const [id, m] of media) if (m.aud) pcmStop(m.owner, id); media.clear(); avSent = null; srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; uready.clear(); ulaySent = null; if (utcWant) { utcWant = false; if (el()) window.klm.send('nengine:utc', false); } for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
   // klik di jendela native diteruskan ke kanvas di bawahnya (pilih kotak grid, klik kanan menu monitor, dll.)

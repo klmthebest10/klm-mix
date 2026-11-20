@@ -16,7 +16,7 @@ function findExe() {
   return c.find((p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }) || '';
 }
 // hanya perintah yang dikenal mesin, tanpa baris baru / karakter kendali (perintah utex/utk/ublob hanya dari proses utama)
-const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff|ostart|ostop|vt|naud|camaud|avoff)( [\w.,\- ]{0,2000})?$/;
+const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff|ostart|ostop|vt|naud|camaud|avoff|comp|ovl)( [\w.,\- ]{0,4000})?$/;
 
 // DuplicateHandle (kernel32) lewat koffi: handle NT tekstur lapisan UTC → disalin ke proses klm-engine
 let K = null;
@@ -185,14 +185,14 @@ function setup({ win, log = () => {} }) {
           const k = k32(); hProc = k ? k.OpenProcess(0x40 /* PROCESS_DUP_HANDLE */, 0, p.pid) : 0;
           if (utcOn) { resendTk(); if (onUtcWant) onUtcWant(); }
         }
-        else if (/^(err|uerr|oerr|ostarted|ostopped|kerr|camerr) /.test(s)) log('[nengine] ' + s);
+        else if (/^(err|uerr|oerr|ostarted|ostopped|kerr|camerr|srcerr|naerr) /.test(s)) log('[nengine] ' + s);
         toWin(s);
       }
     });
     p.stderr.on('data', (d) => log('[nengine] stderr ' + String(d).slice(0, 300)));
     p.on('error', (e) => { st = { state: 'error', msg: e.message }; toWin('exit error'); });
     p.on('exit', (code) => {
-      if (P !== p) return; P = null;
+      if (P !== p) return; P = null; log('[nengine] mesin berhenti, kode ' + code);
       dropUtc(); camDropAll(); if (hProc && k32()) { try { k32().CloseHandle(hProc); } catch (e) {} } hProc = 0;
       toWin('exit ' + code);
       if (want && restarts < 3) { restarts++; st = { state: 'restarting' }; setTimeout(() => { if (want) { start(); toWin('restart'); } }, 800 * restarts); }

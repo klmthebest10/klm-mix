@@ -209,7 +209,7 @@ process.on('unhandledRejection', (e) => { console.warn('[KLM] unhandledRejection
 const vstMgr = require('./vst').setup({ win: () => mainWin });
 const airplay = require('./airplay').setup({ win: () => mainWin, server, configDir: server.configDir });
 const procAudio = require('./procaudio').setup({ win: () => mainWin, server });
-const nEngine = require('./nengine').setup({ win: () => mainWin, log: (m) => console.log(m) }); // mesin video native (eksperimen)
+const nEngine = require('./nengine').setup({ win: () => mainWin, log: (m) => { console.log(m); if (global.__smokeLog) { try { global.__smokeLog(m); } catch (e) {} } } }); // mesin video native (eksperimen)
 try { server.hub.setNativeTap(nEngine.tsTap); } catch (e) {}
 // update di dalam aplikasi (GitHub Releases). Saat memasang, jendela ditutup tanpa dialog konfirmasi lagi
 // (penyimpanan preset & penutupan rekaman sudah dikerjakan halaman sebelum memanggil update:install).
@@ -419,6 +419,7 @@ function hardQuit(why) {
 function smokeTest() {
   const out = process.env.KLM_SMOKE;
   const log = (m) => { try { fs.appendFileSync(path.join(out, 'smoke.log'), new Date().toISOString() + ' ' + m + '\n'); } catch (e) {} console.log('[SMOKE] ' + m); };
+  global.__smokeLog = (m) => log('mesin: ' + m); // catatan mesin native ikut masuk log uji
   try { fs.mkdirSync(out, { recursive: true }); } catch (e) {}
   const http = require('http');
   const post = (p, body) => new Promise((res) => {
@@ -886,11 +887,14 @@ function smokeTest() {
             await js('KM.engine.cut(window.__vs); 1'); await wait(2500);
             const v7 = JSON.parse(await js(`Promise.all([KM.nengine.probe('pgm', 0.5, 0.5), KM.nengine.probe('pgm', 0.05, 0.05)]).then((p) => JSON.stringify({ p, pgm: KM.nengine.pgm, why: KM.nengine.why.pgm }))`));
             log('Virtual Set native: ' + JSON.stringify(v7) + ' (harap tengah 32,64,255)');
+            log('Virtual Set native — diagnosa: ' + await js('JSON.stringify({ state: KM.nengine.state, comps: KM.nengine.debug ? KM.nengine.debug() : null })'));
             const nr7 = (a, c, t) => a && c.every((x, i) => Math.abs(a[i] - x) <= t);
             if (!v7.pgm || !nr7(v7.p[0], [32, 64, 255], 6)) { fail++; log('GAGAL: Virtual Set tidak tampil native'); } else log('Virtual Set native: OK');
             await js('KM.engine.overlay(0, window.__vt, "in"); 1'); await wait(2500);
             const t7 = JSON.parse(await js('JSON.stringify({ pgm: KM.nengine.pgm, why: KM.nengine.why.pgm, title: (() => { const m = KM.nengine.media.get("i" + String(window.__vt).replace(/[^\\w.-]/g, "_").slice(0, 60)); return m ? { ok: m.ok } : null; })() })'));
             log('Title Cepat di overlay native: ' + JSON.stringify(t7));
+            const tp = JSON.parse(await js(`KM.nengine.probe('pgm', 0.5, 0.5).then((p) => JSON.stringify(p))`) || 'null');
+            log('Title overlay: piksel tengah Program ' + JSON.stringify(tp) + ' • ovl terkirim: ' + await js('JSON.stringify(KM.nengine.debug().ovl || null)'));
             if (!t7.pgm) { fail++; log('GAGAL: Program dengan Title di overlay tidak native (' + t7.why + ')'); } else log('Title overlay native: OK');
             await js('KM.engine.overlay(0, null, "off"); KM.engine.setPreview(window.__vb); 1'); await wait(3000);
             const b7 = JSON.parse(await js('JSON.stringify({ pvw: KM.nengine.pvw, why: KM.nengine.why.pvw })'));
