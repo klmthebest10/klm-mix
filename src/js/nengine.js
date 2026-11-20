@@ -16,7 +16,9 @@
  * Fase 5: file video (dekode DXVA, posisi mengikuti elemen video KLM — audio tetap dari KLM) & gambar (WIC).
  * Fase 8: posisi & rotasi input/kotak, koreksi warna, chroma/luma key, latar AI (mask dari model segmentasi KLM,
  * komposit di GPU native), semua transisi kecuali stinger, overlay zoom, FTB.
- * Bila monitor menampilkan hal lain (transisi stinger, mode grid, sumber yang belum didukung) atau ada menu/dialog di
+ * Fase 9: transisi stinger (video transparan diputar di halaman offscreen → tekstur GPU), grid Preview (komposisi
+ * kotak + label + tally di ukuran panel Preview), latar AI dengan model segmentasi di mesin native.
+ * Bila monitor menampilkan hal lain (sumber yang belum didukung) atau ada menu/dialog di
  * atas monitor, monitor itu otomatis kembali ke tampilan JS — tanpa kedip.
  */
 'use strict';
@@ -36,7 +38,8 @@
     pvw: { want: false, shown: false, hideAt: -1, rect: '', id: null },
     pgm: { want: false, shown: false, hideAt: -1, rect: '', id: null }
   };
-  let out = '', transKey = '', tbarSent = '', ftbSent = '';
+  let out = '', transKey = '', tbarSent = '', ftbSent = '', bsizeSent = '', stPlaying = -1;
+  const sting = [{ src: '', ok: false, wait: false }, { src: '', ok: false, wait: false }]; // halaman video stinger offscreen per slot
   const attrSent = new Map(); // id mesin → { pos, fx, seg, segN } terakhir yang dikirim (Fase 8)
   // Fase 2: grafis UTC
   let utcWant = false, ulaySent = null, utcErr = '';
@@ -106,6 +109,7 @@
     const walk = (i, d) => { if (!i || d > 4 || set.has(i)) return; set.add(i); for (const l of i.layers || []) if (l && l.on && l.inputId) walk(KM.getInput(l.inputId), d + 1); };
     for (const id of [S.previewId, S.programId, S.trans && S.trans.fromId, S.trans && S.trans.toId]) if (id) walk(KM.getInput(id), 0);
     for (const ch of S.overlays || []) if (ch && ch.phase !== 'off' && ch.inputId) walk(KM.getInput(ch.inputId), 0);
+    if (KM.engine.gridActive && KM.engine.gridActive()) for (const id of KM.engine.gridIds()) walk(KM.getInput(id), 0);
     return set;
   }
   const hasLayers = (inp) => inp.type === 'virtualset' || (inp.layers || []).some((l) => l && l.on && l.inputId);
@@ -224,12 +228,37 @@
     return { line: 'ovl' + (out.length ? ' ' + out.join(' ') : '') };
   }
   const TR_NATIVE = new Set(['fade', 'cut', 'merge', 'wipe', 'wipeup', 'slide', 'slideup', 'fly', 'zoom', 'crosszoom', 'circle', 'barn', 'cube', 'dip', 'dipwhite', 'blur']);
+  // ---- Fase 9: stinger — video diputar di halaman offscreen transparan (proses utama), teksturnya masuk mesin native
+  const STING_TYPES = new Set(['video', 'urlvideo']);
+  const stSlot = (tr) => (tr && tr.type === 'stinger1' ? 0 : tr && tr.type === 'stinger2' ? 1 : -1);
+  function stingerSrc(slot) {
+    const sg = (KM.settings.stingers || [])[slot], inp = sg && KM.getInput(sg.inputId);
+    if (!inp || !STING_TYPES.has(inp.type)) return '';
+    const u = (inp.opts || {}).url || '', lp = localPath(u);
+    return lp ? 'file:' + lp : isHttp(u) ? u : '';
+  }
+  function stingerSync() {
+    for (let i = 0; i < 2; i++) {
+      const src = stingerSrc(i), st = sting[i];
+      if (src === st.src) continue;
+      st.src = src; st.ok = false;
+      if (!src) { window.klm.invoke('stinger:drop', i).catch(() => {}); continue; }
+      st.wait = true;
+      window.klm.invoke('stinger:prep', i, src, KM.settings.width, KM.settings.height, KM.settings.fps || 30)
+        .then((r) => { if (st.src === src) { st.ok = !!(r && r.ok); st.wait = false; if (!st.ok && r && r.err) console.warn('[nengine] stinger', i, r.err); } })
+        .catch(() => { if (st.src === src) { st.ok = false; st.wait = false; } });
+    }
+  }
+  function stingerReady(tr) {
+    const i = stSlot(tr); if (i < 0 || !tr.stingerId) return false;
+    const st = sting[i]; return st.ok && st.src && st.src === stingerSrc(i) && uready.has('k' + i);
+  }
   // tanpa memperhitungkan grafis UTC
   function pgmBaseWhy() {
     const S = KM.state;
     const ov = ovlState(); if (ov.why) return ov.why;
     if (S.trans) {
-      if (!TR_NATIVE.has(S.trans.type)) return 'transisi ' + S.trans.type;
+      if (!TR_NATIVE.has(S.trans.type) && !stingerReady(S.trans)) return 'transisi ' + S.trans.type;
       for (const id of [S.trans.fromId, S.trans.toId]) { const i = KM.getInput(id); if (id && !spec(i)) return 'sumber ' + label(i); }
     }
     if (!S.programId) return '';
@@ -246,9 +275,50 @@
     }
     return '';
   }
+  // ---- Fase 9: grid Preview = komposisi kotak (sumber + label + tally) di ukuran kanvas Preview (rasio panel)
+  let gridSent = '';
+  const gridLabels = new Map();
+  function gridLabel(text, fs, maxW) {
+    const g0 = document.createElement('canvas').getContext('2d'); g0.font = '700 ' + fs + 'px Plus Jakarta Sans, sans-serif';
+    const tw = Math.max(4, Math.round(Math.min(maxW - 8, g0.measureText(text).width + fs))), th = Math.max(4, Math.round(fs * 1.6));
+    const id = hashId('gl', text + '|' + fs + '|' + tw); let L = gridLabels.get(id);
+    if (L) return L.ok ? L : null;
+    L = { id, ok: false, w: tw, h: th }; gridLabels.set(id, L);
+    const c = document.createElement('canvas'); c.width = tw; c.height = th; const g = c.getContext('2d');
+    g.fillStyle = 'rgba(0,0,0,.62)'; g.fillRect(0, 0, tw, th);
+    g.font = '700 ' + fs + 'px Plus Jakarta Sans, sans-serif'; g.fillStyle = '#fff'; g.fillText(text, fs * 0.5, th - fs * 0.5, Math.max(1, maxW - fs));
+    try { const d = g.getImageData(0, 0, tw, th); window.klm.send('nengine:raster', id, tw, th, d.data.buffer); media.set(id, { sig: 'label', kind: 'raster', owner: '', ok: false, err: '', keep: true, onok: () => { L.ok = true; } }); } catch (e) {}
+    return null;
+  }
+  const fillTok = (x, y, w, h, col) => ['-', num(x), num(y), num(w), num(h), 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, '-', col, 0, '-', 0, 0, 0, 0].join(',');
+  function gridComp() {
+    const E = KM.engine, S = KM.state, ids = E.gridIds();
+    if (!ids.length) return 'grid Preview kosong';
+    const pw = E.prev.width, ph = E.prev.height; if (pw < 16 || ph < 16) return 'grid belum siap';
+    const cells = E.gridLayout(ids.length, pw, ph), arG = (KM.settings.width || 16) / (KM.settings.height || 9);
+    const fs = Math.max(10, Math.round(Math.min(cells[0].h, cells[0].w / arG) * 0.09));
+    const toks = [fillTok(0, 0, 1, 1, '15181e')];
+    for (let i = 0; i < ids.length; i++) {
+      const inp = KM.getInput(ids[i]), c = cells[i];
+      if (!spec(inp)) return 'grid: sumber ' + label(inp);
+      const L = gridLabel(KM.inputNum(inp) + '  ' + inp.title, fs, c.w); if (!L) return 'menyiapkan label grid';
+      toks.push([eidOf(inp), num(c.x / pw), num(c.y / ph), num(c.w / pw), num(c.h / ph), 3, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, '-', '000000', 0,
+        L.id, num(c.x / pw), num((c.y + c.h - L.h) / ph), num(L.w / pw), num(L.h / ph)].join(','));
+      const tl = ids[i] === S.previewId ? '22c55e' : E.live.has(ids[i]) ? 'ef4444' : null;
+      if (tl) {
+        const lw = Math.max(2, Math.round(Math.min(c.h, c.w / arG) * 0.025)), X = c.x / pw, Y = c.y / ph, Wc = c.w / pw, Hc = c.h / ph, lx = lw / pw, ly = lw / ph;
+        toks.push(fillTok(X, Y, Wc, ly, tl), fillTok(X, Y + Hc - ly, Wc, ly, tl), fillTok(X, Y, lx, Hc, tl), fillTok(X + Wc - lx, Y, lx, Hc, tl));
+      }
+    }
+    const line = ['comp', 'Gpv', '-', 1, 0, '-'].concat(toks).join(' ');
+    if (line !== gridSent) { gridSent = line; cmd(line); }
+    const bs = Math.round(pw) + ' ' + Math.round(ph);
+    if (bs !== bsizeSent) { bsizeSent = bs; cmd('bsize pvw ' + bs); }
+    return '';
+  }
   function pvwWhy() {
     const S = KM.state, E = KM.engine;
-    if (E.gridActive && E.gridActive()) return 'mode grid';
+    if (E.gridActive && E.gridActive()) return gridComp();
     if (!S.previewId) return '';
     const inp = KM.getInput(S.previewId);
     return spec(inp) ? '' : 'sumber ' + label(inp);
@@ -292,8 +362,15 @@
     // posisi / efek / latar AI tiap input yang dipakai (Fase 8)
     for (const i of usedInputs()) if (!hasLayers(i) || i.type !== 'virtualset') attrSync(i);
     // transisi: otomatis dikirim sekali (mesin native menghitung waktunya sendiri); T-bar manual dikirim posisinya
-    const tr = S.trans, ttype = tr && TR_NATIVE.has(tr.type) && tr.type !== 'cut' ? tr.type : 'fade';
-    if (tr && !tr.manual && TR_NATIVE.has(tr.type)) {
+    stingerSync();
+    const tr = S.trans, ttype = tr && TR_NATIVE.has(tr.type) && tr.type !== 'cut' ? tr.type : 'fade', sl = stSlot(tr);
+    if (tr && !tr.manual && sl >= 0 && stingerReady(tr)) {
+      const k = tr.fromId + '>' + tr.toId + '@' + tr.t0;
+      if (k !== transKey) { // video stinger mulai diputar bersamaan dengan transisi (suara tetap dari input stinger di mixer)
+        transKey = k; stPlaying = sl; window.klm.send('stinger:play', sl);
+        cmd('trans ' + Math.max(1, Math.round(tr.dur || 1)) + ' ' + idOf(tr.fromId) + ' ' + idOf(tr.toId) + ' stinger k' + sl + ' ' + Math.max(0, Math.round(tr.cut || 500)));
+      }
+    } else if (tr && !tr.manual && TR_NATIVE.has(tr.type)) {
       const k = tr.fromId + '>' + tr.toId + '@' + tr.t0;
       if (k !== transKey) { transKey = k; cmd('trans ' + Math.max(1, Math.round(tr.type === 'cut' ? 1 : tr.dur || 1)) + ' ' + idOf(tr.fromId) + ' ' + idOf(tr.toId) + ' ' + ttype); }
     } else if (tr && tr.manual) {
@@ -301,6 +378,7 @@
       if (v !== tbarSent) { tbarSent = v; cmd('tbar ' + v); }
     } else {
       if (tbarSent) { tbarSent = ''; cmd('tbar off'); }
+      if (stPlaying >= 0 && !tr) { window.klm.send('stinger:stop', stPlaying); stPlaying = -1; }
       transKey = tr ? transKey : '';
     }
     // Fade To Black: alpha hitam paling atas (di atas grafis UTC, sama dengan mesin JS)
@@ -315,7 +393,10 @@
     if (outs.size) { const w = base || utcWhy(ids); if (w && w !== 'menunggu grafis UTC' && w !== warnedWhy) { warnedWhy = w; KM.toast('⚠ Output native: ' + w + ' — bagian itu tidak ikut terekam/tersiar', 'warn', 8000); } if (!w) warnedWhy = ''; }
     const pg = idOf(S.programId), pv = idOf(S.previewId);
     if (!tr && pg !== bus.pgm.id) { bus.pgm.id = pg; cmd('pgm ' + pg); }
-    if (pv !== bus.pvw.id) { bus.pvw.id = pv; cmd('pvw ' + pv); }
+    const grid = KM.engine.gridActive && KM.engine.gridActive();
+    if (!grid && bsizeSent !== '0 0' && bsizeSent !== '') { bsizeSent = '0 0'; cmd('bsize pvw 0 0'); }
+    const pvId = grid ? 'Gpv' : pv;
+    if (pvId !== bus.pvw.id) { bus.pvw.id = pvId; cmd('pvw ' + pvId); }
     // tampil / sembunyi + posisi (posisi & tutupan dicek tiap 3 frame; alasan tiap frame)
     const geo = frameN % 3 === 0;
     for (const k of ['pvw', 'pgm']) {
@@ -359,7 +440,7 @@
     else if (t === 'uerr') { utcErr = rest.replace(/^\S+ /, '').slice(0, 80); KM.log && KM.log('mesin native UTC: ' + rest); }
     else if (t === 'exit' || t === 'restart') { if (t === 'exit') N.restarts = (N.restarts || 0) + 1; for (const x of outs.values()) { x.err = 'mesin native berhenti'; if (x.wait) x.wait.rej(new Error(x.err)); if (x.stopWait) x.stopWait(); else if (x.onEnd) x.onEnd(x); } outs.clear(); audStop(); ready = false; N.pvw = N.pgm = false; N.state = t === 'exit' ? 'berhenti' : 'memulai ulang'; resetSent(); camLost(); KM.changed('nengine'); }
   }
-  function resetSent() { wready.clear(); comps.clear(); labels.clear(); ovlSent = ''; for (const [id, m] of media) if (m.aud) pcmStop(m.owner, id); media.clear(); avSent = null; srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; ftbSent = ''; attrSent.clear(); uready.clear(); ulaySent = null; if (utcWant) { utcWant = false; if (el()) window.klm.send('nengine:utc', false); } for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
+  function resetSent() { wready.clear(); comps.clear(); labels.clear(); ovlSent = ''; for (const [id, m] of media) if (m.aud) pcmStop(m.owner, id); media.clear(); avSent = null; srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; ftbSent = ''; bsizeSent = ''; gridSent = ''; gridLabels.clear(); stPlaying = -1; for (const st of sting) { st.src = ''; st.ok = false; } attrSent.clear(); uready.clear(); ulaySent = null; if (utcWant) { utcWant = false; if (el()) window.klm.send('nengine:utc', false); } for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
   // klik di jendela native diteruskan ke kanvas di bawahnya (pilih kotak grid, klik kanan menu monitor, dll.)
   function clickFwd(a) {
     const cv = document.getElementById(a[0]); if (!cv) return;

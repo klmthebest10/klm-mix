@@ -16,7 +16,7 @@ function findExe() {
   return c.find((p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }) || '';
 }
 // hanya perintah yang dikenal mesin, tanpa baris baru / karakter kendali (perintah utex/utk/ublob hanya dari proses utama)
-const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff|ostart|ostop|vt|naud|camaud|avoff|comp|ovl|ftb|ipos|fx|seg)( [\w.,\- ]{0,4000})?$/;
+const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff|ostart|ostop|vt|naud|camaud|avoff|comp|ovl|ftb|ipos|fx|seg|bsize)( [\w.,\- ]{0,4000})?$/;
 
 // DuplicateHandle (kernel32) lewat koffi: handle NT tekstur lapisan UTC → disalin ke proses klm-engine
 let K = null;
@@ -101,15 +101,15 @@ function setup({ win, log = () => {} }) {
     const x = ul.get(id); if (!x || !x.fly || x.fly.seq !== seq) return;
     x.fly.unref(x.fly.h); x.fly = null;
     const p = x.pend; x.pend = null;
-    if (p) { if ((utcOn || x.cmd === 'stex') && P) sendTex(id, x, p.h, p.meta, p.unref, x.cmd); else p.unref(p.h); }
+    if (p) { if ((utcOn || x.cmd === 'stex' || x.cmd === 'ptex') && P) sendTex(id, x, p.h, p.meta, p.unref, x.cmd); else p.unref(p.h); }
   }
   // sumber tekstur GPU lain (Web Browser offscreen) → mesin native sebagai sumber biasa
-  function extPush(id, h, meta, unref) {
+  function extPush(id, h, meta, unref, cmdName) { // cmdName: 'stex' (buram, Web Browser) | 'ptex' (alpha premultiplied, video stinger)
     if (!P || st.state !== 'ready') { unref(h); return; }
     const x = lay(id);
     if (x.fly && Date.now() - x.fly.t > 1000) { x.fly.unref(x.fly.h); x.fly = null; }
     if (x.fly) { if (x.pend) x.pend.unref(x.pend.h); x.pend = { h, meta, unref }; return; }
-    sendTex(id, x, h, meta, unref, 'stex');
+    sendTex(id, x, h, meta, unref, cmdName === 'ptex' ? 'ptex' : 'stex');
   }
   // running text native: pesan dari halaman overlay ({k:'strip'|'geo'|'live'|'reset'})
   const num = (v) => (Number.isFinite(+v) ? +(+v).toFixed(3) : 0);

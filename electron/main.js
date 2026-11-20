@@ -391,6 +391,41 @@ function openBview(id) {
   v.loadFile(path.join(__dirname, 'bview.html')).catch(() => {});
   return true;
 }
+// ---- video stinger untuk mesin native (Fase 9): diputar di halaman offscreen TRANSPARAN, teksturnya (alpha premultiplied)
+// langsung ke mesin native — WebM transparan tetap transparan. Suara stinger tetap dari input stinger di mixer KLM.
+const stingWins = new Map(); // slot → { win, src }
+function stingDrop(slot) { const s = stingWins.get(slot); stingWins.delete(slot); if (s && s.win && !s.win.isDestroyed()) s.win.destroy(); }
+ipcMain.handle('stinger:drop', (e, slot) => { stingDrop(slot | 0); return true; });
+ipcMain.handle('stinger:prep', async (e, slot, src, W, H, fps) => {
+  slot = slot | 0; if (slot < 0 || slot > 1) return { ok: false, err: 'slot' };
+  let url = String(src || '');
+  if (url.startsWith('file:')) url = require('url').pathToFileURL(url.slice(5)).href;
+  else if (!/^https?:\/\//i.test(url)) return { ok: false, err: 'alamat video tidak didukung' };
+  W = Math.max(64, Math.min(3840, W | 0 || 1920)); H = Math.max(36, Math.min(2160, H | 0 || 1080));
+  let s = stingWins.get(slot);
+  if (!s || !s.win || s.win.isDestroyed()) {
+    const win = new BrowserWindow({ show: false, width: W, height: H, useContentSize: true, frame: false, transparent: true, backgroundColor: '#00000000', paintWhenInitiallyHidden: true,
+      webPreferences: { offscreen: { useSharedTexture: true }, backgroundThrottling: false, contextIsolation: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' } });
+    win.webContents.setAudioMuted(true);
+    win.webContents.setFrameRate(Math.max(24, Math.min(60, fps | 0 || 30)));
+    win.webContents.on('paint', (ev) => {
+      const t = ev && ev.texture; if (!t) return;
+      const hold = { tex: t, n: 1 }, unref = (h) => { if (h && --h.n <= 0 && h.tex) { const x = h.tex; h.tex = null; try { x.release(); } catch (er) {} } };
+      const cs = (t.textureInfo && t.textureInfo.codedSize) || {};
+      if (nEngine.ready && nEngine.ready()) { try { nEngine.extPush('k' + slot, hold, { W: cs.width | 0, H: cs.height | 0 }, unref, 'ptex'); } catch (er) { unref(hold); } } else unref(hold);
+    });
+    s = { win, src: '' }; stingWins.set(slot, s);
+    await win.loadFile(path.join(__dirname, 'stinger.html')).catch(() => {});
+  } else if (s.win.getContentSize()[0] !== W || s.win.getContentSize()[1] !== H) s.win.setContentSize(W, H);
+  s.src = url;
+  try {
+    const r = await s.win.webContents.executeJavaScript('window.klmSet(' + JSON.stringify(url) + ')');
+    try { s.win.webContents.invalidate(); } catch (er) {}
+    return r && r.ok ? { ok: true, dur: r.dur } : { ok: false, err: (r && r.err) || 'video tidak bisa dibuka' };
+  } catch (er) { return { ok: false, err: er.message }; }
+});
+ipcMain.on('stinger:play', (e, slot) => { const s = stingWins.get(slot | 0); if (s && s.win && !s.win.isDestroyed()) s.win.webContents.executeJavaScript('window.klmPlay()').catch(() => {}); });
+ipcMain.on('stinger:stop', (e, slot) => { const s = stingWins.get(slot | 0); if (s && s.win && !s.win.isDestroyed()) s.win.webContents.executeJavaScript('window.klmStop()').catch(() => {}); });
 const bvSrc = (e) => { const v = BrowserWindow.fromWebContents(e.sender); const id = v && v.__src; const w = id != null && browsers.get(id); return w && !w.isDestroyed() ? w : null; };
 ipcMain.on('bview:input', (e, ev) => {
   const w = bvSrc(e); if (!w || !ev || typeof ev.type !== 'string') return;
@@ -1069,6 +1104,31 @@ function smokeTest() {
               const r5 = await pr([[0.5, 0.5]]);
               log('Fase 8 koreksi warna native: ' + JSON.stringify(r5));
               if (!r5.pgm || !near(r5.p[0], [54, 54, 54], 5)) { fail++; log('GAGAL: koreksi warna tidak native'); } else log('Koreksi warna native: OK');
+              // --- Fase 9: grid Preview native (kotak + label + tally di ukuran panel Preview)
+              await js('KM.getInput(window.__f8a).cc = null; window.__pg = KM.settings.pvGrid; KM.settings.pvGrid = { on: true, ids: [window.__f8a, window.__f8b] }; KM.engine.setPreview(window.__f8b); KM.changed("settings"); 1');
+              await wait(2500);
+              const g9 = JSON.parse(await js(`Promise.all([[0.25, 0.5], [0.75, 0.5]].map((q) => KM.nengine.probe('pvw', q[0], q[1]))).then((p) => JSON.stringify({ p, pvw: KM.nengine.pvw, why: KM.nengine.why.pvw, prev: [KM.engine.prev.width, KM.engine.prev.height], cells: KM.engine.gridLayout(2, KM.engine.prev.width, KM.engine.prev.height) }))`));
+              log('Fase 9 grid Preview native: ' + JSON.stringify(g9));
+              { const c = g9.cells || [], P = g9.prev || [1, 1]; // titik tengah tiap kotak
+                const pts = c.map((q) => [(q.x + q.w / 2) / P[0], (q.y + q.h / 2) / P[1]]);
+                const cp = pts.length === 2 ? JSON.parse(await js(`Promise.all(${JSON.stringify(pts)}.map((q) => KM.nengine.probe('pvw', q[0], q[1]))).then((p) => JSON.stringify(p))`)) : [];
+                log('Fase 9 grid: piksel tengah kotak ' + JSON.stringify(cp));
+                if (!g9.pvw || !near(cp[0], [255, 0, 0], 8) || !near(cp[1], [0, 255, 0], 8)) { fail++; log('GAGAL: grid Preview tidak tampil native'); } else log('Grid Preview native: OK'); }
+              await js('KM.settings.pvGrid = window.__pg || { on: false, ids: [] }; KM.changed("settings"); 1');
+              await wait(800);
+              // --- Fase 9: stinger native (video diputar di halaman offscreen → tekstur GPU ke mesin native)
+              const stFile = (typeof file === 'string' && file) || '';
+              if (!stFile) log('catatan: tidak ada file video uji — uji stinger native dilewati');
+              else {
+                await js(`(() => { const v = KM.inputs.create('video', { title: 'Stinger uji', opts: { url: KM.fileUrl(${JSON.stringify(stFile)}) } }); window.__stv = v.id; window.__sg0 = Object.assign({}, KM.settings.stingers[0]); KM.settings.stingers[0] = { inputId: v.id, cut: 300 }; KM.engine.cut(window.__f8a); KM.engine.setPreview(window.__f8b); return 1; })()`);
+                await wait(6000);
+                await js('KM.engine.transition("stinger1", 0); 1'); await wait(700);
+                const s9 = JSON.parse(await js(`KM.nengine.probe('pgm', 0.5, 0.5).then((p) => JSON.stringify({ p, pgm: KM.nengine.pgm, why: KM.nengine.why.pgm, tr: KM.state.trans && KM.state.trans.type }))`));
+                log('Fase 9 stinger native (sedang berjalan): ' + JSON.stringify(s9));
+                if (!s9.pgm || s9.tr !== 'stinger1' || near(s9.p, [255, 0, 0], 20) || near(s9.p, [0, 255, 0], 20)) { fail++; log('GAGAL: transisi stinger tidak native / video stinger tidak tampil'); } else log('Stinger native: OK');
+                await wait(4000);
+                await js('KM.settings.stingers[0] = window.__sg0; KM.inputs.remove(window.__stv); 1');
+              }
               await js('KM.inputs.remove(window.__f8a); KM.inputs.remove(window.__f8b); 1');
             } catch (e) { fail++; log('GAGAL Fase 8 native: ' + e.message); }
             await js('["__vs","__vt","__vb","__vc"].forEach((k) => KM.inputs.remove(window[k])); 1');
