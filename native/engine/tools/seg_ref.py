@@ -4,9 +4,10 @@ Menjalankan model segmentasi (selfie_segmenter.tflite) dengan TensorFlow Lite re
 (siluet orang) dan menyimpan masukan & keluarannya sebagai float32 mentah. klm-engine.exe --selftest menjalankan
 model yang sama dengan interpreter GPU-nya sendiri lalu membandingkan hasilnya.
 
-pakai: python seg_ref.py <model.tflite> <folder keluaran>
+pakai: python seg_ref.py <model.tflite> <folder keluaran> [foto uji]
 """
 import os
+import struct
 import sys
 
 import numpy as np
@@ -35,6 +36,77 @@ def test_image(h, w):
     return img
 
 
+# ---- metadata TFLite (NormalizationOptions) dibaca langsung dari flatbuffer — sama dengan mesin native
+class Tab:
+    def __init__(self, b, off):
+        self.b, self.t = b, off
+        self.vt = off - struct.unpack_from("<i", b, off)[0]
+        self.vsz = struct.unpack_from("<H", b, self.vt)[0]
+
+    def fo(self, i):
+        o = 4 + 2 * i
+        return struct.unpack_from("<H", self.b, self.vt + o)[0] if o + 2 <= self.vsz else 0
+
+    def u(self, i, fmt, d):
+        o = self.fo(i)
+        return struct.unpack_from(fmt, self.b, self.t + o)[0] if o else d
+
+    def vec(self, i):
+        o = self.fo(i)
+        if not o:
+            return None, 0
+        p = self.t + o + struct.unpack_from("<I", self.b, self.t + o)[0]
+        return p + 4, struct.unpack_from("<I", self.b, p)[0]
+
+    def vtab(self, i, k):
+        p, n = self.vec(i)
+        if p is None or k >= n:
+            return None
+        q = p + 4 * k
+        return Tab(self.b, q + struct.unpack_from("<I", self.b, q)[0])
+
+    def tab(self, i):
+        o = self.fo(i)
+        return Tab(self.b, self.t + o + struct.unpack_from("<I", self.b, self.t + o)[0]) if o else None
+
+    def s(self, i):
+        p, n = self.vec(i)
+        return self.b[p:p + n].decode("utf-8", "replace") if p is not None else ""
+
+
+def normalization(path):
+    b = open(path, "rb").read()
+    root = Tab(b, struct.unpack_from("<I", b, 0)[0])
+    _, nm = root.vec(6)
+    for i in range(nm):
+        md = root.vtab(6, i)
+        if md.s(0) != "TFLITE_METADATA":
+            continue
+        bu = root.vtab(4, md.u(1, "<I", 0))
+        p, n = bu.vec(0)
+        mb = b[p:p + n]
+        mm = Tab(mb, struct.unpack_from("<I", mb, 0)[0])
+        tin = mm.vtab(3, 0).vtab(2, 0)
+        _, np_ = tin.vec(4)
+        for k in range(np_):
+            pu = tin.vtab(4, k)
+            if pu.u(0, "<B", 0) != 1:
+                continue
+            no = pu.tab(1)
+            mp, a = no.vec(0)
+            sp, c = no.vec(1)
+            if a and c:
+                return struct.unpack_from("<f", mb, mp)[0], struct.unpack_from("<f", mb, sp)[0]
+    return None
+
+
+def photo(path, h, w):
+    raw = tf.io.read_file(path)
+    img = tf.io.decode_image(raw, channels=3, expand_animations=False)
+    img = tf.image.resize(tf.cast(img, tf.float32) / 255.0, (h, w), method="bilinear", antialias=True)
+    return np.clip(img.numpy(), 0, 1).astype(np.float32)
+
+
 def main():
     model, out = sys.argv[1], sys.argv[2]
     os.makedirs(out, exist_ok=True)
@@ -53,7 +125,21 @@ def main():
     print("INPUT", ind["name"], ind["shape"], ind["dtype"], ind.get("quantization"))
     print("OUTPUT", outd["name"], outd["shape"], outd["dtype"])
     _, h, w, c = ind["shape"]
-    x = test_image(h, w)[None].astype(np.float32)
+    norm = normalization(model)
+    print("NORMALISASI metadata:", norm)
+    img = None
+    if len(sys.argv) > 3 and os.path.exists(sys.argv[3]):
+        try:
+            img = photo(sys.argv[3], h, w)
+            print("FOTO uji:", sys.argv[3])
+        except Exception as e:
+            print("foto uji gagal:", e)
+    if img is None:
+        img = test_image(h, w)
+    x = img[None].astype(np.float32)
+    img.astype(np.float32).tofile(os.path.join(out, "img.bin"))
+    if norm:
+        x = ((x * 255.0 - norm[0]) / norm[1]).astype(np.float32)
     it.set_tensor(ind["index"], x)
     it.invoke()
     y = it.get_tensor(outd["index"]).astype(np.float32)
@@ -63,6 +149,9 @@ def main():
         f.write("%d %d %d %d %d\n" % (h, w, c, y.shape[1], y.shape[2]))
     print("REF min %.4f max %.4f mean %.4f  orang(>0.5) %.1f%%" % (y.min(), y.max(), y.mean(), 100.0 * (y > 0.5).mean()))
     print("REF tengah badan %.3f  pojok latar %.3f" % (y[0, int(h * 0.8), w // 2, 0], y[0, 8, 8, 0]))
+    ys, xs = np.nonzero(y[0, :, :, 0] > 0.5)
+    if len(xs):
+        print("REF kotak orang x %d..%d  y %d..%d" % (xs.min(), xs.max(), ys.min(), ys.max()))
 
 
 if __name__ == "__main__":

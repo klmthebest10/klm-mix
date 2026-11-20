@@ -2708,18 +2708,22 @@ static int selftest(bool warp) {
               const bool pass = n == ref.size() && mean < 0.01 && iou > 0.97;
               emit("  %s Latar AI native = TensorFlow Lite: selisih rata-rata %.5f, maks %.4f, IoU orang %.4f (%zu nilai, %.1f ms/inferensi di %s)", pass ? "OK " : "GAGAL", mean, mx, iou, n, per, g_warp ? "WARP" : "GPU");
               if (!pass) ok = 0;
-              // ujung ke ujung: gambar uji sebagai sumber → mask native → latar diganti warna biru di Program
-              const int H = segm::M.IH, W = segm::M.IW; std::vector<uint8_t> rgba((size_t)W * H * 4);
-              for (int i = 0; i < W * H; i++) { for (int c = 0; c < 3; c++) rgba[i * 4 + c] = (uint8_t)std::lround(std::min(1.f, std::max(0.f, in[i * 3 + c])) * 255); rgba[i * 4 + 3] = 255; }
+              // ujung ke ujung: foto uji sebagai sumber → normalisasi dari metadata → mask native → latar diganti warna biru di Program
+              const int H = segm::M.IH, W = segm::M.IW; std::vector<float> img; if (!rdf(dir + L"\\img.bin", img) || img.size() < (size_t)W * H * 3) img = in;
+              std::vector<uint8_t> rgba((size_t)W * H * 4);
+              for (int i = 0; i < W * H; i++) { for (int c = 0; c < 3; c++) rgba[i * 4 + c] = (uint8_t)std::lround(std::min(1.f, std::max(0.f, img[i * 3 + c])) * 255); rgba[i * 4 + 3] = 255; }
               char cmdl[96]; snprintf(cmdl, sizeof cmdl, "srcimg sgimg %d %d %zu", W, H, rgba.size()); command(cmdl, rgba);
               command("seg sgimg 2 0 14 0000ff - 0 0 0 1 0 1 0.5 0 0 1.6 0"); command("pgm sgimg"); for (int r = 0; r < 14; r++) { run(1); Sleep(35); }
               const SegN& sgn = g_seg["sgimg"];
-              const float rb = ref[(size_t)(H * 0.8) * W + W / 2], rc = ref[(size_t)8 * W + 8];
-              const UINT side = std::min(g_W, g_H), ox = (g_W - side) / 2; // gambar persegi di tengah (fit)
               emit("  %s Latar AI native berjalan di frame: %d inferensi, orang=%d, kotak %.2f,%.2f %.2fx%.2f", sgn.infN > 0 ? "OK " : "GAGAL", sgn.infN, sgn.person ? 1 : 0, sgn.box[0], sgn.box[1], sgn.box[2], sgn.box[3]); if (sgn.infN <= 0) ok = 0;
-              if (rb > 0.9f) chk(g_pgm, ox + side / 2, (UINT)(side * 0.8), (int)std::lround(in[((size_t)(H * 0.8) * W + W / 2) * 3] * 255), (int)std::lround(in[((size_t)(H * 0.8) * W + W / 2) * 3 + 1] * 255), (int)std::lround(in[((size_t)(H * 0.8) * W + W / 2) * 3 + 2] * 255), 8, "Latar AI native: badan orang tetap");
-              else emit("  (info) referensi tidak menganggap badan uji sebagai orang (%.2f) — cek piksel badan dilewati", rb);
-              if (rc < 0.1f) chk(g_pgm, ox + (UINT)(8.0 * side / W), (UINT)(8.0 * side / H), 0, 0, 255, 8, "Latar AI native: latar diganti warna");
+              const UINT side = std::min(g_W, g_H), ox = (g_W - side) / 2; // gambar persegi di tengah (fit)
+              int px = -1, py = -1, bx = -1, by = -1; // titik orang yakin (≥0,97) & latar yakin (≤0,02) menurut TensorFlow Lite
+              for (int y = H / 8; y < H - H / 8 && px < 0; y += 4) for (int x = W / 8; x < W - W / 8; x += 4) if (ref[(size_t)y * W + x] >= 0.97f && ref[(size_t)(y + 3) * W + x] >= 0.97f && ref[(size_t)y * W + x + 3] >= 0.97f) { px = x; py = y; break; }
+              for (int k = 0; k < 4 && bx < 0; k++) { const int x = k & 1 ? W - 10 : 9, y = k & 2 ? H - 10 : 9; if (ref[(size_t)y * W + x] <= 0.02f) { bx = x; by = y; } }
+              auto sx = [&](int x) { return ox + (UINT)((x + 0.5) * side / W); }; auto sy = [&](int y) { return (UINT)((y + 0.5) * side / H); };
+              if (px >= 0) { const size_t q = ((size_t)py * W + px) * 3; chk(g_pgm, sx(px), sy(py), (int)std::lround(img[q] * 255), (int)std::lround(img[q + 1] * 255), (int)std::lround(img[q + 2] * 255), 12, "Latar AI native: orang tetap (titik yakin menurut TensorFlow)"); }
+              else emit("  (info) referensi tidak menemukan titik orang yakin — cek piksel orang dilewati");
+              if (bx >= 0) chk(g_pgm, sx(bx), sy(by), 0, 0, 255, 12, "Latar AI native: latar diganti warna");
               command("seg sgimg -"); command("del sgimg"); command("pgm a"); run(1);
             }
           }

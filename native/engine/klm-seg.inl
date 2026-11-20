@@ -41,7 +41,8 @@ static float half2f(uint16_t h) {
 
 enum Code { ADD = 0, AVERAGE_POOL_2D = 1, CONCATENATION = 2, CONV_2D = 3, DEPTHWISE_CONV_2D = 4, DEQUANTIZE = 6, LOGISTIC = 14, MAX_POOL_2D = 17, MUL = 18, RELU = 19,
   RELU_N1_TO_1 = 20, RELU6 = 21, RESHAPE = 22, RESIZE_BILINEAR = 23, TANH = 28, PAD = 34, MEAN = 40, SUB = 41, DIV = 42, SQUEEZE = 43, MAXIMUM = 55, MINIMUM = 57,
-  TRANSPOSE_CONV = 67, EXPAND_DIMS = 70, RESIZE_NEAREST_NEIGHBOR = 97, HARD_SWISH = 117 };
+  TRANSPOSE_CONV = 67, EXPAND_DIMS = 70, RESIZE_NEAREST_NEIGHBOR = 97, HARD_SWISH = 117, CUSTOM = 32,
+  TCONV_BIAS = 1000 }; // operator khusus MediaPipe "Convolution2DTransposeBias" (= TRANSPOSE_CONV + bias)
 
 struct Tensor {
   std::vector<int> shape; int type = 0; std::string name; bool isConst = false;
@@ -175,8 +176,9 @@ RWTexture2D<unorm float> Mk : register(u1);
 enum { S_CONV, S_DW, S_BIN, S_UN, S_MEAN, S_POOL, S_RESIZE, S_CONCAT, S_TCONV, S_PAD, S_IN, S_POST, S_N };
 static const char* kCsNames[S_N] = { "csConv", "csDw", "csBin", "csUn", "csMean", "csPool", "csResize", "csConcat", "csTConv", "csPad", "csIn", "csPost" };
 
+static float g_inScale = 1.f, g_inOff = 0.f; // rentang masukan model: nilai 0..1 · skala + geser
 struct Model {
-  bool ok = false; std::string err, path; std::vector<uint8_t> file;
+  bool ok = false; std::string err, path, norm; std::vector<uint8_t> file; float scale = 1.f, off = 0.f;
   std::vector<Tensor> T; std::vector<Disp> D; int input = -1, output = -1; int IH = 0, IW = 0, OH = 0, OW = 0, OC = 1;
   ComPtr<ID3D11ComputeShader> cs[S_N]; ComPtr<ID3D11SamplerState> samp; double ms = 0; int ops = 0;
 };
@@ -212,7 +214,7 @@ static const char* opName(int c) {
     case DEPTHWISE_CONV_2D: return "DEPTHWISE_CONV_2D"; case DEQUANTIZE: return "DEQUANTIZE"; case LOGISTIC: return "LOGISTIC"; case MAX_POOL_2D: return "MAX_POOL_2D";
     case MUL: return "MUL"; case RELU: return "RELU"; case RELU6: return "RELU6"; case RESHAPE: return "RESHAPE"; case RESIZE_BILINEAR: return "RESIZE_BILINEAR";
     case TANH: return "TANH"; case PAD: return "PAD"; case MEAN: return "MEAN"; case SUB: return "SUB"; case DIV: return "DIV"; case TRANSPOSE_CONV: return "TRANSPOSE_CONV";
-    case RESIZE_NEAREST_NEIGHBOR: return "RESIZE_NEAREST_NEIGHBOR"; case HARD_SWISH: return "HARD_SWISH"; default: return "?"; }
+    case RESIZE_NEAREST_NEIGHBOR: return "RESIZE_NEAREST_NEIGHBOR"; case HARD_SWISH: return "HARD_SWISH"; case TCONV_BIAS: return "Convolution2DTransposeBias"; default: return "?"; }
 }
 
 static bool load(const std::wstring& path, std::string& info) {
@@ -226,7 +228,24 @@ static bool load(const std::wstring& path, std::string& info) {
   if (memcmp(B + 4, "TFL3", 4) != 0) { M.err = "bukan file .tflite"; return false; }
   Tab root(B, N, rd32(B)); if (!root.ok()) { M.err = "model rusak"; return false; }
   uint32_t nOpc = 0; root.vec(1, nOpc); std::vector<int> opc(nOpc);
-  for (uint32_t i = 0; i < nOpc; i++) { Tab o = root.vtab(1, i); int dc = (int)o.sc<int8_t>(0, 0), bc = o.sc<int32_t>(3, 0); opc[i] = std::max(dc, bc); }
+  std::string customs;
+  for (uint32_t i = 0; i < nOpc; i++) {
+    Tab o = root.vtab(1, i); int dc = (int)o.sc<int8_t>(0, 0), bc = o.sc<int32_t>(3, 0); opc[i] = std::max(dc, bc);
+    if (opc[i] == CUSTOM) { const std::string cc = o.str(1); if (cc == "Convolution2DTransposeBias") opc[i] = TCONV_BIAS; else customs += (customs.empty() ? "" : ",") + cc; }
+  }
+  // normalisasi masukan dari metadata model (NormalizationOptions mean/std, nilai piksel 0..255); tanpa metadata: 0..1
+  M.scale = 1.f; M.off = 0.f; M.norm = "0..1 (bawaan)";
+  { uint32_t nm = 0; root.vec(6, nm);
+    for (uint32_t i = 0; i < nm; i++) {
+      Tab md = root.vtab(6, i); if (md.str(0) != "TFLITE_METADATA") continue;
+      Tab bu = root.vtab(4, md.sc<uint32_t>(1, 0)); uint32_t bn = 0; const uint8_t* bd = bu.ok() ? bu.vec(0, bn) : nullptr; if (!bd || bn < 8) break;
+      Tab mm(bd, bn, rd32(bd)); Tab sgm = mm.vtab(3, 0); Tab tin = sgm.ok() ? sgm.vtab(2, 0) : Tab(); uint32_t np = 0; if (tin.ok()) tin.vec(4, np);
+      for (uint32_t k = 0; k < np; k++) {
+        Tab pu = tin.vtab(4, k); if (pu.sc<uint8_t>(0, 0) != 1) continue; Tab no = pu.tab(1); uint32_t a = 0, b = 0; const uint8_t* mp = no.vec(0, a); const uint8_t* sp = no.vec(1, b);
+        if (mp && sp && a && b) { float mean, sd; memcpy(&mean, mp, 4); memcpy(&sd, sp, 4); if (sd != 0) { M.scale = 255.f / sd; M.off = -mean / sd; char t[64]; snprintf(t, sizeof t, "mean %g std %g", mean, sd); M.norm = t; } }
+      }
+      break;
+    } }
   Tab sg = root.vtab(2, 0); if (!sg.ok()) { M.err = "model tanpa subgraph"; return false; }
   uint32_t nT = 0; sg.vec(0, nT); M.T.resize(nT);
   for (uint32_t i = 0; i < nT; i++) {
@@ -246,9 +265,13 @@ static bool load(const std::wstring& path, std::string& info) {
   if (ins.empty() || outs.empty()) { M.err = "model tanpa masukan/keluaran"; return false; }
   M.input = ins[0]; M.output = outs[0];
   // operator → dispatch
-  struct Op { int code; std::vector<int32_t> in, out; Tab opt; };
+  struct Op { int code; std::vector<int32_t> in, out; Tab opt; std::vector<uint8_t> cust; };
   std::vector<Op> ops; uint32_t nO = 0; sg.vec(3, nO);
-  for (uint32_t i = 0; i < nO; i++) { Tab o = sg.vtab(3, i); Op op; const uint32_t oi = o.sc<uint32_t>(0, 0); op.code = oi < opc.size() ? opc[oi] : -1; op.in = o.ivec(1); op.out = o.ivec(2); op.opt = o.tab(4); ops.push_back(op); }
+  for (uint32_t i = 0; i < nO; i++) {
+    Tab o = sg.vtab(3, i); Op op; const uint32_t oi = o.sc<uint32_t>(0, 0); op.code = oi < opc.size() ? opc[oi] : -1; op.in = o.ivec(1); op.out = o.ivec(2); op.opt = o.tab(4);
+    uint32_t cn = 0; const uint8_t* cp = o.vec(5, cn); if (cp && cn) op.cust.assign(cp, cp + cn);
+    ops.push_back(op);
+  }
   // konstanta: DEQUANTIZE (bobot fp16) & bentuk ulang konstanta dihitung sekali di CPU
   for (auto& op : ops) {
     if (op.in.empty() || op.out.empty() || op.in[0] < 0) continue;
@@ -260,8 +283,8 @@ static bool load(const std::wstring& path, std::string& info) {
     if (op.code == -2) continue; hist[op.code]++;
     switch (op.code) {
       case ADD: case MUL: case SUB: case DIV: case MAXIMUM: case MINIMUM: case CONV_2D: case DEPTHWISE_CONV_2D: case LOGISTIC: case HARD_SWISH: case RELU: case RELU6: case TANH: case RELU_N1_TO_1:
-      case RESHAPE: case SQUEEZE: case EXPAND_DIMS: case DEQUANTIZE: case MEAN: case AVERAGE_POOL_2D: case MAX_POOL_2D: case RESIZE_BILINEAR: case RESIZE_NEAREST_NEIGHBOR: case CONCATENATION: case TRANSPOSE_CONV: case PAD: break;
-      default: { char t[32]; snprintf(t, sizeof t, "%s%d", bad.empty() ? "" : ",", op.code); bad += t; }
+      case RESHAPE: case SQUEEZE: case EXPAND_DIMS: case DEQUANTIZE: case MEAN: case AVERAGE_POOL_2D: case MAX_POOL_2D: case RESIZE_BILINEAR: case RESIZE_NEAREST_NEIGHBOR: case CONCATENATION: case TRANSPOSE_CONV: case PAD: case TCONV_BIAS: break;
+      default: { char t[64]; if (op.code == CUSTOM) snprintf(t, sizeof t, "%scustom:%s", bad.empty() ? "" : ",", customs.c_str()); else snprintf(t, sizeof t, "%s%d", bad.empty() ? "" : ",", op.code); bad += t; }
     }
   }
   if (!bad.empty()) { M.err = "operator belum didukung: " + bad; return false; }
@@ -304,6 +327,16 @@ static bool load(const std::wstring& path, std::string& info) {
         int a_[4] = { xx->H, xx->W, xx->C, y->C }, b_[4] = { y->H, y->W, KH, KW }, c_[4] = { sh, sw, pT, pL }, d_[4] = { actf, bs ? 1 : 0, 0, 0 };
         memcpy(p.a, a_, 16); memcpy(p.b, b_, 16); memcpy(p.c, c_, 16); memcpy(p.d, d_, 16);
         d.sh = S_TCONV; d.in[0] = srv(xx); d.in[1] = srv(w); d.in[2] = srv(bs); break;
+      }
+      case TCONV_BIAS: { // MediaPipe: masukan [x, filter OHWI, bias], opsi = TfLiteTransposeConvParams {padding, stride_w, stride_h}
+        Tensor* w = in(1); Tensor* bs = in(2); if (!w) { M.err = "Convolution2DTransposeBias tidak lengkap"; return false; }
+        int padk = 1, sw = std::max(1, y->W / std::max(1, x->W)), sh = std::max(1, y->H / std::max(1, x->H));
+        if (op.cust.size() >= 12) { int32_t v[3]; memcpy(v, op.cust.data(), 12); padk = v[0]; if (v[1] > 0) sw = v[1]; if (v[2] > 0) sh = v[2]; }
+        const int KH = w->H, KW = w->W; int pT = 0, pL = 0;
+        if (padk != 2) { pT = std::max(0, ((x->H - 1) * sh + KH - y->H) / 2); pL = std::max(0, ((x->W - 1) * sw + KW - y->W) / 2); }
+        int a_[4] = { x->H, x->W, x->C, y->C }, b_[4] = { y->H, y->W, KH, KW }, c_[4] = { sh, sw, pT, pL }, d_[4] = { 0, bs ? 1 : 0, 0, 0 };
+        memcpy(p.a, a_, 16); memcpy(p.b, b_, 16); memcpy(p.c, c_, 16); memcpy(p.d, d_, 16);
+        d.sh = S_TCONV; d.in[0] = srv(x); d.in[1] = srv(w); d.in[2] = srv(bs); break;
       }
       case ADD: case MUL: case SUB: case DIV: case MAXIMUM: case MINIMUM: {
         Tensor* q = in(1); if (!q) { M.err = "operasi biner tanpa operand"; return false; }
@@ -364,7 +397,8 @@ static bool load(const std::wstring& path, std::string& info) {
   if (ti.C != 3) { M.err = "masukan model bukan RGB"; return false; }
   M.ops = (int)M.D.size(); M.ok = true;
   char t[160]; std::string h; for (auto& kv : hist) { snprintf(t, sizeof t, "%s%s×%d", h.empty() ? "" : " ", opName(kv.first), kv.second); h += t; }
-  snprintf(t, sizeof t, "masukan %dx%dx3, keluaran %dx%dx%d, %d dispatch • ", M.IH, M.IW, M.OH, M.OW, M.OC, M.ops); info = t + h;
+  g_inScale = M.scale; g_inOff = M.off;
+  snprintf(t, sizeof t, "masukan %dx%dx3 (%s), keluaran %dx%dx%d, %d dispatch • ", M.IH, M.IW, M.norm.c_str(), M.OH, M.OW, M.OC, M.ops); info = t + h;
   return true;
 }
 static void unbind() {
@@ -384,7 +418,6 @@ static void runOps() {
   unbind();
 }
 // gambar sumber (tekstur apa pun) → masukan model (diperkecil, rentang 0..1 · skala + geser)
-static float g_inScale = 1.f, g_inOff = 0.f;
 static void feed(ID3D11ShaderResourceView* src) {
   P p{}; p.a[0] = M.IH; p.a[1] = M.IW; p.f[0] = g_inScale; p.f[1] = g_inOff;
   static ComPtr<ID3D11Buffer> cb; static P last{}; if (!cb || memcmp(&last, &p, sizeof p)) { cb = mkCB(p); last = p; }

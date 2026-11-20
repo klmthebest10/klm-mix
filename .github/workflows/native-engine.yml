@@ -31,7 +31,12 @@ jobs:
           Invoke-WebRequest -Uri $u -OutFile "$env:RUNNER_TEMP\seg.tflite" -MaximumRetryCount 3 -RetryIntervalSec 5
           python -m pip install --quiet --disable-pip-version-check tensorflow-cpu==2.17.1 numpy
           if ($LASTEXITCODE -ne 0) { python -m pip install --quiet --disable-pip-version-check tensorflow numpy }
-          python native/engine/tools/seg_ref.py "$env:RUNNER_TEMP\seg.tflite" "$env:RUNNER_TEMP\segref"
+          # foto uji berisi orang (kepala & bahu) dari contoh data OpenCV
+          $ph = "$env:RUNNER_TEMP\person.jpg"
+          foreach ($pu in @("https://raw.githubusercontent.com/opencv/opencv/4.x/samples/data/lena.jpg", "https://raw.githubusercontent.com/opencv/opencv/4.x/samples/data/messi5.jpg")) {
+            try { Invoke-WebRequest -Uri $pu -OutFile $ph -MaximumRetryCount 2 -RetryIntervalSec 3; if ((Get-Item $ph).Length -gt 10000) { Write-Host "foto uji: $pu"; break } } catch { Write-Host "foto uji gagal: $pu" }
+          }
+          python native/engine/tools/seg_ref.py "$env:RUNNER_TEMP\seg.tflite" "$env:RUNNER_TEMP\segref" $ph
           if ($LASTEXITCODE -ne 0) { Write-Host "::warning::referensi TensorFlow gagal dibuat" }
       - name: Uji mandiri (selftest)
         shell: pwsh
