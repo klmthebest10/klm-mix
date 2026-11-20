@@ -142,7 +142,7 @@
       if (!dests.length) { KM.toast('Isi URL & stream key dulu di Pengaturan Streaming', 'warn'); KM.ui && KM.ui.openSettings('stream'); return false; }
     }
     if (nativeOk()) { // output native: MPEG-TS H.264+AAC dari mesin native → ffmpeg -c copy
-      const cfgN = { encoder: 'copy', inputFormat: 'mpegts', videoBitrate: sc.videoBitrate, audioBitrate: sc.audioBitrate, fps: KM.settings.fps, destinations: dests };
+      const cfgN = { encoder: 'copy', videoBitrate: sc.videoBitrate, audioBitrate: sc.audioBitrate, fps: KM.settings.fps, destinations: dests };
       let rN = null, xN = null;
       try {
         rN = await openHubOut('stream', { cfg: cfgN, native: true }, (m) => {
