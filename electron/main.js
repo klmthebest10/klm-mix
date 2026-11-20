@@ -1010,7 +1010,7 @@ function smokeTest() {
             else log('Web Browser native: OK');
             // jendela "lihat & klik" untuk halaman offscreen: klik & ketik di jendela itu harus sampai ke halaman, frame harus tampil
             try {
-              const page = 'data:text/html,' + encodeURIComponent('<body style="margin:0;background:#c00000;height:100vh" onmousedown="document.body.style.background=\'#00b000\';document.getElementById(\'t\').focus()"><input id="t" style="position:absolute;left:4px;top:4px;width:60px"></body>');
+              const page = 'data:text/html,' + encodeURIComponent('<body style="margin:0;background:#c00000;height:100vh" onmousedown="event.preventDefault();document.body.style.background=\'#00b000\';document.getElementById(\'t\').focus()"><input id="t" style="position:absolute;left:4px;top:4px;width:60px"></body>');
               await js(`(() => { const b = KM.inputs.create('browser', { title: 'Browser klik', opts: { url: ${JSON.stringify(page)}, width: 640, height: 360 } }); window.__vk = b.id; return 1; })()`);
               await wait(3000);
               const wid = await js('(() => { const i = KM.state.inputs.find((x) => x.id === window.__vk); return i && i.rt.osr ? i.rt.winId : 0; })()');
