@@ -1761,8 +1761,8 @@ static int selftest(bool warp) {
       double t0 = nowMs(); while (nowMs() - t0 < 4000 && !(g_cams.count("v1") && g_cams["v1"]->frames > 0)) { run(1); Sleep(15); }
       run(3);
       int q1[3], q2[3]; bool a1 = readPixel(g_pgm, 20, 180, q1), a2 = readPixel(g_pgm, 620, 180, q2);
-      auto near = [](int* q) { return std::abs(q[0] - 32) <= 14 && std::abs(q[1] - 160) <= 14 && std::abs(q[2] - 224) <= 14; };
-      bool okv = a1 && a2 && (near(q1) || near(q2));
+      auto nearBg = [](int* q) { return std::abs(q[0] - 32) <= 14 && std::abs(q[1] - 160) <= 14 && std::abs(q[2] - 224) <= 14; };
+      bool okv = a1 && a2 && (nearBg(q1) || nearBg(q2));
       emit("  %s file video (diam di 1,0 s): (%d,%d,%d) / (%d,%d,%d) harap latar ±(32,160,224)", okv ? "OK " : "GAGAL", q1[0], q1[1], q1[2], q2[0], q2[1], q2[2]); if (!okv) ok = 0;
       int f0 = g_cams.count("v1") ? g_cams["v1"]->frames.load() : 0;
       command("vt v1 0.2 1 1"); double t1 = nowMs(); while (nowMs() - t1 < 1200) { run(1); Sleep(15); }
