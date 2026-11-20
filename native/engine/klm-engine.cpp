@@ -74,7 +74,15 @@
 //   comp <id> <base|-> <baseFit> <redup> <fg|-> [lapisan…]   komposisi berlapis; lapisan = 25 nilai dipisah koma:
 //        src,x,y,w,h,fit,zoom,px,py,cropL,cropR,cropT,cropB,flip,op,rad,bw,warnaBingkai,warnaLatar,bayangan,label,lx,ly,lw,lh
 //        (posisi relatif kotak 0..1, fit 0=isi 1=muat 2=rentang, warna hex 6 digit atau "-", label = id gambar atau "-")
-//   ovl [src,alpha,dx,dy,klip …]          overlay di atas Program (dx/dy relatif lebar/tinggi, klip = lebar sapuan 0..1)
+//   ovl [src,alpha,dx,dy,klip[,zoom] …]   overlay di atas Program (dx/dy relatif lebar/tinggi, klip = lebar sapuan 0..1, zoom di tengah)
+// Fase 8 — rotasi, efek, latar AI, transisi, FTB:
+//   comp … lapisan nilai ke-26 (opsional) = rotasi derajat; baseFit 3 = latar memakai posisi input (ipos); fit 3 = kotak ikut posisi input
+//   ipos <id> <fit> <zoom> <x> <y> <cL> <cR> <cT> <cB> <rot°> | ipos <id> -   posisi input (= drawInputRect di engine.js)
+//   fx <id> <cc> <bri> <con> <sat> <hue rad> <gam> <key> <warna> <sim> <smo> <spill> <luma> <lo> <hi> | fx <id> -   koreksi warna & chroma/luma key
+//   seg <id> <mode> <feather> <blur> <warna> <bgId|-> <bgFit> <cx> <cy> <cw> <hide> | seg <id> -   latar AI (0 hapus 1 buram 2 warna 3 gambar)
+//   segm <id> <w> <h> <n>                 + n byte mask orang 8-bit (dari model segmentasi KLM)
+//   trans <ms> <from> <to> [jenis] / tbar <v> <from> <to> [jenis]   jenis: fade merge wipe wipeup slide slideup fly zoom crosszoom circle barn cube dip dipwhite blur
+//   ftb <0..1>                            Fade To Black di atas semuanya (termasuk grafis UTC)
 //
 // Keluaran stdout (satu baris per kejadian): ready <adapter> | shown <bus> | hidden <bus> | click <bus> <x> <y> <btn> <dbl>
 //   | srcerr <id> <pesan> | srcok <id> <w> <h> | stats fps=.. ms=.. mem=.. utex=.. | err <pesan>
@@ -170,7 +178,7 @@ static void stdinThread() {
       char c = buf[i];
       if (c == '\n') {
         if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (line.compare(0, 6, "ublob ") == 0 || line.compare(0, 5, "kenc ") == 0 || line.compare(0, 4, "aud ") == 0 || line.compare(0, 7, "srcimg ") == 0) {
+        if (line.compare(0, 6, "ublob ") == 0 || line.compare(0, 5, "kenc ") == 0 || line.compare(0, 4, "aud ") == 0 || line.compare(0, 7, "srcimg ") == 0 || line.compare(0, 5, "segm ") == 0) {
           size_t sp = line.find_last_of(' ');
           unsigned long long nb = strtoull(line.c_str() + sp + 1, nullptr, 10);
           if (nb > 0 && nb <= 64ull * 1024 * 1024) { blob.line = line; blob.data.clear(); blob.data.reserve((size_t)nb); need = (size_t)nb; }
@@ -193,22 +201,36 @@ static ComPtr<ID3D11SamplerState> g_samp;
 static ComPtr<ID3D11BlendState> g_blend, g_blendPM;
 static ComPtr<ID3D11RasterizerState> g_rast, g_rastSc;
 static ComPtr<ID3D11Query> g_query;
-static ComPtr<ID3D11PixelShader> g_psOpaque, g_psLayer, g_psFill;
-static ComPtr<ID3D11Buffer> g_cb;
+static ComPtr<ID3D11PixelShader> g_psOpaque, g_psLayer, g_psFill, g_psFx, g_psBlur;
+static ComPtr<ID3D11Buffer> g_cb, g_cbFx;
 static std::string g_adapterName;
 static bool g_warp = false;
 
-struct CB { float dst[4]; float uv[4]; float col[4]; float p2[4]; float p3[4]; float p4[4]; };
+struct CB { float dst[4]; float uv[4]; float col[4]; float p2[4]; float p3[4]; float p4[4]; float p5[4]; float p6[4]; float p7[4]; float p8[4]; };
+// efek per sumber (Fase 8): koreksi warna, chroma key, luma key, mask latar AI, buram
+struct FxCB { float f0[4]; float f1[4]; float f2[4]; float f3[4]; float f4[4]; float f5[4]; };
 
 static const char* kHlsl = R"(
-cbuffer C : register(b0) { float4 dst; float4 uv; float4 col; float4 p2; float4 p3; float4 p4; };
-struct O { float4 p : SV_Position; float2 t : TEXCOORD0; };
+cbuffer C : register(b0) { float4 dst; float4 uv; float4 col; float4 p2; float4 p3; float4 p4; float4 p5; float4 p6; float4 p7; float4 p8; };
+// p4.w = rotasi kotak (radian, di sekitar pusatnya); p5/p6 = transformasi affine global (transisi, overlay zoom) dalam piksel;
+// p7/p8.x = klip global layar (1 = persegi x0,y0,x1,y1; 2 = lingkaran cx,cy,r); p8.yz = ukuran target (0 = jalur lama tanpa transformasi)
+cbuffer F : register(b1) { float4 f0; float4 f1; float4 f2; float4 f3; float4 f4; float4 f5; };
+struct O { float4 p : SV_Position; float2 t : TEXCOORD0; float2 l : TEXCOORD1; };
 O vs(uint id : SV_VertexID) {
   float2 q = float2(id & 1, id >> 1);
-  O o; o.p = float4(lerp(dst.x, dst.z, q.x), lerp(dst.y, dst.w, q.y), 0, 1);
-  o.t = float2(lerp(uv.x, uv.z, q.x), lerp(uv.y, uv.w, q.y)); return o;
+  float2 n = float2(lerp(dst.x, dst.z, q.x), lerp(dst.y, dst.w, q.y));
+  O o; o.t = float2(lerp(uv.x, uv.z, q.x), lerp(uv.y, uv.w, q.y)); o.l = float2(0, 0);
+  if (p8.y > 0) {
+    float2 px = float2((n.x + 1) * 0.5 * p8.y, (1 - n.y) * 0.5 * p8.z);
+    float2 c = float2((dst.x + dst.z + 2) * 0.25 * p8.y, (2 - dst.y - dst.w) * 0.25 * p8.z);
+    float s = sin(p4.w), k = cos(p4.w); float2 d = px - c; px = c + float2(d.x * k - d.y * s, d.x * s + d.y * k);
+    o.l = px;
+    if (p5.w > 0.5) px = float2(p5.x * px.x + p5.y * px.y + p5.z, p6.x * px.x + p6.y * px.y + p6.z);
+    n = float2(px.x / p8.y * 2 - 1, 1 - px.y / p8.z * 2);
+  }
+  o.p = float4(n, 0, 1); return o;
 }
-Texture2D tx : register(t0); SamplerState sm : register(s0);
+Texture2D tx : register(t0); Texture2D mk : register(t1); SamplerState sm : register(s0);
 float4 ps(O i) : SV_Target { float4 c = tx.Sample(sm, i.t); return float4(c.rgb, c.a * col.a); }
 float4 psSolid(O i) : SV_Target { return col; }
 // alpha premultiplied (tekstur lapisan UTC dari Chromium): warna sudah dikali alpha
@@ -222,8 +244,45 @@ float msk(float2 pos) {
   float2 q = abs(pos - c) - (hs - r); float d = length(max(q, 0)) + min(max(q.x, q.y), 0) - r;
   return saturate(0.5 - d);
 }
-float4 psLayer(O i) : SV_Target { float4 c = tx.Sample(sm, i.t); return float4(c.rgb, (p4.y > 0.5 ? 1 : c.a) * col.a * msk(i.p.xy)); }
-float4 psFill(O i) : SV_Target { return float4(col.rgb, col.a * msk(i.p.xy)); }
+float2 lp(O i) { return p8.y > 0 ? i.l : i.p.xy; } // posisi sebelum transformasi global (klip kotak ikut bergerak bersama isinya)
+float gclip(float2 sp) {
+  if (p8.x < 0.5) return 1;
+  if (p8.x < 1.5) { float2 a = saturate(sp - p7.xy + 0.5) * saturate(p7.zw - sp + 0.5); return a.x * a.y; }
+  return saturate(p7.z - length(sp - p7.xy) + 0.5);
+}
+float4 psLayer(O i) : SV_Target { float4 c = tx.Sample(sm, i.t); return float4(c.rgb, (p4.y > 0.5 ? 1 : c.a) * col.a * msk(lp(i)) * gclip(i.p.xy)); }
+float4 psFill(O i) : SV_Target { return float4(col.rgb, col.a * msk(lp(i)) * gclip(i.p.xy)); }
+// efek (Fase 8) — rumus sama dengan effects.js (WebGL) agar hasil native = hasil mesin JS
+float2 chroma(float3 c) { return float2(-0.1687 * c.r - 0.3313 * c.g + 0.5 * c.b, 0.5 * c.r - 0.4187 * c.g - 0.0813 * c.b); }
+float3 hueRot(float3 c, float a) { const float3 k = float3(0.57735, 0.57735, 0.57735); float ca = cos(a); return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - ca); }
+float4 srcSample(float2 t) {
+  if (f5.x < 0.5) return tx.Sample(sm, t);
+  int n = (int)f5.w; float4 s = 0; float ws = 0; // buram latar AI: grid gaussian ±2σ
+  [loop] for (int y = -n; y <= n; y++) [loop] for (int x = -n; x <= n; x++) { float w = exp(-(x * x + y * y) * 2.0 / (n * n)); s += tx.SampleLevel(sm, t + float2(x, y) * f5.yz, 0) * w; ws += w; }
+  return s / ws;
+}
+float4 psFx(O i) : SV_Target {
+  float4 s = srcSample(i.t); float3 c = s.rgb; float a = p4.y > 0.5 ? 1 : s.a;
+  if (f4.x > 0.5) { float m = 0; [unroll] for (int y = -1; y <= 1; y++) [unroll] for (int x = -1; x <= 1; x++) m += mk.Sample(sm, i.t + float2(x, y) * f4.yz).r; a *= m / 9; }
+  if (f1.y > 0.5) {
+    float d = distance(chroma(c), chroma(f3.rgb)); a *= smoothstep(f1.z, f1.z + f1.w, d);
+    float lum = dot(c, float3(0.2126, 0.7152, 0.0722)); c = lerp(float3(lum, lum, lum), c, pow(saturate(d / max(f2.x, 0.0001)), 1.5));
+  }
+  if (f2.y > 0.5) { float l = dot(c, float3(0.2126, 0.7152, 0.0722)); a *= smoothstep(f2.z, f2.w, l); }
+  if (f4.w > 0.5) {
+    c = c + f0.x; c = (c - 0.5) * f0.y + 0.5;
+    float l2 = dot(c, float3(0.2126, 0.7152, 0.0722)); c = lerp(float3(l2, l2, l2), c, f0.z);
+    if (f0.w != 0) c = hueRot(c, f0.w);
+    c = pow(saturate(c), 1.0 / f1.x);
+  }
+  return float4(c, a * col.a * msk(lp(i)) * gclip(i.p.xy));
+}
+// buram terpisah (transisi blur): p2.xy = langkah uv, p2.z = langkah per sisi (σ = n/2 langkah)
+float4 psBlur(O i) : SV_Target {
+  int n = (int)p2.z; float4 s = 0; float ws = 0;
+  [loop] for (int k = -n; k <= n; k++) { float w = exp(-k * k * 2.0 / (n * n)); s += tx.SampleLevel(sm, i.t + p2.xy * k, 0) * w; ws += w; }
+  return float4((s / ws).rgb, 1);
+}
 // perkecil berkualitas tinggi: rata-rata n×n sampel bilinear di seluruh tapak piksel tujuan (tajam, tanpa gerigi / kedip)
 float4 psDown(O i) : SV_Target {
   int n = (int)p2.z; float4 s = 0;
@@ -279,6 +338,10 @@ static bool initD3D(bool forceWarp) {
   g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psLayer);
   if (!compile("psFill", "ps_4_0", b)) return false;
   g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psFill);
+  if (!compile("psFx", "ps_4_0", b)) return false;
+  g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psFx);
+  if (!compile("psBlur", "ps_4_0", b)) return false;
+  g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psBlur);
   // Media Foundation (kamera) memakai device ini dari utasnya sendiri → konteks wajib dilindungi multithread
   { ComPtr<ID3D11Multithread> mt; if (SUCCEEDED(g_ctx.As(&mt))) mt->SetMultithreadProtected(TRUE); }
 
@@ -300,6 +363,8 @@ static bool initD3D(bool forceWarp) {
   g_dev->CreateQuery(&qd, &g_query);
   D3D11_BUFFER_DESC cbd{}; cbd.ByteWidth = sizeof(CB); cbd.Usage = D3D11_USAGE_DYNAMIC; cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER; cbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
   if (FAILED(g_dev->CreateBuffer(&cbd, nullptr, &g_cb))) { emit("err constant buffer"); return false; }
+  cbd.ByteWidth = sizeof(FxCB);
+  if (FAILED(g_dev->CreateBuffer(&cbd, nullptr, &g_cbFx))) { emit("err constant buffer efek"); return false; }
   return true;
 }
 
@@ -951,7 +1016,11 @@ struct Bus {
 static Bus g_pvw{ "pvw" }, g_pgm{ "pgm" };
 static HWND g_parent = nullptr;
 static UINT g_W = 1920, g_H = 1080, g_fps = 30;
-struct Trans { bool on = false, manual = false; double t0 = 0, dur = 0, k = 0; std::string from, to; } g_tr;
+struct Trans { bool on = false, manual = false; double t0 = 0, dur = 0, k = 0; std::string from, to; int type = 0; } g_tr;
+// jenis transisi (= engine.js): 0 fade … 14 blur
+static const char* kTrNames[] = { "fade", "merge", "wipe", "wipeup", "slide", "slideup", "fly", "zoom", "crosszoom", "circle", "barn", "cube", "dip", "dipwhite", "blur" };
+static int trType(const std::string& s) { for (int i = 0; i < 15; i++) if (s == kTrNames[i]) return i; return 0; }
+static double g_ftb = 0; // Fade To Black (alpha hitam di atas semuanya)
 
 static LRESULT CALLBACK monProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
   Bus* b = (Bus*)GetWindowLongPtrW(h, GWLP_USERDATA);
@@ -1012,10 +1081,12 @@ static bool ensureSwap(Bus& b, UINT w, UINT h) {
 }
 
 // ---------------------------------------------------------------- menggambar
-static void setCB6(const float dst[4], const float uv[4], const float col[4], const float p2[4], const float p3[4], const float p4[4]) {
+static void setCB6(const float dst[4], const float uv[4], const float col[4], const float p2[4], const float p3[4], const float p4[4], const float* p5 = nullptr, const float* p6 = nullptr, const float* p7 = nullptr, const float* p8 = nullptr) {
+  static const float z[4] = { 0, 0, 0, 0 };
   D3D11_MAPPED_SUBRESOURCE m;
   if (FAILED(g_ctx->Map(g_cb.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return;
   CB* c = (CB*)m.pData; memcpy(c->dst, dst, 16); memcpy(c->uv, uv, 16); memcpy(c->col, col, 16); memcpy(c->p2, p2, 16); memcpy(c->p3, p3, 16); memcpy(c->p4, p4, 16);
+  memcpy(c->p5, p5 ? p5 : z, 16); memcpy(c->p6, p6 ? p6 : z, 16); memcpy(c->p7, p7 ? p7 : z, 16); memcpy(c->p8, p8 ? p8 : z, 16);
   g_ctx->Unmap(g_cb.Get(), 0);
 }
 static void setCB(const float dst[4], const float uv[4], const float col[4], const float p2[4]) { static const float z[4] = { 0, 0, 0, 0 }; setCB6(dst, uv, col, p2, z, z); }
@@ -1024,13 +1095,34 @@ static void pipeline() {
   g_ctx->IASetInputLayout(nullptr);
   g_ctx->VSSetShader(g_vs.Get(), nullptr, 0);
   g_ctx->VSSetConstantBuffers(0, 1, g_cb.GetAddressOf());
-  g_ctx->PSSetConstantBuffers(0, 1, g_cb.GetAddressOf());
+  ID3D11Buffer* cbs[2] = { g_cb.Get(), g_cbFx.Get() };
+  g_ctx->PSSetConstantBuffers(0, 2, cbs);
   g_ctx->PSSetSamplers(0, 1, g_samp.GetAddressOf());
   g_ctx->RSSetState(g_rast.Get());
   float bf[4] = { 0, 0, 0, 0 };
   g_ctx->OMSetBlendState(g_blend.Get(), bf, 0xffffffff);
 }
 static void viewport(UINT w, UINT h) { D3D11_VIEWPORT v{ 0, 0, (float)w, (float)h, 0, 1 }; g_ctx->RSSetViewports(1, &v); }
+// ---- transformasi global (Fase 8): transisi & overlay zoom menggerakkan / memutar / menskala seluruh gambar sumber
+struct Aff { double a = 1, b = 0, c = 0, d = 1, tx = 0, ty = 0; bool on = false; };
+static Aff affMul(const Aff& m, const Aff& n) { // m ∘ n (n dulu, lalu m) — sama dengan urutan ctx.translate/rotate/scale di kanvas
+  Aff r; r.on = m.on || n.on;
+  r.a = m.a * n.a + m.b * n.c; r.b = m.a * n.b + m.b * n.d; r.tx = m.a * n.tx + m.b * n.ty + m.tx;
+  r.c = m.c * n.a + m.d * n.c; r.d = m.c * n.b + m.d * n.d; r.ty = m.c * n.tx + m.d * n.ty + m.ty;
+  return r;
+}
+static Aff affT(double x, double y) { Aff r; r.tx = x; r.ty = y; r.on = true; return r; }
+static Aff affS(double sx, double sy) { Aff r; r.a = sx; r.d = sy; r.on = true; return r; }
+static Aff affR(double rad) { Aff r; r.a = std::cos(rad); r.b = -std::sin(rad); r.c = std::sin(rad); r.d = std::cos(rad); r.on = true; return r; }
+static Aff affZoom(double z, double cx, double cy) { return affMul(affT(cx, cy), affMul(affS(z, z), affT(-cx, -cy))); } // = zoomTf di engine.js
+static Aff g_G;                       // transformasi global saat ini
+static int g_clipMode = 0; static float g_clipP[4] = { 0, 0, 0, 0 }; // klip global layar
+static void setCBX(const float dst[4], const float uv[4], const float col[4], const float p3[4], const float p4[4]) {
+  const float p2[4] = { 0, 0, 1, 0 };
+  float p5[4] = { (float)g_G.a, (float)g_G.b, (float)g_G.tx, g_G.on ? 1.f : 0.f }, p6[4] = { (float)g_G.c, (float)g_G.d, (float)g_G.ty, 0 };
+  float p8[4] = { (float)g_clipMode, (float)g_W, (float)g_H, 0 };
+  setCB6(dst, uv, col, p2, p3, p4, p5, p6, g_clipP, p8);
+}
 // sumber "fit": rasio terjaga, di tengah (sama dengan posisi bawaan input KLM)
 // ---- sumber → kotak mana pun (Fase 7): fit / fill / stretch, zoom, geser, pangkas, cermin, klip bersudut bulat
 struct SrcView { ComPtr<ID3D11ShaderResourceView> srv; UINT w = 0, h = 0; bool opaque = false; };
@@ -1054,32 +1146,98 @@ static bool getSrv(const std::string& id, SrcView& v) {
   Cam& c = *ci->second; std::lock_guard<std::mutex> l(c.mx); if (!c.got || !c.srv) return false;
   v.srv = c.srv; v.w = c.w; v.h = c.h; v.opaque = true; return true;
 }
-static void quadPx(const Rc& d, float u0, float v0, float u1, float v1, ID3D11ShaderResourceView* srv, float alpha, bool opaque, const Mask& m) {
-  float dst[4] = { (float)(d.x / g_W * 2 - 1), (float)(1 - d.y / g_H * 2), (float)((d.x + d.w) / g_W * 2 - 1), (float)(1 - (d.y + d.h) / g_H * 2) };
-  float uv[4] = { u0, v0, u1, v1 }, col[4] = { 1, 1, 1, alpha }, p2[4] = { 0, 0, 1, 0 };
-  float p3[4] = { (float)m.r.x, (float)m.r.y, (float)(m.r.x + m.r.w), (float)(m.r.y + m.r.h) }, p4[4] = { (float)m.rad, opaque ? 1.f : 0.f, m.on ? 1.f : 0.f, 0 };
-  setCB6(dst, uv, col, p2, p3, p4);
+static void ndcOf(const Rc& d, float dst[4]) { dst[0] = (float)(d.x / g_W * 2 - 1); dst[1] = (float)(1 - d.y / g_H * 2); dst[2] = (float)((d.x + d.w) / g_W * 2 - 1); dst[3] = (float)(1 - (d.y + d.h) / g_H * 2); }
+static void quadPx(const Rc& d, float u0, float v0, float u1, float v1, ID3D11ShaderResourceView* srv, float alpha, bool opaque, const Mask& m, double rot = 0) {
+  float dst[4]; ndcOf(d, dst);
+  float uv[4] = { u0, v0, u1, v1 }, col[4] = { 1, 1, 1, alpha };
+  float p3[4] = { (float)m.r.x, (float)m.r.y, (float)(m.r.x + m.r.w), (float)(m.r.y + m.r.h) }, p4[4] = { (float)m.rad, opaque ? 1.f : 0.f, m.on ? 1.f : 0.f, (float)rot };
+  setCBX(dst, uv, col, p3, p4);
   g_ctx->PSSetShader(g_psLayer.Get(), nullptr, 0);
   g_ctx->PSSetShaderResources(0, 1, &srv);
   g_ctx->Draw(4, 0);
 }
-static void fillPx(const Rc& d, float r, float g, float b, float a, const Mask& m) {
+static void fillPx(const Rc& d, float r, float g, float b, float a, const Mask& m, double rot = 0) {
   if (a <= 0 || d.w <= 0 || d.h <= 0) return;
-  float dst[4] = { (float)(d.x / g_W * 2 - 1), (float)(1 - d.y / g_H * 2), (float)((d.x + d.w) / g_W * 2 - 1), (float)(1 - (d.y + d.h) / g_H * 2) };
-  float uv[4] = { 0, 0, 1, 1 }, col[4] = { r, g, b, a }, p2[4] = { 0, 0, 1, 0 };
-  float p3[4] = { (float)m.r.x, (float)m.r.y, (float)(m.r.x + m.r.w), (float)(m.r.y + m.r.h) }, p4[4] = { (float)m.rad, 0, m.on ? 1.f : 0.f, 0 };
-  setCB6(dst, uv, col, p2, p3, p4);
+  float dst[4]; ndcOf(d, dst);
+  float uv[4] = { 0, 0, 1, 1 }, col[4] = { r, g, b, a };
+  float p3[4] = { (float)m.r.x, (float)m.r.y, (float)(m.r.x + m.r.w), (float)(m.r.y + m.r.h) }, p4[4] = { (float)m.rad, 0, m.on ? 1.f : 0.f, (float)rot };
+  setCBX(dst, uv, col, p3, p4);
   g_ctx->PSSetShader(g_psFill.Get(), nullptr, 0);
   g_ctx->Draw(4, 0);
 }
+// ---- efek per sumber (Fase 8)
+struct FxN { float bri = 0, con = 1, sat = 1, hue = 0, gam = 1; bool cc = false, key = false, luma = false; float kc[3] = { 0, 1, 0 }; float sim = 0.4f, smo = 0.08f, spill = 0.1f, lo = 0.05f, hi = 0.15f; };
+static std::map<std::string, FxN> g_fx;
+// latar AI: mask orang dari model segmentasi KLM (kecil, per frame) + mode latar
+struct SegN { int mode = 0; double feather = 3, blur = 14, cx = 0, cy = 0, cw = 1; float col[3] = { 0, 0.69f, 0.25f }; std::string bg; int bgFit = 0; bool hide = false;
+  ComPtr<ID3D11Texture2D> tex; ComPtr<ID3D11ShaderResourceView> srv; UINT mw = 0, mh = 0; };
+static std::map<std::string, SegN> g_seg;
+// posisi input (Fase 8): fit / zoom / geser / pangkas / rotasi milik input — sama dengan drawInputRect di engine.js
+struct PosN { int fit = 1; double zoom = 1, x = 0, y = 0, cl = 0, cr = 0, ct = 0, cb = 0, rot = 0; };
+static std::map<std::string, PosN> g_pos;
+static void setFx(const FxN* f, const SegN* sg, bool mask, bool blur, double blurPx, UINT sw, UINT sh) {
+  D3D11_MAPPED_SUBRESOURCE m;
+  if (FAILED(g_ctx->Map(g_cbFx.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return;
+  FxCB* c = (FxCB*)m.pData; memset(c, 0, sizeof(FxCB));
+  FxN d; const FxN& x = f ? *f : d;
+  c->f0[0] = x.bri; c->f0[1] = x.con; c->f0[2] = x.sat; c->f0[3] = x.hue;
+  c->f1[0] = x.gam > 0.01f ? x.gam : 1; c->f1[1] = x.key ? 1.f : 0.f; c->f1[2] = x.sim; c->f1[3] = x.smo;
+  c->f2[0] = x.spill; c->f2[1] = x.luma ? 1.f : 0.f; c->f2[2] = x.lo; c->f2[3] = x.hi;
+  c->f3[0] = x.kc[0]; c->f3[1] = x.kc[1]; c->f3[2] = x.kc[2];
+  c->f4[3] = f && x.cc ? 1.f : 0.f;
+  if (mask && sg && sg->mw) { // feather: px pada lebar 1280 (= segment.js) → texel mask
+    const double fr = std::max(0.35, sg->feather * sg->mw / 1280.0 * 1.4);
+    c->f4[0] = 1; c->f4[1] = (float)(fr / sg->mw * sg->cw); c->f4[2] = (float)(fr / sg->mh * sg->cw);
+  }
+  if (blur && sw && sh) { const int n = 4; const double st = std::max(0.5, blurPx / 2); c->f5[0] = 1; c->f5[1] = (float)(st / sw); c->f5[2] = (float)(st / sh); c->f5[3] = (float)n; }
+  g_ctx->Unmap(g_cbFx.Get(), 0);
+}
+static void quadFx(const Rc& d, float u0, float v0, float u1, float v1, ID3D11ShaderResourceView* srv, ID3D11ShaderResourceView* msk, float alpha, bool opaque, const Mask& m, double rot) {
+  float dst[4]; ndcOf(d, dst);
+  float uv[4] = { u0, v0, u1, v1 }, col[4] = { 1, 1, 1, alpha };
+  float p3[4] = { (float)m.r.x, (float)m.r.y, (float)(m.r.x + m.r.w), (float)(m.r.y + m.r.h) }, p4[4] = { (float)m.rad, opaque ? 1.f : 0.f, m.on ? 1.f : 0.f, (float)rot };
+  setCBX(dst, uv, col, p3, p4);
+  g_ctx->PSSetShader(g_psFx.Get(), nullptr, 0);
+  ID3D11ShaderResourceView* sr[2] = { srv, msk };
+  g_ctx->PSSetShaderResources(0, 2, sr);
+  g_ctx->Draw(4, 0);
+  ID3D11ShaderResourceView* none[2] = { nullptr, nullptr }; g_ctx->PSSetShaderResources(0, 2, none);
+}
+static void drawView(const std::string& id, const Rc& box, int fit, double zoom, double px, double py, double cl, double cr, double ct, double cb, bool flip, float alpha, const Mask& m, int depth, double rot = 0);
+// satu sumber ke satu kotak tujuan: lewat efek / latar AI bila ada (urutan sama dengan getSource: latar AI → chroma key & koreksi warna)
+static void srcQuad(const std::string& id, const SrcView& v, const Rc& d, float u0, float v0, float u1, float v1, float alpha, const Mask& m, double rot, int depth) {
+  auto fi = g_fx.find(id); const FxN* fx = fi == g_fx.end() ? nullptr : &fi->second;
+  auto si = g_seg.find(id); SegN* sg = si == g_seg.end() || !si->second.srv ? nullptr : &si->second;
+  if (!fx && !sg) { quadPx(d, u0, v0, u1, v1, v.srv.Get(), alpha, v.opaque, m, rot); return; }
+  if (sg) {
+    if (sg->hide) return; // "sembunyikan bila tidak ada orang"
+    // bingkai otomatis mengikuti orang: sumber & mask dipotong bersama (kotak persegi relatif)
+    auto rm = [&](float u, double o) { return (float)(o + u * sg->cw); };
+    u0 = rm(u0, sg->cx); u1 = rm(u1, sg->cx); v0 = rm(v0, sg->cy); v1 = rm(v1, sg->cy);
+    if (sg->mode == 1) { // buramkan latar: sumber yang sama, diburamkan & sedikit diperbesar (tepi tidak terlihat)
+      const float iu = (u1 - u0) * 0.0283f, iv = (v1 - v0) * 0.0283f;
+      setFx(fx, nullptr, false, true, sg->blur * v.w * sg->cw / 1280.0, v.w, v.h); // σ dalam piksel sumber (= segment.js)
+      quadFx(d, u0 + iu, v0 + iv, u1 - iu, v1 - iv, v.srv.Get(), nullptr, alpha, true, m, rot);
+    } else if (sg->mode == 2) fillPx(d, sg->col[0], sg->col[1], sg->col[2], alpha, m, rot);
+    else if (sg->mode == 3 && !sg->bg.empty()) {
+      SrcView b; if (getSrv(sg->bg, b)) {
+        const double sc = (sg->bgFit == 1 ? std::min(d.w / b.w, d.h / b.h) : std::max(d.w / b.w, d.h / b.h)), bw = b.w * sc, bh = b.h * sc;
+        if (sg->bgFit == 1) { quadPx(Rc{ d.x + (d.w - bw) / 2, d.y + (d.h - bh) / 2, bw, bh }, 0, 0, 1, 1, b.srv.Get(), alpha, b.opaque, m, rot); }
+        else { const float fu = (float)(d.w / bw), fv = (float)(d.h / bh); quadPx(d, 0.5f - fu / 2, 0.5f - fv / 2, 0.5f + fu / 2, 0.5f + fv / 2, b.srv.Get(), alpha, b.opaque, m, rot); }
+      } else fillPx(d, 0.063f, 0.094f, 0.125f, alpha, m, rot);
+    }
+  }
+  setFx(fx, sg, sg != nullptr, false, 0, v.w, v.h);
+  quadFx(d, u0, v0, u1, v1, v.srv.Get(), sg ? sg->srv.Get() : nullptr, alpha, v.opaque, m, rot);
+}
 struct LayerN {
-  std::string src, lab; double x = 0, y = 0, w = 1, h = 1, zoom = 1, px = 0, py = 0, cl = 0, cr = 0, ct = 0, cb = 0, op = 1, rad = 0, bw = 0, sh = 0, lx = 0, ly = 0, lw = 0, lh = 0;
+  std::string src, lab; double x = 0, y = 0, w = 1, h = 1, zoom = 1, px = 0, py = 0, cl = 0, cr = 0, ct = 0, cb = 0, op = 1, rad = 0, bw = 0, sh = 0, lx = 0, ly = 0, lw = 0, lh = 0, rot = 0;
   int fit = 0; bool flip = false, hasBc = false, hasBg = false; float bc[3] = { 1, 1, 1 }, bg[3] = { 0, 0, 0 };
 };
 struct CompN { std::string base, fg; int baseFit = 1; double dim = 0; std::vector<LayerN> L; };
 static std::map<std::string, CompN> g_comp;
 static void drawComp(const std::string& id, const Rc& box, float alpha, const Mask& m, int depth);
-static void drawView(const std::string& id, const Rc& box, int fit, double zoom, double px, double py, double cl, double cr, double ct, double cb, bool flip, float alpha, const Mask& m, int depth) {
+static void drawView(const std::string& id, const Rc& box, int fit, double zoom, double px, double py, double cl, double cr, double ct, double cb, bool flip, float alpha, const Mask& m, int depth, double rot) {
   if (id.empty() || id == "-" || alpha <= 0 || depth > 4) return;
   if (g_comp.count(id)) { drawComp(id, box, alpha, m, depth + 1); return; }
   SrcView v; if (!getSrv(id, v)) return;
@@ -1088,15 +1246,31 @@ static void drawView(const std::string& id, const Rc& box, int fit, double zoom,
   double dw = cw * sc * zoom, dh = ch * sc * zoom;
   if (fit == 2) { dw = box.w * zoom; dh = box.h * zoom; }
   const double cx = box.x + box.w / 2 + px * box.w / 2, cy = box.y + box.h / 2 + py * box.h / 2;
-  float u0 = (float)cl, u1 = (float)(1 - cr); if (flip) std::swap(u0, u1);
-  quadPx(Rc{ cx - dw / 2, cy - dh / 2, dw, dh }, u0, (float)ct, u1, (float)(1 - cb), v.srv.Get(), alpha, v.opaque, m);
+  float u0 = (float)cl, u1 = (float)(1 - cr); if (flip) { std::swap(u0, u1); rot = -rot; } // cermin lalu putar (urutan kanvas)
+  srcQuad(id, v, Rc{ cx - dw / 2, cy - dh / 2, dw, dh }, u0, (float)ct, u1, (float)(1 - cb), alpha, m, rot, depth);
+}
+// input dengan posisinya sendiri (drawInputRect): ukuran dari sumber utuh, pangkasan tetap di tempatnya, rotasi di sekitar titik pusat
+static void drawInput(const std::string& id, const Rc& box, float alpha, const Mask& m, int depth) {
+  if (id.empty() || id == "-" || alpha <= 0 || depth > 4) return;
+  if (g_comp.count(id)) { drawComp(id, box, alpha, m, depth + 1); return; }
+  auto pi = g_pos.find(id);
+  if (pi == g_pos.end()) { drawView(id, box, 1, 1, 0, 0, 0, 0, 0, 0, false, alpha, m, depth); return; }
+  const PosN& p = pi->second; SrcView v; if (!getSrv(id, v)) return;
+  const double sc = p.fit == 0 ? std::max(box.w / v.w, box.h / v.h) : std::min(box.w / v.w, box.h / v.h);
+  double dw = v.w * sc * p.zoom, dh = v.h * sc * p.zoom; if (p.fit == 2) { dw = box.w * p.zoom; dh = box.h * p.zoom; }
+  const double cx = box.x + box.w / 2 + p.x * box.w / 2, cy = box.y + box.h / 2 + p.y * box.h / 2;
+  const double fw = std::max(0.001, 1 - p.cl - p.cr), fh = std::max(0.001, 1 - p.ct - p.cb), rad = p.rot * 3.14159265358979 / 180;
+  Rc d{ cx - dw / 2 + p.cl * dw, cy - dh / 2 + p.ct * dh, fw * dw, fh * dh };
+  // rotasi kanvas berporos di (cx,cy), shader memutar di pusat kotak → geser pusat kotak mengikuti putaran
+  if (rad != 0) { const double ox = d.x + d.w / 2 - cx, oy = d.y + d.h / 2 - cy, c = std::cos(rad), s = std::sin(rad); d.x = cx + ox * c - oy * s - d.w / 2; d.y = cy + ox * s + oy * c - d.h / 2; }
+  srcQuad(id, v, d, (float)p.cl, (float)p.ct, (float)(1 - p.cr), (float)(1 - p.cb), alpha, m, rad, depth);
 }
 static void hexRgb(const std::string& h, float c[3]) { unsigned v = 0; sscanf(h.c_str(), "%x", &v); c[0] = ((v >> 16) & 255) / 255.f; c[1] = ((v >> 8) & 255) / 255.f; c[2] = (v & 255) / 255.f; }
 // komposisi berlapis (Virtual Set, input dengan kotak PiP): latar → redup → kotak (bayangan, bingkai, isi, label) → latar depan
 static void drawComp(const std::string& id, const Rc& box, float alpha, const Mask& m, int depth) {
   auto it = g_comp.find(id); if (it == g_comp.end() || depth > 4) return;
   const CompN& C = it->second;
-  if (!C.base.empty()) drawView(C.base, box, C.baseFit, 1, 0, 0, 0, 0, 0, 0, false, alpha, m, depth);
+  if (!C.base.empty()) { if (C.baseFit == 3) drawInput(C.base, box, alpha, m, depth); else drawView(C.base, box, C.baseFit, 1, 0, 0, 0, 0, 0, 0, false, alpha, m, depth); }
   if (C.dim > 0) fillPx(box, 0, 0, 0, (float)(std::min(0.9, C.dim) * alpha), m);
   const double k = box.w / 1920;
   for (const LayerN& l : C.L) {
@@ -1105,26 +1279,30 @@ static void drawComp(const std::string& id, const Rc& box, float alpha, const Ma
     if (l.sh > 0) { Rc s{ r.x - b, r.y - b + 14 * k * l.sh, r.w + 2 * b, r.h + 2 * b }; for (int q = 3; q >= 1; q--) { double e = q * 10 * k * l.sh; Rc s2{ s.x - e, s.y - e, s.w + 2 * e, s.h + 2 * e }; fillPx(s2, 0, 0, 0, a * 0.12f, Mask{ true, s2, rad + b + e }); } }
     if (b > 0) { Rc o{ r.x - b, r.y - b, r.w + 2 * b, r.h + 2 * b }; fillPx(o, l.bc[0], l.bc[1], l.bc[2], a, Mask{ true, o, rad + b }); }
     if (l.hasBg) fillPx(r, l.bg[0], l.bg[1], l.bg[2], a, Mask{ true, r, rad });
-    drawView(l.src, r, l.fit, l.zoom, l.px, l.py, l.cl, l.cr, l.ct, l.cb, l.flip, a, Mask{ true, r, rad }, depth);
+    if (l.fit == 3) drawInput(l.src, r, a, Mask{ true, r, rad }, depth + 1); // kotak lama: ikut posisi input sumber
+    else drawView(l.src, r, l.fit, l.zoom, l.px, l.py, l.cl, l.cr, l.ct, l.cb, l.flip, a, Mask{ true, r, rad }, depth, l.rot * 3.14159265358979 / 180);
     if (!l.lab.empty() && l.lw > 0) drawView(l.lab, Rc{ box.x + l.lx * box.w, box.y + l.ly * box.h, l.lw * box.w, l.lh * box.h }, 2, 1, 0, 0, 0, 0, 0, 0, false, a, Mask{}, depth);
   }
   if (!C.fg.empty()) drawView(C.fg, box, 2, 1, 0, 0, 0, 0, 0, 0, false, alpha, m, depth);
 }
 static void drawSource(const std::string& id, float alpha) {
   if (id.empty() || id == "-" || alpha <= 0) return;
-  const Rc full{ 0, 0, (double)g_W, (double)g_H };
-  if (g_comp.count(id)) drawComp(id, full, alpha, Mask{}, 0);
-  else drawView(id, full, 1, 1, 0, 0, 0, 0, 0, 0, false, alpha, Mask{}, 0);
+  drawInput(id, Rc{ 0, 0, (double)g_W, (double)g_H }, alpha, Mask{}, 0);
 }
-// overlay (Fase 7): input penuh di atas Program dengan transparansi / geser / sapuan
-struct OvlN { std::string src; double a = 1, dx = 0, dy = 0, clip = 1; };
+// sumber penuh dengan transformasi global (= full(ctx, inp, alpha, tf) di engine.js)
+static void drawFull(const std::string& id, float alpha, const Aff& tf) { const Aff old = g_G; g_G = tf; drawSource(id, alpha); g_G = old; }
+static void clipRect(double x0, double y0, double x1, double y1) { g_clipMode = 1; g_clipP[0] = (float)x0; g_clipP[1] = (float)y0; g_clipP[2] = (float)x1; g_clipP[3] = (float)y1; }
+static void clipOff() { g_clipMode = 0; }
+// overlay (Fase 7/8): input penuh di atas Program dengan transparansi / geser / sapuan / zoom
+struct OvlN { std::string src; double a = 1, dx = 0, dy = 0, clip = 1, z = 1; };
 static std::vector<OvlN> g_ovl;
 static void drawOverlaysN() {
   for (auto& o : g_ovl) {
-    Rc box{ o.dx * g_W, o.dy * g_H, (double)g_W, (double)g_H };
-    Mask m; if (o.clip < 0.999) { m.on = true; m.r = Rc{ 0, 0, o.clip * g_W, (double)g_H }; }
-    if (g_comp.count(o.src)) drawComp(o.src, box, (float)o.a, m, 0);
-    else drawView(o.src, box, 1, 1, 0, 0, 0, 0, 0, 0, false, (float)o.a, m, 0);
+    if (o.clip < 0.999) clipRect(0, 0, o.clip * g_W, g_H);
+    const Aff old = g_G; Aff tf = affT(o.dx * g_W, o.dy * g_H);
+    if (std::fabs(o.z - 1) > 1e-4) tf = affMul(tf, affZoom(std::max(0.01, o.z), g_W / 2.0, g_H / 2.0));
+    g_G = tf; drawSource(o.src, (float)o.a); g_G = old;
+    clipOff();
   }
 }
 // ---------------------------------------------------------------- grafis UTC (Fase 2)
@@ -1748,15 +1926,73 @@ static void utcCommand(const std::string& c, std::istringstream& is, const std::
 }
 
 static float ease(float p) { p = p < 0 ? 0 : p > 1 ? 1 : p; return p < 0.5f ? 4 * p * p * p : 1 - std::pow(-2 * p + 2, 3.0f) / 2; } // = KM.ease
+// ---- transisi (Fase 8): semua jenis transisi mesin JS kecuali stinger, rumus sama dengan drawTransition di engine.js
+struct TmpRT { ComPtr<ID3D11Texture2D> t; ComPtr<ID3D11ShaderResourceView> srv; ComPtr<ID3D11RenderTargetView> rtv; };
+static TmpRT g_tmp[2];
+static bool ensureTmp(TmpRT& r) {
+  if (r.t) { D3D11_TEXTURE2D_DESC d{}; r.t->GetDesc(&d); if (d.Width == g_W && d.Height == g_H) return true; }
+  r.rtv.Reset(); if (!makeTex(g_W, g_H, nullptr, r.t, r.srv, true)) return false;
+  return SUCCEEDED(g_dev->CreateRenderTargetView(r.t.Get(), nullptr, &r.rtv));
+}
+static void blurPass(ID3D11ShaderResourceView* src, ID3D11RenderTargetView* dst, float du, float dv) {
+  ID3D11ShaderResourceView* none = nullptr; g_ctx->PSSetShaderResources(0, 1, &none);
+  g_ctx->OMSetRenderTargets(1, &dst, nullptr);
+  float d[4] = { -1, 1, 1, -1 }, uv[4] = { 0, 0, 1, 1 }, col[4] = { 1, 1, 1, 1 }, p2[4] = { du, dv, 12, 0 };
+  setCB(d, uv, col, p2);
+  g_ctx->PSSetShader(g_psBlur.Get(), nullptr, 0);
+  g_ctx->PSSetShaderResources(0, 1, &src);
+  float bf[4] = { 0, 0, 0, 0 }; g_ctx->OMSetBlendState(nullptr, bf, 0xffffffff);
+  g_ctx->Draw(4, 0);
+  g_ctx->OMSetBlendState(g_blend.Get(), bf, 0xffffffff);
+  g_ctx->PSSetShaderResources(0, 1, &none);
+}
+static void drawTrans(Bus& b, float p) {
+  const std::string &A = g_tr.from, &B = g_tr.to; const double W = g_W, H = g_H; const Aff I; const Rc full{ 0, 0, W, H };
+  switch (g_tr.type) {
+    case 1: drawFull(A, 1 - p * 0.3f, affZoom(1 + p * 0.06, W / 2, H / 2)); drawFull(B, p, affZoom(1.08 - 0.08 * p, W / 2, H / 2)); break; // merge
+    case 2: drawSource(A, 1); clipRect(0, 0, W * p, H); drawSource(B, 1); clipOff(); break; // wipe
+    case 3: drawSource(A, 1); clipRect(0, H * (1 - p), W, H); drawSource(B, 1); clipOff(); break; // wipeup
+    case 4: drawFull(A, 1, affT(-W * p, 0)); drawFull(B, 1, affT(W * (1 - p), 0)); break; // slide
+    case 5: drawFull(A, 1, affT(0, -H * p)); drawFull(B, 1, affT(0, H * (1 - p))); break; // slideup
+    case 6: drawSource(A, 1); drawFull(B, std::min(1.f, p * 1.5f), affMul(affT(W / 2 - (1 - p) * W * 0.4, H / 2 - (1 - p) * H * 0.4), affMul(affR(-(1 - p) * 0.5), affMul(affS(p, p), affT(-W / 2, -H / 2))))); break; // fly
+    case 7: drawFull(A, 1 - p, affZoom(1 + p * 0.8, W / 2, H / 2)); drawFull(B, p, affZoom(0.7 + 0.3 * p, W / 2, H / 2)); break; // zoom
+    case 8: // crosszoom
+      if (p < 0.5f) drawFull(A, 1, affZoom(1 + p * 4, W / 2, H / 2)); else drawFull(B, 1, affZoom(1 + (1 - p) * 4, W / 2, H / 2));
+      fillPx(full, 1, 1, 1, (0.5f - std::fabs(p - 0.5f)) * 0.8f, Mask{}); break;
+    case 9: drawSource(A, 1); g_clipMode = 2; g_clipP[0] = (float)(W / 2); g_clipP[1] = (float)(H / 2); g_clipP[2] = (float)(std::hypot(W, H) / 2 * p); drawSource(B, 1); clipOff(); break; // circle
+    case 10: drawSource(A, 1); clipRect(W / 2 * (1 - p), 0, W / 2 * (1 - p) + W * p, H); drawSource(B, 1); clipOff(); break; // barn
+    case 11: // cube
+      drawFull(A, 1, affS(std::max(0.001, 1.0 - p), 1)); fillPx(Rc{ 0, 0, W * (1 - p), H }, 0, 0, 0, p * 0.6f, Mask{});
+      drawFull(B, 1, affMul(affT(W * (1 - p), 0), affS(std::max(0.001f, p), 1))); fillPx(Rc{ W * (1 - p), 0, W * p, H }, 0, 0, 0, (1 - p) * 0.6f, Mask{}); break;
+    case 12: case 13: { const float c = g_tr.type == 12 ? 0.f : 1.f; // dip / dipwhite
+      if (p < 0.5f) { drawSource(A, 1); fillPx(full, c, c, c, p * 2, Mask{}); } else { drawSource(B, 1); fillPx(full, c, c, c, (1 - p) * 2, Mask{}); } break; }
+    case 14: { // blur: gambar ke tekstur sementara lalu buram gaussian dua arah (σ = blur kanvas dalam piksel output)
+      const double bl = std::round(std::sin(p * 3.14159265358979) * 24);
+      if (bl < 0.5 || !ensureTmp(g_tmp[0]) || !ensureTmp(g_tmp[1])) { drawSource(A, 1); drawSource(B, p); break; }
+      float black[4] = { 0, 0, 0, 1 };
+      g_ctx->OMSetRenderTargets(1, g_tmp[0].rtv.GetAddressOf(), nullptr); g_ctx->ClearRenderTargetView(g_tmp[0].rtv.Get(), black);
+      drawSource(A, 1); drawSource(B, p);
+      const float st = (float)(bl / 6);
+      blurPass(g_tmp[0].srv.Get(), g_tmp[1].rtv.Get(), st / (float)W, 0);
+      blurPass(g_tmp[1].srv.Get(), b.rtv.Get(), 0, st / (float)H);
+      break; }
+    default: drawSource(A, 1); drawSource(B, p); // fade
+  }
+  (void)I;
+}
 static void compose(Bus& b, bool program) {
   ensureRT(b); if (!b.rtv) return;
   ID3D11ShaderResourceView* none = nullptr; g_ctx->PSSetShaderResources(0, 1, &none);
   g_ctx->OMSetRenderTargets(1, b.rtv.GetAddressOf(), nullptr);
   viewport(g_W, g_H);
   float black[4] = { 0, 0, 0, 1 }; g_ctx->ClearRenderTargetView(b.rtv.Get(), black);
-  if (program && g_tr.on) { drawSource(g_tr.from, 1); drawSource(g_tr.to, ease((float)g_tr.k)); }
+  g_G = Aff(); clipOff();
+  if (program && g_tr.on) drawTrans(b, ease((float)g_tr.k));
   else drawSource(b.id, 1);
-  if (program) { drawOverlaysN(); drawUtc(); } // overlay lalu grafis UTC ON AIR di atas Program (urutan sama dengan mesin JS)
+  if (program) {
+    drawOverlaysN(); drawUtc(); // overlay lalu grafis UTC ON AIR di atas Program (urutan sama dengan mesin JS)
+    if (g_ftb > 0.0005) { pipeline(); viewport(g_W, g_H); g_ctx->OMSetRenderTargets(1, b.rtv.GetAddressOf(), nullptr); fillPx(Rc{ 0, 0, (double)g_W, (double)g_H }, 0, 0, 0, (float)g_ftb, Mask{}); } // FTB paling atas
+  }
 }
 static void present(Bus& b) {
   if (!b.want || !b.hwnd) return;
@@ -1892,6 +2128,7 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
       l.px = d(7); l.py = d(8); l.cl = d(9); l.cr = d(10); l.ct = d(11); l.cb = d(12); l.flip = f[13] == "1"; l.op = d(14); l.rad = d(15); l.bw = d(16);
       if (f[17] != "-") { l.hasBc = true; hexRgb(f[17], l.bc); } if (f[18] != "-") { l.hasBg = true; hexRgb(f[18], l.bg); }
       l.sh = d(19); l.lab = f[20] == "-" ? "" : f[20]; l.lx = d(21); l.ly = d(22); l.lw = d(23); l.lh = d(24);
+      if (f.size() > 25) l.rot = d(25);
       C.L.push_back(l);
     }
     g_comp[id] = std::move(C);
@@ -1900,7 +2137,9 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
     while (is >> tok && g_ovl.size() < 8) {
       std::vector<std::string> f; std::stringstream ss(tok); std::string x; while (std::getline(ss, x, ',')) f.push_back(x);
       if (f.size() < 5) continue;
-      OvlN o; o.src = f[0]; o.a = atof(f[1].c_str()); o.dx = atof(f[2].c_str()); o.dy = atof(f[3].c_str()); o.clip = atof(f[4].c_str()); g_ovl.push_back(o);
+      OvlN o; o.src = f[0]; o.a = atof(f[1].c_str()); o.dx = atof(f[2].c_str()); o.dy = atof(f[3].c_str()); o.clip = atof(f[4].c_str());
+      if (f.size() > 5) o.z = atof(f[5].c_str());
+      g_ovl.push_back(o);
     }
   } else if (c == "naud") {
     std::string id; int on = 0; is >> id >> on; vAudio(id, on != 0);
@@ -1913,13 +2152,42 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
   } else if (c == "pvw" || c == "pgm") {
     std::string id; is >> id; (c == "pvw" ? g_pvw : g_pgm).id = id == "-" ? "" : id;
   } else if (c == "trans") {
-    double ms = 0; std::string a, b; is >> ms >> a >> b;
-    g_tr = Trans(); g_tr.on = true; g_tr.t0 = nowMs(); g_tr.dur = std::max(1.0, ms); g_tr.from = a == "-" ? "" : a; g_tr.to = b == "-" ? "" : b;
+    double ms = 0; std::string a, b, ty; is >> ms >> a >> b >> ty;
+    g_tr = Trans(); g_tr.on = true; g_tr.t0 = nowMs(); g_tr.dur = std::max(1.0, ms); g_tr.from = a == "-" ? "" : a; g_tr.to = b == "-" ? "" : b; g_tr.type = trType(ty);
   } else if (c == "tbar") {
     std::string v; is >> v;
     if (v == "off") { g_tr.on = false; return; }
-    std::string a, b; is >> a >> b;
-    g_tr.on = true; g_tr.manual = true; g_tr.k = std::atoi(v.c_str()) / 1000.0; g_tr.from = a == "-" ? "" : a; g_tr.to = b == "-" ? "" : b;
+    std::string a, b, ty; is >> a >> b >> ty;
+    g_tr.on = true; g_tr.manual = true; g_tr.k = std::atoi(v.c_str()) / 1000.0; g_tr.from = a == "-" ? "" : a; g_tr.to = b == "-" ? "" : b; g_tr.type = trType(ty);
+  } else if (c == "ftb") {
+    double a = 0; is >> a; g_ftb = std::max(0.0, std::min(1.0, a));
+  } else if (c == "ipos") { // ipos <id> <fit 0/1/2> <zoom> <x> <y> <cl> <cr> <ct> <cb> <rot°>  |  ipos <id> -
+    std::string id, f; is >> id >> f; if (id.empty() || id.size() > 64) return;
+    if (f == "-" || f.empty()) { g_pos.erase(id); return; }
+    PosN p; p.fit = atoi(f.c_str()); is >> p.zoom >> p.x >> p.y >> p.cl >> p.cr >> p.ct >> p.cb >> p.rot; if (!(p.zoom > 0)) p.zoom = 1; g_pos[id] = p;
+  } else if (c == "fx") { // fx <id> <cc 0/1> <bri> <con> <sat> <hue rad> <gam> <key 0/1> <rrggbb> <sim> <smo> <spill> <luma 0/1> <lo> <hi>  |  fx <id> -
+    std::string id, cc; is >> id >> cc; if (id.empty() || id.size() > 64) return;
+    if (cc == "-" || cc.empty()) { g_fx.erase(id); return; }
+    FxN f; int key = 0, luma = 0; std::string kc; f.cc = cc == "1";
+    is >> f.bri >> f.con >> f.sat >> f.hue >> f.gam >> key >> kc >> f.sim >> f.smo >> f.spill >> luma >> f.lo >> f.hi;
+    f.key = key != 0; f.luma = luma != 0; hexRgb(kc, f.kc); g_fx[id] = f;
+  } else if (c == "seg") { // seg <id> <mode 0 hapus|1 buram|2 warna|3 gambar> <feather> <blur> <rrggbb> <bgId|-> <bgFit 0 fill|1 fit> <cx> <cy> <cw> <hide 0/1>  |  seg <id> -
+    std::string id, md; is >> id >> md; if (id.empty() || id.size() > 64) return;
+    if (md == "-" || md.empty()) { g_seg.erase(id); return; }
+    SegN& g = g_seg[id]; std::string col, bg; int hide = 0; g.mode = atoi(md.c_str());
+    is >> g.feather >> g.blur >> col >> bg >> g.bgFit >> g.cx >> g.cy >> g.cw >> hide;
+    hexRgb(col, g.col); g.bg = bg == "-" ? "" : bg; g.hide = hide != 0; if (!(g.cw > 0.01) || g.cw > 1) { g.cx = g.cy = 0; g.cw = 1; }
+  } else if (c == "segm") { // mask latar AI: <id> <w> <h> <n> + n byte (8-bit, 1 = orang)
+    std::string id; UINT w = 0, h = 0; size_t n = 0; is >> id >> w >> h >> n;
+    auto it = g_seg.find(id); if (it == g_seg.end() || !w || !h || w > 2048 || h > 2048 || data.size() < (size_t)w * h) return;
+    SegN& g = it->second;
+    if (!g.tex || g.mw != w || g.mh != h) {
+      D3D11_TEXTURE2D_DESC d{}; d.Width = w; d.Height = h; d.MipLevels = 1; d.ArraySize = 1; d.Format = DXGI_FORMAT_R8_UNORM; d.SampleDesc.Count = 1;
+      d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+      D3D11_SUBRESOURCE_DATA sd{ data.data(), w, 0 }; g.tex.Reset(); g.srv.Reset();
+      if (FAILED(g_dev->CreateTexture2D(&d, &sd, &g.tex)) || FAILED(g_dev->CreateShaderResourceView(g.tex.Get(), nullptr, &g.srv))) { g.tex.Reset(); g.srv.Reset(); g.mw = g.mh = 0; return; }
+      g.mw = w; g.mh = h;
+    } else g_ctx->UpdateSubresource(g.tex.Get(), 0, nullptr, data.data(), w, 0);
   } else if (c == "stats") {
     sendStats(0, 0);
   } else if (c == "quit") {
@@ -2262,6 +2530,40 @@ static int selftest(bool warp) {
       chk(g_pgm, 100, 180, 255, 0, 0, 2, "Overlay geser: kiri masih Program");
       chk(g_pgm, 500, 180, 0, 255, 0, 2, "Overlay geser: kanan overlay");
       command("ovl"); command("del c1"); run(1);
+      // ---- Fase 8: rotasi, efek, latar AI, transisi, overlay zoom, FTB
+      command("ovl gg,1,0,0,1,0.5"); run(2);
+      chk(g_pgm, 320, 180, 0, 255, 0, 2, "Overlay zoom 50%: tengah overlay");
+      chk(g_pgm, 20, 20, 255, 0, 0, 2, "Overlay zoom 50%: pojok tetap Program");
+      command("ovl"); command("ftb 0.5"); run(2);
+      chk(g_pgm, 320, 180, 128, 0, 0, 3, "FTB 50% di atas Program");
+      command("ftb 0"); run(1);
+      struct TrT { const char* cmd; UINT x, y; int r, g, b; const char* what; };
+      const TrT trs[] = {
+        { "tbar 500 a gg wipe", 100, 180, 0, 255, 0, "Transisi wipe 50%: kiri sumber baru" }, { "tbar 500 a gg wipe", 540, 180, 255, 0, 0, "Transisi wipe 50%: kanan sumber lama" },
+        { "tbar 500 a gg slide", 100, 180, 255, 0, 0, "Transisi slide 50%: kiri sumber lama" }, { "tbar 500 a gg slide", 540, 180, 0, 255, 0, "Transisi slide 50%: kanan sumber baru" },
+        { "tbar 500 a gg circle", 320, 180, 0, 255, 0, "Transisi circle 50%: tengah sumber baru" }, { "tbar 500 a gg circle", 10, 10, 255, 0, 0, "Transisi circle 50%: pojok sumber lama" },
+        { "tbar 500 a gg zoom", 320, 180, 64, 128, 0, "Transisi zoom 50%" }, { "tbar 500 a gg blur", 320, 180, 128, 128, 0, "Transisi blur 50% (buram gaussian)" },
+        { "tbar 250 a gg dip", 320, 180, 223, 0, 0, "Transisi dip ke hitam 25%" }, { "tbar 500 a gg barn", 320, 180, 0, 255, 0, "Transisi barn door 50%: tengah" },
+        { "tbar 500 a gg barn", 20, 180, 255, 0, 0, "Transisi barn door 50%: tepi" }, { "tbar 500 a gg cube", 100, 180, 179, 0, 0, "Transisi cube 50%: sisi lama digelapkan" } };
+      for (auto& t : trs) { command(t.cmd); run(2); chk(g_pgm, t.x, t.y, t.r, t.g, t.b, 4, t.what); }
+      command("tbar off"); command("pgm a"); run(1);
+      command("comp c2 a 1 0 - gg,0.25,0.25,0.5,0.5,2,1,0,0,0,0,0,0,0,1,0,0,-,-,0,-,0,0,0,0,45"); command("pgm c2"); run(2);
+      chk(g_pgm, 320, 180, 0, 255, 0, 2, "Rotasi kotak 45°: tengah");
+      chk(g_pgm, 320, 96, 0, 255, 0, 2, "Rotasi kotak 45°: tepi atas kotak tertutup");
+      chk(g_pgm, 166, 96, 255, 0, 0, 2, "Rotasi kotak 45°: sudut kotak (klip tetap tegak)");
+      command("del c2"); command("ipos gg 2 0.5 0 0 0 0 0 0 90"); command("pgm gg"); run(2);
+      chk(g_pgm, 320, 40, 0, 255, 0, 2, "Rotasi input 90°: atas (tegak)");
+      chk(g_pgm, 200, 180, 0, 0, 0, 2, "Rotasi input 90°: samping kosong");
+      command("ipos gg -"); command("fx a 1 0 1 0 0 1 0 00ff00 0.4 0.08 0.1 0 0.05 0.15"); command("pgm a"); run(2);
+      chk(g_pgm, 320, 180, 54, 54, 54, 3, "Koreksi warna native (saturasi 0)");
+      command("fx a -"); command("fx gg 0 0 1 1 0 1 1 00ff00 0.4 0.08 0.1 0 0.05 0.15"); command("ovl gg,1,0,0,1"); run(2);
+      chk(g_pgm, 320, 180, 255, 0, 0, 2, "Chroma key native (overlay hijau dihapus)");
+      command("ovl"); command("fx gg -"); command("seg gg 2 3 14 0000ff - 0 0 0 1 0");
+      { std::vector<uint8_t> m(16); for (int i = 0; i < 16; i++) m[i] = (i % 4) < 2 ? 255 : 0; command("segm gg 4 4 16", m); }
+      command("pgm gg"); run(2);
+      chk(g_pgm, 80, 180, 0, 255, 0, 3, "Latar AI native: orang (mask) tetap");
+      chk(g_pgm, 560, 180, 0, 0, 255, 3, "Latar AI native: latar diganti warna");
+      command("seg gg -"); command("pgm a"); run(1);
       { // jendela uji berwarna, ditangkap lewat Windows.Graphics.Capture
         WNDCLASSEXW wc{ sizeof wc }; wc.lpfnWndProc = DefWindowProcW; wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"KLMWgcTest"; wc.hbrBackground = CreateSolidBrush(RGB(30, 200, 90));
         RegisterClassExW(&wc);
