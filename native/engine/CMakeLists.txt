@@ -7,6 +7,6 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>") # tanpa 
 add_executable(klm-engine klm-engine.cpp)
 target_compile_definitions(klm-engine PRIVATE _WIN32_WINNT=0x0A00 WINVER=0x0A00 UNICODE _UNICODE NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
 if(MSVC)
-  target_compile_options(klm-engine PRIVATE /W3 /utf-8 /O2)
+  target_compile_options(klm-engine PRIVATE /W3 /utf-8 /O2 /EHsc /bigobj)
 endif()
-target_link_libraries(klm-engine d3d11 dxgi d3dcompiler user32 gdi32 psapi winmm ole32 mfplat mf mfreadwrite mfuuid wmcodecdspuuid windowscodecs propsys)
+target_link_libraries(klm-engine d3d11 dxgi d3dcompiler user32 gdi32 psapi winmm ole32 mfplat mf mfreadwrite mfuuid wmcodecdspuuid windowscodecs propsys windowsapp)

@@ -69,6 +69,13 @@
 //   camaud <camId> <labelHex|->           tangkap audio perangkat (mis. HDMI capture card) untuk kamera native
 //   avoff <ms>                            geser audio terhadap video di output native (+ = audio ditunda, − = video ditunda)
 //
+// Fase 7 — Web Browser / jendela, Title, Virtual Set & kotak PiP, overlay:
+//   src <id> window <hwnd>                tangkap jendela (Windows.Graphics.Capture, tekstur GPU tanpa salinan CPU)
+//   comp <id> <base|-> <baseFit> <redup> <fg|-> [lapisan…]   komposisi berlapis; lapisan = 25 nilai dipisah koma:
+//        src,x,y,w,h,fit,zoom,px,py,cropL,cropR,cropT,cropB,flip,op,rad,bw,warnaBingkai,warnaLatar,bayangan,label,lx,ly,lw,lh
+//        (posisi relatif kotak 0..1, fit 0=isi 1=muat 2=rentang, warna hex 6 digit atau "-", label = id gambar atau "-")
+//   ovl [src,alpha,dx,dy,klip …]          overlay di atas Program (dx/dy relatif lebar/tinggi, klip = lebar sapuan 0..1)
+//
 // Keluaran stdout (satu baris per kejadian): ready <adapter> | shown <bus> | hidden <bus> | click <bus> <x> <y> <btn> <dbl>
 //   | srcerr <id> <pesan> | srcok <id> <w> <h> | stats fps=.. ms=.. mem=.. utex=.. | err <pesan>
 //   | uack <layer> <seq> | uready <layer> | uerr <layer> <pesan>
@@ -93,6 +100,16 @@
 #include <io.h>
 #include <timeapi.h>
 #include <wrl/client.h>
+#ifdef GetCurrentTime
+#undef GetCurrentTime
+#endif
+#include <winrt/base.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Graphics.Capture.h>
+#include <winrt/Windows.Graphics.DirectX.h>
+#include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
+#include <windows.graphics.capture.interop.h>
+#include <windows.graphics.directx.direct3d11.interop.h>
 #include <atomic>
 #include <cmath>
 #include <cstdarg>
@@ -176,15 +193,15 @@ static ComPtr<ID3D11SamplerState> g_samp;
 static ComPtr<ID3D11BlendState> g_blend, g_blendPM;
 static ComPtr<ID3D11RasterizerState> g_rast, g_rastSc;
 static ComPtr<ID3D11Query> g_query;
-static ComPtr<ID3D11PixelShader> g_psOpaque;
+static ComPtr<ID3D11PixelShader> g_psOpaque, g_psLayer, g_psFill;
 static ComPtr<ID3D11Buffer> g_cb;
 static std::string g_adapterName;
 static bool g_warp = false;
 
-struct CB { float dst[4]; float uv[4]; float col[4]; float p2[4]; };
+struct CB { float dst[4]; float uv[4]; float col[4]; float p2[4]; float p3[4]; float p4[4]; };
 
 static const char* kHlsl = R"(
-cbuffer C : register(b0) { float4 dst; float4 uv; float4 col; float4 p2; };
+cbuffer C : register(b0) { float4 dst; float4 uv; float4 col; float4 p2; float4 p3; float4 p4; };
 struct O { float4 p : SV_Position; float2 t : TEXCOORD0; };
 O vs(uint id : SV_VertexID) {
   float2 q = float2(id & 1, id >> 1);
@@ -198,6 +215,15 @@ float4 psSolid(O i) : SV_Target { return col; }
 float4 psPM(O i) : SV_Target { return tx.Sample(sm, i.t) * col.a; }
 // kamera (RGB32 / X8): kanal alpha dari dekoder tidak berarti → selalu buram
 float4 psOpaque(O i) : SV_Target { return float4(tx.Sample(sm, i.t).rgb, col.a); }
+// lapisan (Fase 7): klip persegi bersudut bulat (p3 = kotak piksel, p4.x = radius, p4.y = buram, p4.z = klip aktif)
+float msk(float2 pos) {
+  if (p4.z < 0.5) return 1;
+  float2 c = (p3.xy + p3.zw) * 0.5, hs = max((p3.zw - p3.xy) * 0.5, 0.001); float r = min(p4.x, min(hs.x, hs.y));
+  float2 q = abs(pos - c) - (hs - r); float d = length(max(q, 0)) + min(max(q.x, q.y), 0) - r;
+  return saturate(0.5 - d);
+}
+float4 psLayer(O i) : SV_Target { float4 c = tx.Sample(sm, i.t); return float4(c.rgb, (p4.y > 0.5 ? 1 : c.a) * col.a * msk(i.p.xy)); }
+float4 psFill(O i) : SV_Target { return float4(col.rgb, col.a * msk(i.p.xy)); }
 // perkecil berkualitas tinggi: rata-rata n×n sampel bilinear di seluruh tapak piksel tujuan (tajam, tanpa gerigi / kedip)
 float4 psDown(O i) : SV_Target {
   int n = (int)p2.z; float4 s = 0;
@@ -249,6 +275,10 @@ static bool initD3D(bool forceWarp) {
   g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psPM);
   if (!compile("psOpaque", "ps_4_0", b)) return false;
   g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psOpaque);
+  if (!compile("psLayer", "ps_4_0", b)) return false;
+  g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psLayer);
+  if (!compile("psFill", "ps_4_0", b)) return false;
+  g_dev->CreatePixelShader(b->GetBufferPointer(), b->GetBufferSize(), nullptr, &g_psFill);
   // Media Foundation (kamera) memakai device ini dari utasnya sendiri → konteks wajib dilindungi multithread
   { ComPtr<ID3D11Multithread> mt; if (SUCCEEDED(g_ctx.As(&mt))) mt->SetMultithreadProtected(TRUE); }
 
@@ -293,6 +323,12 @@ struct Source {
   ComPtr<IDXGIOutputDuplication> dup;
   double retryAt = 0;
   bool got = false;
+  // jendela (Windows.Graphics.Capture)
+  winrt::Windows::Graphics::Capture::GraphicsCaptureItem wItem{ nullptr };
+  winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool wPool{ nullptr };
+  winrt::Windows::Graphics::Capture::GraphicsCaptureSession wSess{ nullptr };
+  int wcw = 0, wch = 0;
+  ~Source() { try { if (wSess) wSess.Close(); if (wPool) wPool.Close(); } catch (...) {} }
   // GIF bergerak
   std::vector<ComPtr<ID3D11ShaderResourceView>> frames; std::vector<double> delays; double animTotal = 0, animT0 = 0;
 };
@@ -849,6 +885,52 @@ static void tickScreen(Source& s, const std::string& id, double now) {
   s.dup->ReleaseFrame();
 }
 
+// ---- tangkap jendela (Fase 7): Web Browser KLM / jendela aplikasi lain
+static winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice g_wdev{ nullptr };
+static bool openWin(Source& s, const std::string& id, HWND hwnd) {
+  using namespace winrt::Windows::Graphics::Capture;
+  try {
+    if (!IsWindow(hwnd)) { emit("srcerr %s jendela tidak ada", id.c_str()); return false; }
+    if (!GraphicsCaptureSession::IsSupported()) { emit("srcerr %s Windows ini belum mendukung Graphics Capture", id.c_str()); return false; }
+    if (!g_wdev) {
+      ComPtr<IDXGIDevice> dx; g_dev.As(&dx); winrt::com_ptr<::IInspectable> insp;
+      winrt::check_hresult(CreateDirect3D11DeviceFromDXGIDevice(dx.Get(), insp.put()));
+      g_wdev = insp.as<winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice>();
+    }
+    auto interop = winrt::get_activation_factory<GraphicsCaptureItem, IGraphicsCaptureItemInterop>();
+    winrt::check_hresult(interop->CreateForWindow(hwnd, winrt::guid_of<GraphicsCaptureItem>(), winrt::put_abi(s.wItem)));
+    auto sz = s.wItem.Size(); s.wcw = sz.Width; s.wch = sz.Height;
+    s.wPool = Direct3D11CaptureFramePool::CreateFreeThreaded(g_wdev, winrt::Windows::Graphics::DirectX::DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, sz);
+    s.wSess = s.wPool.CreateCaptureSession(s.wItem);
+    try { s.wSess.IsCursorCaptureEnabled(false); } catch (...) {}
+    try { s.wSess.IsBorderRequired(false); } catch (...) {} // Windows 11: tanpa bingkai kuning
+    s.wSess.StartCapture();
+    emit("srcok %s %d %d", id.c_str(), sz.Width, sz.Height);
+    return true;
+  } catch (winrt::hresult_error const& e) { emit("srcerr %s Graphics Capture gagal (0x%08x)", id.c_str(), (unsigned)e.code()); }
+  catch (...) { emit("srcerr %s Graphics Capture gagal", id.c_str()); }
+  return false;
+}
+static void tickWin(Source& s) {
+  if (!s.wPool) return;
+  try {
+    auto f = s.wPool.TryGetNextFrame(); if (!f) return;
+    auto cs = f.ContentSize();
+    auto access = f.Surface().as<::Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();
+    ComPtr<ID3D11Texture2D> t; if (FAILED(access->GetInterface(IID_PPV_ARGS(&t)))) return;
+    if (cs.Width != s.wcw || cs.Height != s.wch) { // jendela berubah ukuran → kolam frame dibuat ulang
+      s.wcw = cs.Width; s.wch = cs.Height;
+      s.wPool.Recreate(g_wdev, winrt::Windows::Graphics::DirectX::DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, cs);
+    }
+    D3D11_TEXTURE2D_DESC d{}; t->GetDesc(&d);
+    UINT w = std::min<UINT>(d.Width, (UINT)std::max(1, cs.Width)), h = std::min<UINT>(d.Height, (UINT)std::max(1, cs.Height));
+    if (!s.tex || s.w != w || s.h != h) { makeTex(w, h, nullptr, s.tex, s.srv); s.w = w; s.h = h; }
+    D3D11_BOX bx{ 0, 0, 0, w, h, 1 };
+    g_ctx->CopySubresourceRegion(s.tex.Get(), 0, 0, 0, 0, t.Get(), 0, &bx);
+    s.got = true;
+  } catch (...) {}
+}
+
 // ---------------------------------------------------------------- monitor (bus)
 struct Bus {
   const char* name;
@@ -924,12 +1006,13 @@ static bool ensureSwap(Bus& b, UINT w, UINT h) {
 }
 
 // ---------------------------------------------------------------- menggambar
-static void setCB(const float dst[4], const float uv[4], const float col[4], const float p2[4]) {
+static void setCB6(const float dst[4], const float uv[4], const float col[4], const float p2[4], const float p3[4], const float p4[4]) {
   D3D11_MAPPED_SUBRESOURCE m;
   if (FAILED(g_ctx->Map(g_cb.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return;
-  CB* c = (CB*)m.pData; memcpy(c->dst, dst, 16); memcpy(c->uv, uv, 16); memcpy(c->col, col, 16); memcpy(c->p2, p2, 16);
+  CB* c = (CB*)m.pData; memcpy(c->dst, dst, 16); memcpy(c->uv, uv, 16); memcpy(c->col, col, 16); memcpy(c->p2, p2, 16); memcpy(c->p3, p3, 16); memcpy(c->p4, p4, 16);
   g_ctx->Unmap(g_cb.Get(), 0);
 }
+static void setCB(const float dst[4], const float uv[4], const float col[4], const float p2[4]) { static const float z[4] = { 0, 0, 0, 0 }; setCB6(dst, uv, col, p2, z, z); }
 static void pipeline() {
   g_ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
   g_ctx->IASetInputLayout(nullptr);
@@ -943,38 +1026,99 @@ static void pipeline() {
 }
 static void viewport(UINT w, UINT h) { D3D11_VIEWPORT v{ 0, 0, (float)w, (float)h, 0, 1 }; g_ctx->RSSetViewports(1, &v); }
 // sumber "fit": rasio terjaga, di tengah (sama dengan posisi bawaan input KLM)
+// ---- sumber → kotak mana pun (Fase 7): fit / fill / stretch, zoom, geser, pangkas, cermin, klip bersudut bulat
+struct SrcView { ComPtr<ID3D11ShaderResourceView> srv; UINT w = 0, h = 0; bool opaque = false; };
+struct Rc { double x = 0, y = 0, w = 0, h = 0; };
+struct Mask { bool on = false; Rc r; double rad = 0; };
+static bool getSrv(const std::string& id, SrcView& v) {
+  auto it = g_src.find(id);
+  if (it != g_src.end()) {
+    Source& s = *it->second; if (!s.srv || !s.w || !s.h) return false;
+    if ((s.kind == "screen" || s.kind == "window") && !s.got) return false;
+    v.srv = s.srv; v.w = s.w; v.h = s.h; v.opaque = s.kind == "screen" || s.kind == "window";
+    if (s.frames.size() > 1 && s.animTotal > 0) { // GIF bergerak: frame menurut waktu
+      double t = std::fmod(nowMs() - s.animT0, s.animTotal); size_t i = 0;
+      while (i + 1 < s.frames.size() && t >= s.delays[i]) { t -= s.delays[i]; i++; }
+      v.srv = s.frames[i];
+    }
+    return true;
+  }
+  auto ci = g_cams.find(id); if (ci == g_cams.end()) return false;
+  Cam& c = *ci->second; std::lock_guard<std::mutex> l(c.mx); if (!c.got || !c.srv) return false;
+  v.srv = c.srv; v.w = c.w; v.h = c.h; v.opaque = true; return true;
+}
+static void quadPx(const Rc& d, float u0, float v0, float u1, float v1, ID3D11ShaderResourceView* srv, float alpha, bool opaque, const Mask& m) {
+  float dst[4] = { (float)(d.x / g_W * 2 - 1), (float)(1 - d.y / g_H * 2), (float)((d.x + d.w) / g_W * 2 - 1), (float)(1 - (d.y + d.h) / g_H * 2) };
+  float uv[4] = { u0, v0, u1, v1 }, col[4] = { 1, 1, 1, alpha }, p2[4] = { 0, 0, 1, 0 };
+  float p3[4] = { (float)m.r.x, (float)m.r.y, (float)(m.r.x + m.r.w), (float)(m.r.y + m.r.h) }, p4[4] = { (float)m.rad, opaque ? 1.f : 0.f, m.on ? 1.f : 0.f, 0 };
+  setCB6(dst, uv, col, p2, p3, p4);
+  g_ctx->PSSetShader(g_psLayer.Get(), nullptr, 0);
+  g_ctx->PSSetShaderResources(0, 1, &srv);
+  g_ctx->Draw(4, 0);
+}
+static void fillPx(const Rc& d, float r, float g, float b, float a, const Mask& m) {
+  if (a <= 0 || d.w <= 0 || d.h <= 0) return;
+  float dst[4] = { (float)(d.x / g_W * 2 - 1), (float)(1 - d.y / g_H * 2), (float)((d.x + d.w) / g_W * 2 - 1), (float)(1 - (d.y + d.h) / g_H * 2) };
+  float uv[4] = { 0, 0, 1, 1 }, col[4] = { r, g, b, a }, p2[4] = { 0, 0, 1, 0 };
+  float p3[4] = { (float)m.r.x, (float)m.r.y, (float)(m.r.x + m.r.w), (float)(m.r.y + m.r.h) }, p4[4] = { (float)m.rad, 0, m.on ? 1.f : 0.f, 0 };
+  setCB6(dst, uv, col, p2, p3, p4);
+  g_ctx->PSSetShader(g_psFill.Get(), nullptr, 0);
+  g_ctx->Draw(4, 0);
+}
+struct LayerN {
+  std::string src, lab; double x = 0, y = 0, w = 1, h = 1, zoom = 1, px = 0, py = 0, cl = 0, cr = 0, ct = 0, cb = 0, op = 1, rad = 0, bw = 0, sh = 0, lx = 0, ly = 0, lw = 0, lh = 0;
+  int fit = 0; bool flip = false, hasBc = false, hasBg = false; float bc[3] = { 1, 1, 1 }, bg[3] = { 0, 0, 0 };
+};
+struct CompN { std::string base, fg; int baseFit = 1; double dim = 0; std::vector<LayerN> L; };
+static std::map<std::string, CompN> g_comp;
+static void drawComp(const std::string& id, const Rc& box, float alpha, const Mask& m, int depth);
+static void drawView(const std::string& id, const Rc& box, int fit, double zoom, double px, double py, double cl, double cr, double ct, double cb, bool flip, float alpha, const Mask& m, int depth) {
+  if (id.empty() || id == "-" || alpha <= 0 || depth > 4) return;
+  if (g_comp.count(id)) { drawComp(id, box, alpha, m, depth + 1); return; }
+  SrcView v; if (!getSrv(id, v)) return;
+  const double fw = std::max(0.02, 1 - cl - cr), fh = std::max(0.02, 1 - ct - cb), cw = v.w * fw, ch = v.h * fh;
+  double sc = fit == 1 ? std::min(box.w / cw, box.h / ch) : std::max(box.w / cw, box.h / ch);
+  double dw = cw * sc * zoom, dh = ch * sc * zoom;
+  if (fit == 2) { dw = box.w * zoom; dh = box.h * zoom; }
+  const double cx = box.x + box.w / 2 + px * box.w / 2, cy = box.y + box.h / 2 + py * box.h / 2;
+  float u0 = (float)cl, u1 = (float)(1 - cr); if (flip) std::swap(u0, u1);
+  quadPx(Rc{ cx - dw / 2, cy - dh / 2, dw, dh }, u0, (float)ct, u1, (float)(1 - cb), v.srv.Get(), alpha, v.opaque, m);
+}
+static void hexRgb(const std::string& h, float c[3]) { unsigned v = 0; sscanf(h.c_str(), "%x", &v); c[0] = ((v >> 16) & 255) / 255.f; c[1] = ((v >> 8) & 255) / 255.f; c[2] = (v & 255) / 255.f; }
+// komposisi berlapis (Virtual Set, input dengan kotak PiP): latar → redup → kotak (bayangan, bingkai, isi, label) → latar depan
+static void drawComp(const std::string& id, const Rc& box, float alpha, const Mask& m, int depth) {
+  auto it = g_comp.find(id); if (it == g_comp.end() || depth > 4) return;
+  const CompN& C = it->second;
+  if (!C.base.empty()) drawView(C.base, box, C.baseFit, 1, 0, 0, 0, 0, 0, 0, false, alpha, m, depth);
+  if (C.dim > 0) fillPx(box, 0, 0, 0, (float)(std::min(0.9, C.dim) * alpha), m);
+  const double k = box.w / 1920;
+  for (const LayerN& l : C.L) {
+    Rc r{ box.x + l.x * box.w, box.y + l.y * box.h, l.w * box.w, l.h * box.h }; if (r.w <= 0 || r.h <= 0) continue;
+    const double rad = l.rad * std::min(r.w, r.h) / 2, b = l.bw * k; const float a = (float)(alpha * std::max(0.0, std::min(1.0, l.op)));
+    if (l.sh > 0) { Rc s{ r.x - b, r.y - b + 14 * k * l.sh, r.w + 2 * b, r.h + 2 * b }; for (int q = 3; q >= 1; q--) { double e = q * 10 * k * l.sh; Rc s2{ s.x - e, s.y - e, s.w + 2 * e, s.h + 2 * e }; fillPx(s2, 0, 0, 0, a * 0.12f, Mask{ true, s2, rad + b + e }); } }
+    if (b > 0) { Rc o{ r.x - b, r.y - b, r.w + 2 * b, r.h + 2 * b }; fillPx(o, l.bc[0], l.bc[1], l.bc[2], a, Mask{ true, o, rad + b }); }
+    if (l.hasBg) fillPx(r, l.bg[0], l.bg[1], l.bg[2], a, Mask{ true, r, rad });
+    drawView(l.src, r, l.fit, l.zoom, l.px, l.py, l.cl, l.cr, l.ct, l.cb, l.flip, a, Mask{ true, r, rad }, depth);
+    if (!l.lab.empty() && l.lw > 0) drawView(l.lab, Rc{ box.x + l.lx * box.w, box.y + l.ly * box.h, l.lw * box.w, l.lh * box.h }, 2, 1, 0, 0, 0, 0, 0, 0, false, a, Mask{}, depth);
+  }
+  if (!C.fg.empty()) drawView(C.fg, box, 2, 1, 0, 0, 0, 0, 0, 0, false, alpha, m, depth);
+}
 static void drawSource(const std::string& id, float alpha) {
   if (id.empty() || id == "-" || alpha <= 0) return;
-  auto it = g_src.find(id);
-  if (it == g_src.end()) { // kamera Media Foundation
-    auto ci = g_cams.find(id); if (ci == g_cams.end()) return;
-    Cam& c = *ci->second; ComPtr<ID3D11ShaderResourceView> srv; UINT cw, ch;
-    { std::lock_guard<std::mutex> l(c.mx); if (!c.got || !c.srv) return; srv = c.srv; cw = c.w; ch = c.h; }
-    double sc = std::min((double)g_W / cw, (double)g_H / ch), dw = cw * sc, dh = ch * sc, x0 = (g_W - dw) / 2, y0 = (g_H - dh) / 2;
-    float dst[4] = { (float)(x0 / g_W * 2 - 1), (float)(1 - y0 / g_H * 2), (float)((x0 + dw) / g_W * 2 - 1), (float)(1 - (y0 + dh) / g_H * 2) };
-    float uv[4] = { 0, 0, 1, 1 }, col[4] = { 1, 1, 1, alpha }, p2[4] = { 0, 0, 1, 0 };
-    setCB(dst, uv, col, p2);
-    g_ctx->PSSetShader(g_psOpaque.Get(), nullptr, 0);
-    g_ctx->PSSetShaderResources(0, 1, srv.GetAddressOf());
-    g_ctx->Draw(4, 0);
-    return;
+  const Rc full{ 0, 0, (double)g_W, (double)g_H };
+  if (g_comp.count(id)) drawComp(id, full, alpha, Mask{}, 0);
+  else drawView(id, full, 1, 1, 0, 0, 0, 0, 0, 0, false, alpha, Mask{}, 0);
+}
+// overlay (Fase 7): input penuh di atas Program dengan transparansi / geser / sapuan
+struct OvlN { std::string src; double a = 1, dx = 0, dy = 0, clip = 1; };
+static std::vector<OvlN> g_ovl;
+static void drawOverlaysN() {
+  for (auto& o : g_ovl) {
+    Rc box{ o.dx * g_W, o.dy * g_H, (double)g_W, (double)g_H };
+    Mask m; if (o.clip < 0.999) { m.on = true; m.r = Rc{ 0, 0, o.clip * g_W, (double)g_H }; }
+    if (g_comp.count(o.src)) drawComp(o.src, box, (float)o.a, m, 0);
+    else drawView(o.src, box, 1, 1, 0, 0, 0, 0, 0, 0, false, (float)o.a, m, 0);
   }
-  Source& s = *it->second; if (!s.srv || !s.w || !s.h) return;
-  if (s.kind == "screen" && !s.got) return;
-  ID3D11ShaderResourceView* srvUse = s.srv.Get();
-  if (s.frames.size() > 1 && s.animTotal > 0) { // GIF bergerak: frame menurut waktu
-    double t = std::fmod(nowMs() - s.animT0, s.animTotal); size_t i = 0;
-    while (i + 1 < s.frames.size() && t >= s.delays[i]) { t -= s.delays[i]; i++; }
-    srvUse = s.frames[i].Get();
-  }
-  double sc = std::min((double)g_W / s.w, (double)g_H / s.h), dw = s.w * sc, dh = s.h * sc;
-  double x0 = (g_W - dw) / 2, y0 = (g_H - dh) / 2;
-  float dst[4] = { (float)(x0 / g_W * 2 - 1), (float)(1 - y0 / g_H * 2), (float)((x0 + dw) / g_W * 2 - 1), (float)(1 - (y0 + dh) / g_H * 2) };
-  float uv[4] = { 0, 0, 1, 1 }, col[4] = { 1, 1, 1, alpha }, p2[4] = { 0, 0, 1, 0 };
-  setCB(dst, uv, col, p2);
-  g_ctx->PSSetShader(g_psTex.Get(), nullptr, 0);
-  g_ctx->PSSetShaderResources(0, 1, &srvUse);
-  g_ctx->Draw(4, 0);
 }
 // ---------------------------------------------------------------- grafis UTC (Fase 2)
 static double unixMs() { // = performance.timeOrigin + performance.now() di Chromium (jam dinding, ms)
@@ -1600,7 +1744,7 @@ static void compose(Bus& b, bool program) {
   float black[4] = { 0, 0, 0, 1 }; g_ctx->ClearRenderTargetView(b.rtv.Get(), black);
   if (program && g_tr.on) { drawSource(g_tr.from, 1); drawSource(g_tr.to, ease((float)g_tr.k)); }
   else drawSource(b.id, 1);
-  if (program) drawUtc(); // grafis UTC ON AIR di atas Program (sama dengan lapisan DSK di mesin JS)
+  if (program) { drawOverlaysN(); drawUtc(); } // overlay lalu grafis UTC ON AIR di atas Program (urutan sama dengan mesin JS)
 }
 static void present(Bus& b) {
   if (!b.want || !b.hwnd) return;
@@ -1704,12 +1848,17 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
       std::string ph, why; is >> ph;
       if (!loadImage(*s, unhex(ph), why)) { emit("srcerr %s %s", id.c_str(), why.c_str()); return; }
       emit("srcok %s %u %u", id.c_str(), s->w, s->h);
+    } else if (kind == "window") {
+      unsigned long long hv = 0; is >> hv;
+      auto old = g_src.find(id);
+      if (old != g_src.end() && old->second->kind == "window" && old->second->wItem) return; // sudah berjalan
+      if (!openWin(*s, id, (HWND)(uintptr_t)hv)) return;
     } else if (kind == "video" || kind == "live") {
       std::string ph; is >> ph; vOpen(id, unhex(ph), kind == "live"); return; // ditampilkan lewat jalur kamera (tekstur dekoder)
     } else { emit("srcerr %s jenis tidak didukung", id.c_str()); return; }
     g_src[id] = std::move(s);
   } else if (c == "del") {
-    std::string id; is >> id; g_src.erase(id); vClose(id);
+    std::string id; is >> id; g_src.erase(id); vClose(id); g_comp.erase(id);
   } else if (c == "srcimg") { // gambar yang sudah dirender KLM (RGBA lurus) → BGRA
     std::string id; UINT w = 0, h = 0; size_t n = 0; is >> id >> w >> h >> n;
     if (id.empty() || id.size() > 64 || !w || !h || w > 8192 || h > 8192 || data.size() < (size_t)w * h * 4) return;
@@ -1718,6 +1867,29 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
     auto sp = std::make_unique<Source>(); sp->kind = "image";
     if (!makeTex(w, h, px.data(), sp->tex, sp->srv)) { emit("srcerr %s tekstur GPU gagal", id.c_str()); return; }
     sp->w = w; sp->h = h; g_src[id] = std::move(sp); emit("srcok %s %u %u", id.c_str(), w, h);
+  } else if (c == "comp") {
+    std::string id, base, fg; CompN C; double dim = 0; is >> id >> base >> C.baseFit >> dim >> fg;
+    if (id.empty() || id.size() > 64) return;
+    C.base = base == "-" ? "" : base; C.fg = fg == "-" ? "" : fg; C.dim = dim;
+    std::string tok;
+    while (is >> tok && C.L.size() < 32) {
+      std::vector<std::string> f; std::stringstream ss(tok); std::string x; while (std::getline(ss, x, ',')) f.push_back(x);
+      if (f.size() < 25) continue;
+      LayerN l; auto d = [&](int i) { return atof(f[i].c_str()); };
+      l.src = f[0] == "-" ? "" : f[0]; l.x = d(1); l.y = d(2); l.w = d(3); l.h = d(4); l.fit = atoi(f[5].c_str()); l.zoom = d(6) > 0 ? d(6) : 1;
+      l.px = d(7); l.py = d(8); l.cl = d(9); l.cr = d(10); l.ct = d(11); l.cb = d(12); l.flip = f[13] == "1"; l.op = d(14); l.rad = d(15); l.bw = d(16);
+      if (f[17] != "-") { l.hasBc = true; hexRgb(f[17], l.bc); } if (f[18] != "-") { l.hasBg = true; hexRgb(f[18], l.bg); }
+      l.sh = d(19); l.lab = f[20] == "-" ? "" : f[20]; l.lx = d(21); l.ly = d(22); l.lw = d(23); l.lh = d(24);
+      C.L.push_back(l);
+    }
+    g_comp[id] = std::move(C);
+  } else if (c == "ovl") {
+    g_ovl.clear(); std::string tok;
+    while (is >> tok && g_ovl.size() < 8) {
+      std::vector<std::string> f; std::stringstream ss(tok); std::string x; while (std::getline(ss, x, ',')) f.push_back(x);
+      if (f.size() < 5) continue;
+      OvlN o; o.src = f[0]; o.a = atof(f[1].c_str()); o.dx = atof(f[2].c_str()); o.dy = atof(f[3].c_str()); o.clip = atof(f[4].c_str()); g_ovl.push_back(o);
+    }
   } else if (c == "naud") {
     std::string id; int on = 0; is >> id >> on; vAudio(id, on != 0);
   } else if (c == "camaud") {
@@ -1753,6 +1925,7 @@ static void frame(double now) {
     g_tr.k = (now - g_tr.t0) / g_tr.dur;
     if (g_tr.k >= 1) { g_tr.on = false; g_pgm.id = g_tr.to; }
   }
+  for (auto& kv : g_src) if (kv.second->kind == "window") tickWin(*kv.second); // jendela: ambil frame terbaru (murah)
   for (auto& kv : g_src) if (kv.second->kind == "screen") {
     const std::string& id = kv.first;
     bool used = id == g_pvw.id || id == g_pgm.id || (g_tr.on && (id == g_tr.from || id == g_tr.to));
@@ -2058,6 +2231,31 @@ static int selftest(bool warp) {
         if (pb > 10) { uint8_t il = g_testPcm[4]; id0.assign((const char*)&g_testPcm[5], il); memcpy(&rate0, &g_testPcm[5 + il], 4); } }
       emit("  %s audio file video native: %zu byte PCM (id=%s, %u Hz)", pb > 48000 && id0 == "v2" ? "OK " : "GAGAL", pb, id0.c_str(), rate0); if (!(pb > 48000 && id0 == "v2")) ok = 0;
       command("avoff 120"); emit("  %s geser A/V output native = %d ms", g_avOff == 120 ? "OK " : "GAGAL", g_avOff); if (g_avOff != 120) ok = 0; command("avoff 0");
+      // ---- Fase 7: komposisi berlapis (Virtual Set / PiP), overlay, tangkap jendela (Web Browser)
+      command("src a colour 255 0 0 0 0 0 0"); command("src b bars"); command("src gg colour 0 255 0 0 0 0 0");
+      command("comp c1 a 1 0 - b,0.25,0.25,0.5,0.5,0,1,0,0,0,0,0,0,0,1,0.4,10,ffffff,-,0,-,0,0,0,0"); command("pgm c1"); run(3);
+      chk(g_pgm, 320, 180, 0, 192, 0, 3, "Virtual Set: isi kotak (color bars hijau di tengah)");
+      chk(g_pgm, 162, 92, 255, 0, 0, 3, "Virtual Set: sudut bulat (latar terlihat di sudut kotak)");
+      chk(g_pgm, 158, 180, 255, 255, 255, 3, "Virtual Set: bingkai putih");
+      chk(g_pgm, 50, 50, 255, 0, 0, 3, "Virtual Set: latar di luar kotak");
+      command("pgm a"); command("ovl gg,0.5,0,0,1"); run(2);
+      chk(g_pgm, 320, 180, 128, 128, 0, 3, "Overlay fade 50% di atas Program");
+      command("ovl gg,1,0.5,0,1"); run(2);
+      chk(g_pgm, 100, 180, 255, 0, 0, 2, "Overlay geser: kiri masih Program");
+      chk(g_pgm, 500, 180, 0, 255, 0, 2, "Overlay geser: kanan overlay");
+      command("ovl"); command("del c1"); run(1);
+      { // jendela uji berwarna, ditangkap lewat Windows.Graphics.Capture
+        WNDCLASSEXW wc{ sizeof wc }; wc.lpfnWndProc = DefWindowProcW; wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"KLMWgcTest"; wc.hbrBackground = CreateSolidBrush(RGB(30, 200, 90));
+        RegisterClassExW(&wc);
+        HWND tw = CreateWindowExW(WS_EX_TOOLWINDOW, L"KLMWgcTest", L"klm wgc", WS_POPUP | WS_VISIBLE, 60, 60, 240, 160, nullptr, nullptr, wc.hInstance, nullptr);
+        UpdateWindow(tw); for (int i = 0; i < 20; i++) { pump(); Sleep(10); }
+        char cw[96]; snprintf(cw, sizeof cw, "src w1 window %llu", (unsigned long long)(uintptr_t)tw); command(cw); command("pgm w1");
+        double tw0 = nowMs(); while (nowMs() - tw0 < 2500 && !(g_src.count("w1") && g_src["w1"]->got)) { run(1); Sleep(20); }
+        if (!g_src.count("w1")) emit("  (info) tangkap jendela tidak tersedia di mesin ini — dilewati");
+        else if (!g_src["w1"]->got) emit("  (info) tangkap jendela belum menerima frame di mesin CI (tanpa sesi desktop aktif?) — dilewati");
+        else { run(2); chk(g_pgm, 320, 180, 30, 200, 90, 6, "Tangkap jendela (Web Browser) di Program"); }
+        command("del w1"); command("pgm a"); DestroyWindow(tw); run(1);
+      }
     }
     command("camoff c9"); command("pgm a"); command("out 1920 1080 30"); run(2);
   }
