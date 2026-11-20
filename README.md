@@ -140,6 +140,17 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.9
+Versi uji (beta).
+- **Mesin video native Fase 6 — semua jenis media:**
+  - **Daftar putar**: item yang sedang tampil dan item berikutnya dibuka mesin native lebih dulu, jadi pergantian video/foto mulus.
+  - **GIF bergerak**: dianimasikan mesin native (komposisi frame, jeda, cara buang frame dari metadata GIF).
+  - **SVG**: dirender KLM sesuai resolusi output lalu dikirim sekali ke GPU.
+  - **Sumber dari internet**: gambar dari URL diunduh sekali ke cache lalu dibuka native; Video dari URL dibuka langsung oleh Media Foundation; **Stream Masuk** (RTMP/SRT/RTSP/NDI lewat hub) ditampilkan mode langsung (frame tampil begitu siap, sambung ulang otomatis).
+- **Audio sumber native**: suara file video, daftar putar, Stream Masuk, dan capture card/mic kamera USB kini didekode/ditangkap mesin native (Media Foundation) lalu masuk ke strip mixer KLM seperti biasa — fader, EQ, kompresor, mute, meter, VST tetap berlaku. Bila gagal, otomatis kembali ke jalur audio biasa.
+- **Penyelarasan suara–gambar output** (Pengaturan → Performa → Mesin video native): geser −1000…+1000 ms. Positif = suara ditunda (berlaku untuk semua rekam/streaming); negatif = gambar ditunda (khusus output native). Penundaan suara per input tetap ada di Pengaturan audio input → Delay (sync).
+- Web Browser, Title Cepat dan Virtual Set masih memakai jalur biasa.
+
 ### Baru di v1.18.0-beta.8
 Versi uji (beta).
 - **Mesin video native Fase 5: file video & gambar.** Input Video (MP4/MOV/MKV/AVI dan format lain yang didukung Windows) didekode mesin native di GPU (DXVA lewat Media Foundation) dan posisinya mengikuti pemutar KLM (putar, jeda, lompat, laju, loop, mark in/out). Suara video tetap dari KLM seperti biasa. Input Gambar (PNG/JPG/BMP/TIFF/WebP) dimuat lewat Windows Imaging Component langsung ke GPU; gambar sangat besar diperkecil ke 4096 px.
