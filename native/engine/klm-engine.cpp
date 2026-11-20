@@ -52,6 +52,13 @@
 //   aud <n>                               + n byte PCM s16le stereo 48 kHz (audio Program dari KLM) langsung sesudah baris
 //   Keluaran: ostarted <oid> <encoderHex> <hw 0|1> | oerr <oid> <pesan> | ostopped <oid> <frame>
 //
+// Fase 5 — file video & gambar:
+//   src <id> image <pathHex>              gambar (PNG/JPG/BMP/TIFF/WebP… lewat WIC) → tekstur GPU
+//   src <id> video <pathHex>              file video (MP4/MOV/MKV/AVI… lewat Media Foundation, dekode DXVA GPU)
+//   vt <id> <detik> <main 0|1> <laju>     posisi putar dari elemen video KLM (audio tetap dari KLM) — mesin native
+//                                         mengikuti jam ini (lompat bila posisi berbeda > 0,3 s)
+//   Keluaran: vok <id> <w> <h> <durasi> (frame pertama) | srcerr <id> <pesan>
+//
 // Keluaran stdout (satu baris per kejadian): ready <adapter> | shown <bus> | hidden <bus> | click <bus> <x> <y> <btn> <dbl>
 //   | srcerr <id> <pesan> | srcok <id> <w> <h> | stats fps=.. ms=.. mem=.. utex=.. | err <pesan>
 //   | uack <layer> <seq> | uready <layer> | uerr <layer> <pesan>
@@ -68,8 +75,11 @@
 #include <mfreadwrite.h>
 #include <mferror.h>
 #include <wmcodecdsp.h>
+#include <wincodec.h>
+#include <propvarutil.h>
 #include <codecapi.h>
 #include <condition_variable>
+#include <chrono>
 #include <io.h>
 #include <timeapi.h>
 #include <wrl/client.h>
@@ -341,6 +351,132 @@ static bool camTex(Cam& c, UINT w, UINT h, DXGI_FORMAT f, bool rt) { // dipanggi
   c.tex = t; c.srv = v; c.rtv = r; c.w = w; c.h = h; c.fmt = f;
   return true;
 }
+// salin satu sampel Media Foundation (tekstur DXGI atau memori RGB32) ke tekstur sumber
+static bool sampleToCam(Cam& c, IMFSample* smp, UINT mw, UINT mh) {
+  ComPtr<IMFMediaBuffer> mb; if (FAILED(smp->GetBufferByIndex(0, &mb))) return false;
+  ComPtr<IMFDXGIBuffer> db;
+  if (SUCCEEDED(mb.As(&db))) {
+    ComPtr<ID3D11Texture2D> t; UINT sub = 0;
+    if (FAILED(db->GetResource(IID_PPV_ARGS(&t))) || FAILED(db->GetSubresourceIndex(&sub))) return false;
+    D3D11_TEXTURE2D_DESC d{}; t->GetDesc(&d);
+    std::lock_guard<std::mutex> l(c.mx);
+    if (!camTex(c, d.Width, d.Height, d.Format, false)) return false;
+    g_ctx->CopySubresourceRegion(c.tex.Get(), 0, 0, 0, 0, t.Get(), sub, nullptr);
+    c.got = true; return true;
+  }
+  if (!mw || !mh) return false;
+  std::vector<uint8_t> tmp; const BYTE* src = nullptr; LONG pitch = 0; BYTE* p = nullptr; ComPtr<IMF2DBuffer> b2; bool l2 = false; DWORD mx = 0, cur = 0;
+  if (SUCCEEDED(mb.As(&b2)) && SUCCEEDED(b2->Lock2D(&p, &pitch))) { l2 = true; src = p; }
+  else if (SUCCEEDED(mb->Lock(&p, &mx, &cur))) { src = p; pitch = (LONG)mw * 4; if (cur < mw * mh * 4) { mb->Unlock(); return false; } }
+  else return false;
+  if (pitch < 0) { tmp.resize((size_t)mw * mh * 4); for (UINT y = 0; y < mh; y++) memcpy(&tmp[(size_t)y * mw * 4], src + (LONG)y * pitch, (size_t)mw * 4); src = tmp.data(); pitch = (LONG)mw * 4; }
+  bool ok = false;
+  { std::lock_guard<std::mutex> l(c.mx); if (camTex(c, mw, mh, DXGI_FORMAT_B8G8R8A8_UNORM, false)) { g_ctx->UpdateSubresource(c.tex.Get(), 0, nullptr, src, (UINT)pitch, 0); c.got = true; ok = true; } }
+  if (l2) b2->Unlock2D(); else mb->Unlock();
+  return ok;
+}
+// ---- file video (Fase 5): dekode GPU, posisi mengikuti elemen video KLM
+struct VPlay {
+  std::string id; std::shared_ptr<Cam> cam; std::mutex mx; std::condition_variable cv; std::atomic<bool> stop{ false };
+  double aT = 0, aWall = 0, rate = 1; bool playing = false; bool have = false;
+};
+static std::map<std::string, std::shared_ptr<VPlay>> g_vplay;
+static double vClock(VPlay& v) { return v.playing ? v.aT + (nowMs() - v.aWall) / 1000.0 * v.rate : v.aT; }
+static void vThread(std::shared_ptr<VPlay> v, std::wstring path) {
+  CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  ComPtr<IMFAttributes> a; MFCreateAttributes(&a, 3);
+  ComPtr<ID3D11VideoDevice> vd; g_dev.As(&vd);
+  if (g_mfMgr && vd) a->SetUnknown(MF_SOURCE_READER_D3D_MANAGER, g_mfMgr.Get());
+  a->SetUINT32(MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, TRUE);
+  a->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE);
+  ComPtr<IMFSourceReader> rd;
+  HRESULT hr = MFCreateSourceReaderFromURL(path.c_str(), a.Get(), &rd);
+  if (FAILED(hr)) { emit("srcerr %s file video tidak bisa dibuka (0x%08lx)", v->id.c_str(), (unsigned long)hr); CoUninitialize(); return; }
+  const DWORD ST = (DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM;
+  rd->SetStreamSelection((DWORD)MF_SOURCE_READER_ALL_STREAMS, FALSE); rd->SetStreamSelection(ST, TRUE);
+  ComPtr<IMFMediaType> out; MFCreateMediaType(&out); out->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video); out->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+  if (FAILED(hr = rd->SetCurrentMediaType(ST, nullptr, out.Get()))) { out->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_ARGB32); hr = rd->SetCurrentMediaType(ST, nullptr, out.Get()); }
+  if (FAILED(hr)) { emit("srcerr %s codec video tidak didukung Windows (0x%08lx)", v->id.c_str(), (unsigned long)hr); CoUninitialize(); return; }
+  UINT32 w = 0, h = 0; { ComPtr<IMFMediaType> cur; if (SUCCEEDED(rd->GetCurrentMediaType(ST, &cur))) MFGetAttributeSize(cur.Get(), MF_MT_FRAME_SIZE, &w, &h); }
+  double dur = 0; { PROPVARIANT pv; PropVariantInit(&pv); if (SUCCEEDED(rd->GetPresentationAttribute((DWORD)MF_SOURCE_READER_MEDIASOURCE, MF_PD_DURATION, &pv)) && pv.vt == VT_UI8) dur = pv.uhVal.QuadPart / 1e7; PropVariantClear(&pv); }
+  ComPtr<IMFSample> pend; double pendPts = 0, lastPts = -1, seekT = -1; bool eos = false, okSent = false;
+  auto seek = [&](double t) {
+    PROPVARIANT pv; PropVariantInit(&pv); pv.vt = VT_I8; pv.hVal.QuadPart = (LONGLONG)(std::max(0.0, t) * 1e7);
+    rd->SetCurrentPosition(GUID_NULL, pv); PropVariantClear(&pv);
+    pend.Reset(); eos = false; lastPts = std::max(0.0, t) - 0.001; seekT = t;
+  };
+  while (!v->stop) {
+    double M; bool playing;
+    { std::lock_guard<std::mutex> l(v->mx); M = vClock(*v); playing = v->playing; }
+    if (dur > 0 && M > dur) M = dur;
+    // posisi KLM melompat (seek / ulang / loop) → lompat juga; maju sedikit → kejar dengan dekode
+    if (seekT < 0 || M < lastPts - 0.3 || M > lastPts + 2.0) { seek(M); continue; }
+    if (!pend && !eos) {
+      DWORD si = 0, fl = 0; LONGLONG ts = 0; ComPtr<IMFSample> smp;
+      hr = rd->ReadSample(ST, 0, &si, &fl, &ts, &smp);
+      if (FAILED(hr) || (fl & MF_SOURCE_READERF_ERROR)) { emit("srcerr %s dekode video gagal (0x%08lx)", v->id.c_str(), (unsigned long)hr); break; }
+      if (fl & MF_SOURCE_READERF_ENDOFSTREAM) { eos = true; continue; }
+      if (!smp) continue;
+      pend = smp; pendPts = ts / 1e7;
+    }
+    if (pend) {
+      if (pendPts < M - 0.06) { lastPts = pendPts; pend.Reset(); continue; } // tertinggal → buang (kejar posisi)
+      if (pendPts <= M + 0.008) {
+        if (sampleToCam(*v->cam, pend.Get(), w, h)) {
+          v->cam->fresh = true; v->cam->frames++;
+          if (!okSent) { okSent = true; emit("vok %s %u %u %.3f", v->id.c_str(), w, h, dur); }
+        }
+        lastPts = pendPts; pend.Reset(); continue;
+      }
+      // frame berikutnya belum waktunya → tunggu (atau sampai posisi diperbarui KLM)
+      double waitMs = playing ? (pendPts - M) * 1000.0 / std::max(0.05, v->rate) : 40.0;
+      std::unique_lock<std::mutex> l(v->mx);
+      v->cv.wait_for(l, std::chrono::milliseconds((int)std::max(1.0, std::min(40.0, waitMs))));
+      continue;
+    }
+    std::unique_lock<std::mutex> l(v->mx); v->cv.wait_for(l, std::chrono::milliseconds(20)); // akhir file: tahan frame terakhir
+  }
+  rd.Reset();
+  CoUninitialize();
+}
+static void vClose(const std::string& id) {
+  auto it = g_vplay.find(id); if (it == g_vplay.end()) return;
+  { std::lock_guard<std::mutex> l(it->second->mx); it->second->stop = true; } it->second->cv.notify_all();
+  g_vplay.erase(it); g_cams.erase(id);
+}
+static void vOpen(const std::string& id, const std::string& path) {
+  vClose(id);
+  if (!initMF()) { emit("srcerr %s Media Foundation tidak tersedia", id.c_str()); return; }
+  auto v = std::make_shared<VPlay>(); v->id = id; v->cam = std::make_shared<Cam>(); v->cam->id = id; v->aWall = nowMs();
+  g_vplay[id] = v; g_cams[id] = v->cam;
+  std::thread(vThread, v, widen(path)).detach();
+}
+static void vTime(const std::string& id, double t, bool play, double rate) {
+  auto it = g_vplay.find(id); if (it == g_vplay.end()) return;
+  VPlay& v = *it->second;
+  { std::lock_guard<std::mutex> l(v.mx); v.aT = t; v.aWall = nowMs(); v.playing = play; v.rate = rate > 0 ? rate : 1; v.have = true; }
+  v.cv.notify_all();
+}
+// ---- gambar (Fase 5): WIC → BGRA, diperkecil bila > 4096 px
+static bool loadImage(Source& s, const std::string& path, std::string& why) {
+  ComPtr<IWICImagingFactory> f;
+  if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&f)))) { why = "WIC tidak tersedia"; return false; }
+  ComPtr<IWICBitmapDecoder> dec; ComPtr<IWICBitmapFrameDecode> fr;
+  if (FAILED(f->CreateDecoderFromFilename(widen(path).c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &dec)) || FAILED(dec->GetFrame(0, &fr))) { why = "format gambar tidak dikenali"; return false; }
+  UINT w = 0, h = 0; fr->GetSize(&w, &h); if (!w || !h) { why = "ukuran gambar 0"; return false; }
+  ComPtr<IWICBitmapSource> src = fr;
+  if (w > 4096 || h > 4096) {
+    double k = 4096.0 / std::max(w, h); UINT nw = std::max(1u, (UINT)(w * k)), nh = std::max(1u, (UINT)(h * k));
+    ComPtr<IWICBitmapScaler> sc; if (SUCCEEDED(f->CreateBitmapScaler(&sc)) && SUCCEEDED(sc->Initialize(src.Get(), nw, nh, WICBitmapInterpolationModeHighQualityCubic))) { src = sc; w = nw; h = nh; }
+  }
+  ComPtr<IWICFormatConverter> cv;
+  if (FAILED(f->CreateFormatConverter(&cv)) || FAILED(cv->Initialize(src.Get(), GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom))) { why = "konversi warna gagal"; return false; }
+  std::vector<uint8_t> px((size_t)w * h * 4);
+  if (FAILED(cv->CopyPixels(nullptr, w * 4, (UINT)px.size(), px.data()))) { why = "membaca piksel gagal"; return false; }
+  if (!makeTex(w, h, px.data(), s.tex, s.srv)) { why = "tekstur GPU gagal"; return false; }
+  s.w = w; s.h = h; return true;
+}
+
 static void camThread(std::shared_ptr<Cam> c, ComPtr<IMFSourceReader> rd) {
   CoInitializeEx(nullptr, COINIT_MULTITHREADED);
   while (!c->stop) {
@@ -1348,10 +1484,18 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
       auto old = g_src.find(id); // layar yang sama: pertahankan duplikasi yang sudah berjalan
       if (old != g_src.end() && old->second->kind == "screen" && !memcmp(&old->second->want, &s->want, sizeof(RECT))) return;
       openDup(*s, id);
+    } else if (kind == "image") {
+      std::string ph, why; is >> ph;
+      if (!loadImage(*s, unhex(ph), why)) { emit("srcerr %s %s", id.c_str(), why.c_str()); return; }
+      emit("srcok %s %u %u", id.c_str(), s->w, s->h);
+    } else if (kind == "video") {
+      std::string ph; is >> ph; vOpen(id, unhex(ph)); return; // ditampilkan lewat jalur kamera (tekstur dekoder)
     } else { emit("srcerr %s jenis tidak didukung", id.c_str()); return; }
     g_src[id] = std::move(s);
   } else if (c == "del") {
-    std::string id; is >> id; g_src.erase(id);
+    std::string id; is >> id; g_src.erase(id); vClose(id);
+  } else if (c == "vt") {
+    std::string id; double t = 0, rate = 1; int play = 0; is >> id >> t >> play >> rate; vTime(id, t, play != 0, rate);
   } else if (c == "pvw" || c == "pgm") {
     std::string id; is >> id; (c == "pvw" ? g_pvw : g_pgm).id = id == "-" ? "" : id;
   } else if (c == "trans") {
@@ -1610,6 +1754,32 @@ static int selftest(bool warp) {
       const char* kind = b5[0] == 0x47 ? "TS 188" : b5[4] == 0x47 ? "M2TS 192" : (b5[0] == 0 && b5[1] == 0 && b5[2] == 1 && b5[3] == 0xBA) ? "MPEG-2 PS" : nullptr;
       emit("  %s wadah aliran: %s (%02x %02x %02x %02x %02x %02x %02x %02x)", kind ? "OK " : "GAGAL", kind ? kind : "tidak dikenal", b5[0], b5[1], b5[2], b5[3], b5[4], b5[5], b5[6], b5[7]); if (!kind) ok = 0;
       verify(tsf, "streaming MPEG-TS native", 30);
+    }
+    // ---- Fase 5: file video (MP4 hasil rekam di atas) & gambar BMP
+    {
+      command(("src v1 video " + hexOf(narrow(mp4.c_str()))).c_str()); command("vt v1 1.0 0 1"); command("pgm v1");
+      double t0 = nowMs(); while (nowMs() - t0 < 4000 && !(g_cams.count("v1") && g_cams["v1"]->frames > 0)) { run(1); Sleep(15); }
+      run(3);
+      int q1[3], q2[3]; bool a1 = readPixel(g_pgm, 20, 180, q1), a2 = readPixel(g_pgm, 620, 180, q2);
+      auto near = [](int* q) { return std::abs(q[0] - 32) <= 14 && std::abs(q[1] - 160) <= 14 && std::abs(q[2] - 224) <= 14; };
+      bool okv = a1 && a2 && (near(q1) || near(q2));
+      emit("  %s file video (diam di 1,0 s): (%d,%d,%d) / (%d,%d,%d) harap latar ±(32,160,224)", okv ? "OK " : "GAGAL", q1[0], q1[1], q1[2], q2[0], q2[1], q2[2]); if (!okv) ok = 0;
+      int f0 = g_cams.count("v1") ? g_cams["v1"]->frames.load() : 0;
+      command("vt v1 0.2 1 1"); double t1 = nowMs(); while (nowMs() - t1 < 1200) { run(1); Sleep(15); }
+      int f1 = g_cams.count("v1") ? g_cams["v1"]->frames.load() : 0;
+      emit("  %s file video diputar: %d frame dalam 1,2 s", f1 - f0 >= 15 ? "OK " : "GAGAL", f1 - f0); if (f1 - f0 < 15) ok = 0;
+      command("vt v1 0.5 0 1"); run(5);
+      command("del v1"); run(1);
+      emit("  %s file video ditutup", !g_vplay.count("v1") ? "OK " : "GAGAL"); if (g_vplay.count("v1")) ok = 0;
+      // gambar: BMP 64×32 warna (200,50,100)
+      std::wstring bmp = std::wstring(tmp) + L"klm-selftest.bmp";
+      { const int W = 64, H = 32; std::vector<uint8_t> f(54 + W * H * 3, 0); f[0] = 'B'; f[1] = 'M'; uint32_t sz = (uint32_t)f.size(), off = 54, hs = 40;
+        memcpy(&f[2], &sz, 4); memcpy(&f[10], &off, 4); memcpy(&f[14], &hs, 4); int32_t w = W, h = H; memcpy(&f[18], &w, 4); memcpy(&f[22], &h, 4); f[26] = 1; f[28] = 24;
+        for (int i = 0; i < W * H; i++) { f[54 + i * 3] = 100; f[54 + i * 3 + 1] = 50; f[54 + i * 3 + 2] = 200; }
+        HANDLE fh = CreateFileW(bmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr); DWORD wr = 0; if (fh != INVALID_HANDLE_VALUE) { WriteFile(fh, f.data(), (DWORD)f.size(), &wr, nullptr); CloseHandle(fh); } }
+      command(("src i1 image " + hexOf(narrow(bmp.c_str()))).c_str()); command("pgm i1"); run(2);
+      chk(g_pgm, 320, 180, 200, 50, 100, 2, "Gambar (BMP lewat WIC) di Program");
+      command("del i1");
     }
     command("camoff c9"); command("pgm a"); command("out 1920 1080 30"); run(2);
   }
