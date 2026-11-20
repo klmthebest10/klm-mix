@@ -151,6 +151,7 @@ Versi uji (beta).
   - Perintah zoom beruntun dari slider tidak lagi membuat HP error / beralih sendiri ke zoom digital.
   - Zoom digital kini juga berlaku di monitor & rekaman mesin native (sebelumnya hanya di tampilan biasa).
 - **Kartu daftar input native.** Gambar di kartu daftar input (semua jenis input yang didukung mesin native) kini digambar mesin native setiap frame — semulus Preview/Program — lengkap dengan nomor, label LIVE/PVW, ikon jenis, meter audio, dan progres video. Klik, Ctrl+klik, dobel klik, klik kanan, dan gulir tetap berfungsi. Seret untuk mengurutkan input dilakukan dari bagian judul kartu.
+  - Pengaturan `nativeCards: false` mengembalikan kartu ke tampilan biasa bila diperlukan.
 
 ### Baru di v1.18.0-beta.12
 Versi uji (beta).
