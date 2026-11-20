@@ -140,6 +140,16 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.10
+Versi uji (beta).
+- **Mesin video native Fase 7: Web Browser, Title Cepat, Virtual Set & overlay.**
+  - **Web Browser**: saat mesin native menyala, halaman dirender offscreen di GPU (tanpa tangkap layar). Tekstur yang sama dipakai mesin native dan mixer, jadi lebih ringan. Catatan: dalam mode ini halaman tidak punya jendela untuk diklik — untuk berinteraksi, matikan mesin native lalu buat ulang input browser.
+  - **Tangkap Layar jendela** (bukan seluruh layar) kini juga bisa native lewat Windows Graphics Capture.
+  - **Title Cepat**: kanvas title dikirim ke mesin native setiap kali isinya berubah (termasuk saat animasi masuk/keluar).
+  - **Virtual Set & kotak PiP** (input dengan layer): latar gaya/gambar/video, peredup, kotak berisi input lain dengan isi/muat/rentang, zoom, geser, pangkas, cermin, sudut bulat, bingkai, bayangan, transparansi, label nama, dan latar depan — semuanya disusun mesin native.
+  - **Overlay** (saluran overlay 1–4) kini native dengan efek fade, cut, geser, geser-naik dan sapuan; efek zoom masih jalur biasa.
+- Dengan ini hampir semua jenis input bisa tampil native dan ikut rekam/streaming native. Yang masih jalur biasa: rotasi layer/input, efek (chroma key, koreksi warna, latar AI), transisi selain fade/cut, overlay zoom, dan FTB.
+
 ### Baru di v1.18.0-beta.9
 Versi uji (beta).
 - **Mesin video native Fase 6 — semua jenis media:**
