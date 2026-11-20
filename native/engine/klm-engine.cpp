@@ -817,7 +817,7 @@ static bool kInit(KDec& k) {
   ComPtr<IMFAttributes> a;
   if (SUCCEEDED(k.mft->GetAttributes(&a)) && a) { a->SetUINT32(CODECAPI_AVLowLatencyMode, TRUE); a->SetUINT32(MF_LOW_LATENCY, TRUE); }
   g_dev.As(&k.vdev); g_ctx.As(&k.vctx);
-  if (!k.vdev || !k.vctx) { k.vdev.Reset(); k.vctx.Reset(); emit("kerr %s GPU tanpa D3D11 Video Processor — konversi warna di CPU", k.id.c_str()); }
+  if (!k.vdev || !k.vctx) { k.vdev.Reset(); k.vctx.Reset(); emit("kinfo %s GPU tanpa D3D11 Video Processor — konversi warna di CPU", k.id.c_str()); }
   if (g_mfMgr && k.vdev) k.d3d = SUCCEEDED(k.mft->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)g_mfMgr.Get()));
   ComPtr<IMFMediaType> in; MFCreateMediaType(&in);
   in->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video); in->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);

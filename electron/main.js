@@ -749,6 +749,44 @@ function smokeTest() {
           await js('KM.inputs.remove ? KM.inputs.remove(window.__ncam) : 0'); await wait(800);
           log('kamera native setelah input dihapus: ' + await js('JSON.stringify({ cams: KM.nengine.cams.size })'));
         } catch (e) { fail++; log('GAGAL kamera native: ' + e.message); }
+        // --- Fase 4a: KLMCAM (WebRTC H.264) → dekoder GPU mesin native. Uji putaran-balik WebRTC lokal di halaman mixer ---
+        try {
+          const kr = JSON.parse(await js(`(async () => {
+            let inp; try { inp = KM.inputs.create('klmcam', { title: 'KLMCAM native uji', opts: { slot: 9 } }); } catch (e) { return JSON.stringify({ skip: 'input KLMCAM: ' + e.message }); }
+            window.__kinp = inp.id;
+            const cv = document.createElement('canvas'); cv.width = 640; cv.height = 360; const g = cv.getContext('2d');
+            const paint = () => { g.fillStyle = '#2080c0'; g.fillRect(0, 0, 640, 360); g.fillStyle = '#fff'; g.fillRect((performance.now() / 10) % 600, 0, 40, 40); };
+            paint(); window.__kpaint = setInterval(paint, 33);
+            const a = new RTCPeerConnection(), b = new RTCPeerConnection(); window.__kpc = [a, b];
+            a.onicecandidate = (e) => e.candidate && b.addIceCandidate(e.candidate); b.onicecandidate = (e) => e.candidate && a.addIceCandidate(e.candidate);
+            const tr = a.addTransceiver(cv.captureStream(30).getVideoTracks()[0], { direction: 'sendonly' });
+            const caps = (RTCRtpSender.getCapabilities('video') || { codecs: [] }).codecs, h = caps.filter((c) => /h264/i.test(c.mimeType));
+            if (!h.length) return JSON.stringify({ skip: 'Chromium ini tanpa encoder WebRTC H.264' });
+            tr.setCodecPreferences(h.concat(caps.filter((c) => !/h264/i.test(c.mimeType))));
+            b.ontrack = (e) => KM.nengine.kAttach(KM.getInput(window.__kinp), e.receiver);
+            await a.setLocalDescription(await a.createOffer()); await b.setRemoteDescription(a.localDescription);
+            await b.setLocalDescription(await b.createAnswer()); await a.setRemoteDescription(b.localDescription);
+            return JSON.stringify({ ok: 1, st: !!window.RTCRtpScriptTransform });
+          })()`));
+          if (kr.skip) log('catatan KLMCAM native: dilewati — ' + kr.skip);
+          else {
+            await wait(6000);
+            const ks = JSON.parse(await js(`JSON.stringify((() => { const i = KM.getInput(window.__kinp); const id = 'k' + String(i.id).replace(/[^\\w]/g, '').slice(0, 30); const k = KM.nengine.kcams.get(id); return { id, k: k || null, scriptTransform: !!window.RTCRtpScriptTransform, stat: KM.nengine.camStat }; })())`));
+            log('KLMCAM native: ' + JSON.stringify(ks));
+            if (!ks.k || !ks.k.ok) { fail++; log('GAGAL: frame H.264 KLMCAM tidak terdekode mesin native'); }
+            else {
+              await js('KM.engine.setPreview(window.__kinp)'); await wait(1500);
+              const kp = JSON.parse(await js('JSON.stringify({ pvw: KM.nengine.pvw, why: KM.nengine.why.pvw })'));
+              const px = await js(`KM.nengine.probe('pvw', 0.5, 0.75).then((p) => JSON.stringify(p))`);
+              log('KLMCAM native di monitor Preview: ' + JSON.stringify(kp) + ' piksel ' + px + ' (harap ±32,128,192)');
+              const p3 = JSON.parse(px || 'null');
+              if (!kp.pvw) { fail++; log('GAGAL: KLMCAM native tidak tampil di monitor Preview native (' + kp.why + ')'); }
+              else if (!p3 || Math.abs(p3[0] - 32) > 16 || Math.abs(p3[1] - 128) > 16 || Math.abs(p3[2] - 192) > 16) { fail++; log('GAGAL: warna KLMCAM native salah'); }
+              else log('KLMCAM native: OK — H.264 dari WebRTC didekode mesin native dengan warna benar');
+            }
+          }
+          await js('(() => { clearInterval(window.__kpaint); (window.__kpc || []).forEach((p) => p.close()); if (window.__kinp) KM.inputs.remove(window.__kinp); return 1; })()');
+        } catch (e) { fail++; log('GAGAL KLMCAM native: ' + e.message); }
         // --- Fase 2: grafis UTC ON AIR di atas Program, digambar mesin native dari tekstur GPU yang sama ---
         try {
           // uji sebelumnya memaksa jalur CPU → nyalakan lagi zero-copy (mesin native hanya menerima tekstur GPU)
