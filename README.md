@@ -140,6 +140,13 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.12
+Versi uji (beta).
+- **Mesin video native Fase 9:**
+  - **Transisi stinger native.** Video stinger diputar di halaman tersembunyi lalu gambarnya (termasuk transparansi WebM) langsung masuk GPU mesin native. Pergantian sumber tetap di titik cut, dan suara stinger tetap dari input stinger di mixer.
+  - **Grid Preview native.** Banyak input sekaligus di monitor Preview — kotak, label nomor/nama, dan bingkai tally hijau/merah — digambar mesin native mengikuti ukuran panel Preview. Klik 1× / 2× pada kotak tetap berfungsi seperti biasa.
+  - **Latar AI sepenuhnya native.** Model AI pendeteksi orang kini dijalankan langsung di GPU oleh mesin native (bukan lagi MediaPipe di KLM): deteksi orang, mask, bingkai otomatis mengikuti orang, dan "sembunyikan bila tak ada orang" semuanya di mesin native. Tidak ada lagi jeda menunggu mask pertama. Bila GPU tidak mendukung (Direct3D 11 compute), Latar AI otomatis kembali memakai MediaPipe seperti sebelumnya.
+
 ### Baru di v1.18.0-beta.11
 Versi uji (beta).
 - **Web Browser native kini bisa diklik.** Tombol **🖱 Tampilkan/sembunyikan jendela (untuk klik)** di pengaturan input Web Browser membuka jendela "lihat & klik": isinya halaman yang sama dengan yang tampil di mixer. Klik, klik ganda, klik kanan, seret, gulir, ketik, salin/tempel (Ctrl+C/V/X/A/Z), tombol kembali/maju/muat ulang dan kolom alamat semuanya diteruskan ke halaman. Halaman tetap dirender offscreen di GPU — menutup jendela itu tidak menghentikan input. Tautan "buka di jendela baru" dibuka di halaman yang sama.

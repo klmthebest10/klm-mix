@@ -7,6 +7,17 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+// model Latar AI (ikut terpasang di web/): mesin native membacanya langsung — dari dalam app.asar disalin dulu ke folder sementara
+function segModelPath() {
+  try {
+    const src = path.join(__dirname, '..', 'web', 'selfie_segmenter.tflite');
+    if (!fs.existsSync(src)) return '';
+    if (!/\.asar[\\/]/i.test(src)) return src;
+    const size = fs.statSync(src).size, dst = path.join(app.getPath('temp'), 'klm-seg-' + size + '.tflite');
+    if (!fs.existsSync(dst) || fs.statSync(dst).size !== size) fs.writeFileSync(dst, fs.readFileSync(src));
+    return dst;
+  } catch (e) { return ''; }
+}
 function findExe() {
   if (process.platform !== 'win32') return '';
   const c = [];
@@ -192,8 +203,9 @@ function setup({ win, log = () => {} }) {
           st = { state: 'ready', adapter: s.slice(6) }; restarts = 0; write('parent ' + hwnd()); log('[nengine] siap: ' + s.slice(6));
           const k = k32(); hProc = k ? k.OpenProcess(0x40 /* PROCESS_DUP_HANDLE */, 0, p.pid) : 0;
           if (utcOn) { resendTk(); if (onUtcWant) onUtcWant(); }
+          const sm = segModelPath(); if (sm) write('segmodel ' + sm); else log('[nengine] model Latar AI tidak ditemukan — Latar AI memakai jalur biasa');
         }
-        else if (/^(err|uerr|oerr|ostarted|ostopped|kerr|camerr|srcerr|naerr) /.test(s)) log('[nengine] ' + s);
+        else if (/^(err|uerr|oerr|ostarted|ostopped|kerr|camerr|srcerr|naerr|segmodel) /.test(s)) log('[nengine] ' + s);
         toWin(s);
       }
     });

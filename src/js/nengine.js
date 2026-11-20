@@ -23,7 +23,7 @@
  */
 'use strict';
 (function (KM) {
-  const N = KM.nengine = { pvw: false, pgm: false, state: 'off', adapter: '', fps: 0, mem: 0, ms: 0, why: { pvw: '', pgm: '' }, available: false };
+  const N = KM.nengine = { segNative: false, segInfo: '', pvw: false, pgm: false, state: 'off', adapter: '', fps: 0, mem: 0, ms: 0, why: { pvw: '', pgm: '' }, available: false };
   const el = () => !!(window.klm && window.klm.isElectron && window.klm.send);
   if (KM.settings.nativeEngine == null) KM.settings.nativeEngine = false;
   if (KM.settings.nativeCam == null) KM.settings.nativeCam = true; // berlaku hanya bila mesin native menyala
@@ -67,6 +67,10 @@
     return rt.segCrop;
   }
   function segReady(inp) {
+    if (N.segNative) { // model berjalan di mesin native: tidak perlu menunggu MediaPipe di KLM
+      if (inp.seg.mode === 'image' && inp.seg.bgUrl) { const m = media.get(segBgId(inp)); return !!(m && m.ok); }
+      return true;
+    }
     const c = segTick(inp); if (!c || !inp.rt.segA) return false;
     if (inp.seg.mode === 'image' && inp.seg.bgUrl) { const m = media.get(segBgId(inp)); return !!(m && m.ok); }
     return true;
@@ -91,13 +95,16 @@
     }
     if (fx !== a.fx) { a.fx = fx; cmd('fx ' + k + ' ' + fx); }
     let sg = '-';
-    if (KM.seg && KM.seg.on(inp) && inp.rt.segA) {
-      const o = inp.seg, c = inp.rt.segCrop || { cx: 0, cy: 0, cw: 1 }, col = hex6(o.colour || '#00b140');
+    if (KM.seg && KM.seg.on(inp) && (N.segNative || inp.rt.segA)) {
+      const o = inp.seg, c = (!N.segNative && inp.rt.segCrop) || { cx: 0, cy: 0, cw: 1 }, col = hex6(o.colour || '#00b140');
       const bg = o.mode === 'image' && o.bgUrl && media.get(segBgId(inp)) && media.get(segBgId(inp)).ok ? segBgId(inp) : '-';
-      sg = [SEG_MODE[o.mode] == null ? 0 : SEG_MODE[o.mode], num(o.feather || 0, 2), num(o.blur || 0, 2), col === '-' ? '00b140' : col, bg, o.bgFit === 'fit' ? 1 : 0, num(c.cx), num(c.cy), num(c.cw), o.hideEmpty && !inp.rt.person ? 1 : 0].join(' ');
+      sg = [SEG_MODE[o.mode] == null ? 0 : SEG_MODE[o.mode], num(o.feather || 0, 2), num(o.blur || 0, 2), col === '-' ? '00b140' : col, bg, o.bgFit === 'fit' ? 1 : 0, num(c.cx), num(c.cy), num(c.cw),
+        !N.segNative && o.hideEmpty && !inp.rt.person ? 1 : 0].join(' ');
+      // model native: mesin menghitung mask, bingkai otomatis & deteksi orang sendiri (parameter sama dengan segment.js)
+      if (N.segNative) sg += ' ' + [1, num(o.edge == null ? 0.5 : o.edge, 3), o.invert ? 1 : 0, o.follow ? 1 : 0, num(o.followZoom || 1.6, 2), o.hideEmpty ? 1 : 0].join(' ');
     }
     if (sg !== a.seg) { a.seg = sg; cmd('seg ' + k + ' ' + sg); if (sg === '-') a.segN = -1; }
-    if (sg !== '-' && inp.rt.segN !== a.segN) { // mask baru dari model → 8-bit ke mesin native
+    if (sg !== '-' && !N.segNative && inp.rt.segN !== a.segN) { // mask baru dari MediaPipe di KLM → 8-bit ke mesin native
       const A = inp.rt.segA, mc = inp.rt.segMask; if (!A || !mc || A.length !== mc.width * mc.height) return;
       a.segN = inp.rt.segN; const b = new Uint8Array(A.length); for (let i = 0; i < A.length; i++) b[i] = A[i] * 255;
       window.klm.send('nengine:segm', k, mc.width, mc.height, b.buffer);
@@ -422,7 +429,8 @@
 
   function onEv(s) {
     const sp = s.indexOf(' '), t = sp < 0 ? s : s.slice(0, sp), rest = sp < 0 ? '' : s.slice(sp + 1);
-    if (t === 'ready') { ready = true; N.state = 'ready'; N.adapter = rest; resetSent(); KM.changed('nengine'); camReopen(); for (const k of kcams.values()) k.ok = false; kSync(); }
+    if (t === 'segmodel') { const ok = rest.startsWith('ok'); N.segNative = ok; N.segInfo = rest.slice(ok ? 3 : 4); if (!ok) console.warn('[nengine] Latar AI native tidak tersedia:', N.segInfo); attrSent.clear(); KM.changed('nengine'); }
+    else if (t === 'ready') { ready = true; N.segNative = false; N.state = 'ready'; N.adapter = rest; resetSent(); KM.changed('nengine'); camReopen(); for (const k of kcams.values()) k.ok = false; kSync(); }
     else if (t === 'shown' && bus[rest]) { bus[rest].shown = true; N[rest] = bus[rest].want; }
     else if (t === 'hidden' && bus[rest]) { bus[rest].shown = false; N[rest] = false; }
     else if (t === 'srcerr') { const id = rest.split(' ')[0]; const m = media.get(id); if (m) { m.ok = false; m.err = rest.slice(id.length + 1); } else { srcErr.add(id); srcSent.delete(id); } KM.log && KM.log('mesin native: ' + rest); }
