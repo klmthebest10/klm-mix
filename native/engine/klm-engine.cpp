@@ -889,26 +889,32 @@ static void tickScreen(Source& s, const std::string& id, double now) {
 static winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice g_wdev{ nullptr };
 static bool openWin(Source& s, const std::string& id, HWND hwnd) {
   using namespace winrt::Windows::Graphics::Capture;
+  const char* step = "mulai";
   try {
     if (!IsWindow(hwnd)) { emit("srcerr %s jendela tidak ada", id.c_str()); return false; }
     if (!GraphicsCaptureSession::IsSupported()) { emit("srcerr %s Windows ini belum mendukung Graphics Capture", id.c_str()); return false; }
+    step = "perangkat D3D";
     if (!g_wdev) {
       ComPtr<IDXGIDevice> dx; g_dev.As(&dx); winrt::com_ptr<::IInspectable> insp;
       winrt::check_hresult(CreateDirect3D11DeviceFromDXGIDevice(dx.Get(), insp.put()));
       g_wdev = insp.as<winrt::Windows::Graphics::DirectX::Direct3D11::IDirect3DDevice>();
     }
+    step = "item jendela";
     auto interop = winrt::get_activation_factory<GraphicsCaptureItem, IGraphicsCaptureItemInterop>();
     winrt::check_hresult(interop->CreateForWindow(hwnd, winrt::guid_of<GraphicsCaptureItem>(), winrt::put_abi(s.wItem)));
     auto sz = s.wItem.Size(); s.wcw = sz.Width; s.wch = sz.Height;
+    step = "kolam frame";
     s.wPool = Direct3D11CaptureFramePool::CreateFreeThreaded(g_wdev, winrt::Windows::Graphics::DirectX::DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, sz);
+    step = "sesi";
     s.wSess = s.wPool.CreateCaptureSession(s.wItem);
     try { s.wSess.IsCursorCaptureEnabled(false); } catch (...) {}
     try { s.wSess.IsBorderRequired(false); } catch (...) {} // Windows 11: tanpa bingkai kuning
+    step = "mulai tangkap";
     s.wSess.StartCapture();
     emit("srcok %s %d %d", id.c_str(), sz.Width, sz.Height);
     return true;
-  } catch (winrt::hresult_error const& e) { emit("srcerr %s Graphics Capture gagal (0x%08x)", id.c_str(), (unsigned)e.code()); }
-  catch (...) { emit("srcerr %s Graphics Capture gagal", id.c_str()); }
+  } catch (winrt::hresult_error const& e) { emit("srcerr %s Graphics Capture gagal di langkah %s (0x%08x)", id.c_str(), step, (unsigned)e.code()); }
+  catch (...) { emit("srcerr %s Graphics Capture gagal di langkah %s", id.c_str(), step); }
   return false;
 }
 static void tickWin(Source& s) {
@@ -2247,7 +2253,7 @@ static int selftest(bool warp) {
       { // jendela uji berwarna, ditangkap lewat Windows.Graphics.Capture
         WNDCLASSEXW wc{ sizeof wc }; wc.lpfnWndProc = DefWindowProcW; wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"KLMWgcTest"; wc.hbrBackground = CreateSolidBrush(RGB(30, 200, 90));
         RegisterClassExW(&wc);
-        HWND tw = CreateWindowExW(WS_EX_TOOLWINDOW, L"KLMWgcTest", L"klm wgc", WS_POPUP | WS_VISIBLE, 60, 60, 240, 160, nullptr, nullptr, wc.hInstance, nullptr);
+        HWND tw = CreateWindowExW(0, L"KLMWgcTest", L"klm wgc", WS_OVERLAPPEDWINDOW | WS_VISIBLE, 60, 60, 260, 200, nullptr, nullptr, wc.hInstance, nullptr);
         UpdateWindow(tw); for (int i = 0; i < 20; i++) { pump(); Sleep(10); }
         char cw[96]; snprintf(cw, sizeof cw, "src w1 window %llu", (unsigned long long)(uintptr_t)tw); command(cw); command("pgm w1");
         double tw0 = nowMs(); while (nowMs() - tw0 < 2500 && !(g_src.count("w1") && g_src["w1"]->got)) { run(1); Sleep(20); }
