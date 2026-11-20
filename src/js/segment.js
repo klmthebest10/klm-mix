@@ -48,8 +48,9 @@
   };
 
   const smooth = (a, b, t) => a + (b - a) * t;
-  /** proses satu frame → canvas beralfa (atau null bila belum siap: sumber asli dipakai) */
-  SG.process = function (inp, s) {
+  /** proses satu frame → canvas beralfa (atau null bila belum siap: sumber asli dipakai).
+   *  maskOnly (mesin video native): hanya perbarui mask & bingkai otomatis → { cx, cy, cw } (komposit dikerjakan GPU native) */
+  SG.process = function (inp, s, maskOnly) {
     const rt = inp.rt, o = inp.seg;
     if (!rt.segger) { attach(inp); return null; }
     const now = performance.now(), lite = KM.settings.perfLite || KM.settings.perf === 'hemat';
@@ -78,7 +79,7 @@
             px[i * 4 + 3] = v * 255;
             if (v > 0.5) { cnt++; const x = i % mw, y = (i / mw) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
           }
-          mc.getContext('2d').putImageData(rt.segImg, 0, 0);
+          mc.getContext('2d').putImageData(rt.segImg, 0, 0); rt.segN = (rt.segN || 0) + 1;
           const cover = cnt / n; rt.segCover = cover;
           const had = rt.person; rt.person = cover > 0.015; // orang terdeteksi bila ≥1,5% gambar
           if (rt.person) rt.segBox = { x: x0 / mw, y: y0 / mh, w: (x1 - x0 + 1) / mw, h: (y1 - y0 + 1) / mh };
@@ -96,9 +97,10 @@
       if (!rt.person) { tw = 1; tx = 0; ty = 0; }
       tx = Math.max(0, Math.min(1 - tw, tx)); ty = Math.max(0, Math.min(1 - tw, ty));
       const F = rt.segF || (rt.segF = { x: 0, y: 0, w: 1 }), k = 0.07;
-      F.x = smooth(F.x, tx, k); F.y = smooth(F.y, ty, k); F.w = smooth(F.w, tw, k);
+      if (rt.segFF !== KM.engine.frame) { rt.segFF = KM.engine.frame; F.x = smooth(F.x, tx, k); F.y = smooth(F.y, ty, k); F.w = smooth(F.w, tw, k); } // sekali per frame
       cx = F.x; cy = F.y; cw = chh = F.w;
     }
+    if (maskOnly) return { cx, cy, cw };
     const c = out.getContext('2d'), mc = rt.segMask;
     c.globalCompositeOperation = 'copy'; c.filter = o.feather > 0 ? 'blur(' + (o.feather * W / 1280).toFixed(1) + 'px)' : 'none';
     c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';

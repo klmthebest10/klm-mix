@@ -342,29 +342,75 @@ ipcMain.handle('app:relaunch', () => { app.relaunch(); app.exit(0); });
 // ---- Input "Web Browser" (jendela tersembunyi yang di-capture) ----
 // Web Browser offscreen (mesin video native): halaman dirender di GPU tanpa jendela, tekstur yang sama dikirim ke mesin native
 // (sumber "w<id>") dan ke mixer (VideoFrame "osr:<id>") — tanpa tangkap layar
-const osrFly = new Map();
+const osrFly = new Map(), bviews = new Map(); // bviews: id halaman offscreen → jendela "lihat & klik"
 function osrPaint(id, tex) {
-  const { sharedTexture } = require('electron');
   const hold = { tex, n: 1 }, unref = (h) => { if (h && --h.n <= 0 && h.tex) { const t = h.tex; h.tex = null; try { t.release(); } catch (er) {} } };
   const cs = (tex.textureInfo && tex.textureInfo.codedSize) || {}, meta = { W: cs.width | 0, H: cs.height | 0 };
   if (nEngine.ready && nEngine.ready()) { hold.n++; try { nEngine.extPush('w' + id, hold, meta, unref); } catch (er) { unref(hold); } }
-  osrSend(id, hold, meta, unref);
+  const v = bviews.get(id);
+  if (v && !v.isDestroyed() && v.__ready && v.isVisible() && !v.isMinimized()) { hold.n++; osrSend(v.webContents.mainFrame, 'v' + id, 'osr:' + id, hold, meta, unref); }
+  osrSend(mainWin && !mainWin.isDestroyed() ? mainWin.webContents.mainFrame : null, 'm' + id, 'osr:' + id, hold, meta, unref);
 }
-function osrSend(id, hold, meta, unref) {
+// satu kiriman per tujuan per halaman; yang menunggu hanya frame terbaru
+function osrSend(fr, key, tag, hold, meta, unref) {
   const { sharedTexture } = require('electron');
-  const fr = mainWin && !mainWin.isDestroyed() ? mainWin.webContents.mainFrame : null;
   if (!fr || !sharedTexture || !sharedTexture.importSharedTexture) { unref(hold); return; }
-  const f = osrFly.get(id);
-  if (f) { if (f.pend) f.pend.unref(f.pend.hold); f.pend = { hold, meta, unref }; return; } // satu kiriman per halaman; yang menunggu hanya frame terbaru
+  const f = osrFly.get(key);
+  if (f) { if (f.pend) f.pend.unref(f.pend.hold); f.pend = { fr, hold, meta, unref }; return; }
   let imp;
   try { imp = sharedTexture.importSharedTexture({ textureInfo: hold.tex.textureInfo, allReferencesReleased: () => unref(hold) }); } catch (er) { unref(hold); return; }
-  const st = { pend: null }; osrFly.set(id, st);
-  sharedTexture.sendSharedTexture({ frame: fr, importedSharedTexture: imp }, 'osr:' + id, meta).catch(() => {}).finally(() => {
+  const st = { pend: null }; osrFly.set(key, st);
+  sharedTexture.sendSharedTexture({ frame: fr, importedSharedTexture: imp }, tag, meta).catch(() => {}).finally(() => {
     try { imp.release(); } catch (er) {}
-    if (osrFly.get(id) === st) osrFly.delete(id);
-    if (st.pend && st.pend.hold.tex) osrSend(id, st.pend.hold, st.pend.meta, st.pend.unref); else if (st.pend) st.pend.unref(st.pend.hold);
+    if (osrFly.get(key) === st) osrFly.delete(key);
+    const p = st.pend; if (!p) return;
+    if (p.hold.tex) osrSend(p.fr, key, tag, p.hold, p.meta, p.unref); else p.unref(p.hold);
   });
 }
+// Jendela "lihat & klik" untuk halaman offscreen: menampilkan frame yang sama dengan yang masuk ke mixer, mengirim
+// mouse/keyboard ke halaman lewat sendInputEvent — halaman tetap dirender offscreen (tanpa tangkap layar)
+function bviewInfo(id, extra) {
+  const v = bviews.get(id), w = browsers.get(id); if (!v || v.isDestroyed() || !w || w.isDestroyed()) return;
+  const wc = w.webContents;
+  v.webContents.send('bview:info', Object.assign({ size: w.getContentSize(), url: wc.getURL(), title: wc.getTitle() }, extra || {}));
+}
+function openBview(id) {
+  const w = browsers.get(id); if (!w || w.isDestroyed()) return false;
+  let v = bviews.get(id);
+  if (v && !v.isDestroyed()) { if (v.isMinimized()) v.restore(); v.show(); v.focus(); return true; }
+  const [cw, ch] = w.getContentSize(), wa = screen.getPrimaryDisplay().workAreaSize;
+  const k = Math.min(1, (wa.width - 60) / cw, (wa.height - 100) / (ch + 40));
+  v = new BrowserWindow({ width: Math.round(cw * k), height: Math.round(ch * k) + 40, useContentSize: true, minWidth: 360, minHeight: 240,
+    title: 'KLM - Web Browser', backgroundColor: '#111111', autoHideMenuBar: true, icon: path.join(__dirname, '..', 'build', 'icon.png'),
+    webPreferences: { preload: path.join(__dirname, 'bview-preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false, spellcheck: false } });
+  v.setMenuBarVisibility(false);
+  bviews.set(id, v); v.__src = id;
+  v.webContents.on('did-finish-load', () => { v.__ready = true; bviewInfo(id); try { w.webContents.invalidate(); } catch (er) {} });
+  v.on('closed', () => { if (bviews.get(id) === v) bviews.delete(id); osrFly.delete('v' + id); });
+  v.on('focus', () => { try { w.webContents.focus(); } catch (er) {} });
+  v.loadFile(path.join(__dirname, 'bview.html')).catch(() => {});
+  return true;
+}
+const bvSrc = (e) => { const v = BrowserWindow.fromWebContents(e.sender); const id = v && v.__src; const w = id != null && browsers.get(id); return w && !w.isDestroyed() ? w : null; };
+ipcMain.on('bview:input', (e, ev) => {
+  const w = bvSrc(e); if (!w || !ev || typeof ev.type !== 'string') return;
+  const wc = w.webContents;
+  try {
+    if (ev.type === 'edit') { const f = { copy: 1, paste: 1, cut: 1, selectAll: 1, undo: 1, redo: 1 }; if (f[ev.cmd]) wc[ev.cmd](); return; }
+    if (ev.type === 'focus') { wc.focus(); return; }
+    if (ev.type === 'blur') return;
+    wc.sendInputEvent(ev);
+  } catch (er) {}
+});
+ipcMain.on('bview:nav', (e, cmd, url) => {
+  const w = bvSrc(e); if (!w) return; const wc = w.webContents, nh = wc.navigationHistory;
+  try {
+    if (cmd === 'back') { if (nh && nh.canGoBack()) nh.goBack(); else if (!nh && wc.canGoBack()) wc.goBack(); }
+    else if (cmd === 'forward') { if (nh && nh.canGoForward()) nh.goForward(); else if (!nh && wc.canGoForward()) wc.goForward(); }
+    else if (cmd === 'reload') wc.reload();
+    else if (cmd === 'url' && /^(https?|file|data):/i.test(url)) wc.loadURL(url).catch(() => {});
+  } catch (er) {}
+});
 ipcMain.handle('browser:open', async (e, { url, width, height, visible, osr }) => {
   if (osr) {
     const w = new BrowserWindow({ show: false, width: width || 1280, height: height || 720, useContentSize: true, frame: false, skipTaskbar: true,
@@ -373,7 +419,12 @@ ipcMain.handle('browser:open', async (e, { url, width, height, visible, osr }) =
     w.webContents.setFrameRate(30);
     const id = w.id;
     w.webContents.on('paint', (ev) => { const t = ev && ev.texture; if (t) osrPaint(id, t); });
-    browsers.set(id, w); w.on('closed', () => { browsers.delete(id); osrFly.delete(id); });
+    // tautan "jendela baru" (target=_blank / window.open) dibuka di halaman yang sama — halaman offscreen tidak punya jendela lain
+    w.webContents.setWindowOpenHandler(({ url: u }) => { if (/^https?:/i.test(u)) w.loadURL(u).catch(() => {}); return { action: 'deny' }; });
+    const info = () => bviewInfo(id);
+    w.webContents.on('did-navigate', info); w.webContents.on('did-navigate-in-page', info); w.webContents.on('page-title-updated', info);
+    w.webContents.on('cursor-changed', (ev, type) => bviewInfo(id, { cursor: type }));
+    browsers.set(id, w); w.on('closed', () => { browsers.delete(id); osrFly.delete('m' + id); osrFly.delete('v' + id); const v = bviews.get(id); if (v && !v.isDestroyed()) v.destroy(); bviews.delete(id); });
     await w.loadURL(url).catch(() => {});
     w.webContents.invalidate();
     return { winId: id, osr: true };
@@ -396,7 +447,11 @@ ipcMain.handle('browser:navigate', async (e, id, url) => { const w = browsers.ge
 ipcMain.handle('browser:reload', (e, id) => { const w = browsers.get(id); if (w) w.reload(); return !!w; });
 ipcMain.handle('browser:show', (e, id, show) => {
   const w = browsers.get(id); if (!w) return false;
-  if (w.webContents.isOffscreen && w.webContents.isOffscreen()) return 'osr'; // halaman offscreen tidak punya jendela untuk diklik
+  if (w.webContents.isOffscreen && w.webContents.isOffscreen()) { // halaman offscreen: buka/tutup jendela "lihat & klik"
+    if (show) return openBview(id) ? 'osr-view' : false;
+    const v = bviews.get(id); if (v && !v.isDestroyed()) v.close();
+    return 'osr-view';
+  }
   const [bw] = w.getSize();
   if (show) { w.setPosition(100, 100); w.setSkipTaskbar(false); w.setFocusable(true); w.focus(); }
   else { w.setPosition(-bw - 200, 0); w.setSkipTaskbar(true); w.setFocusable(false); }
@@ -953,6 +1008,69 @@ function smokeTest() {
             log('Web Browser native (tangkap jendela): ' + JSON.stringify(b7));
             if (!b7.pvw) log('catatan: Web Browser belum tampil native di CI (' + b7.why + ') — jendela browser di luar layar mungkin tidak dirender saat tanpa sesi desktop');
             else log('Web Browser native: OK');
+            // jendela "lihat & klik" untuk halaman offscreen: klik & ketik di jendela itu harus sampai ke halaman, frame harus tampil
+            try {
+              const page = 'data:text/html,' + encodeURIComponent('<body style="margin:0;background:#c00000;height:100vh" onmousedown="document.body.style.background=\'#00b000\';document.getElementById(\'t\').focus()"><input id="t" style="position:absolute;left:4px;top:4px;width:60px"></body>');
+              await js(`(() => { const b = KM.inputs.create('browser', { title: 'Browser klik', opts: { url: ${JSON.stringify(page)}, width: 640, height: 360 } }); window.__vk = b.id; return 1; })()`);
+              await wait(3000);
+              const wid = await js('(() => { const i = KM.state.inputs.find((x) => x.id === window.__vk); return i && i.rt.osr ? i.rt.winId : 0; })()');
+              if (!wid) log('catatan: input Web Browser uji klik bukan halaman offscreen — uji jendela klik dilewati');
+              else {
+                const r = await js(`window.klm.invoke('browser:show', ${wid}, true)`);
+                const bv = bviews.get(wid); let ok = false;
+                for (let i = 0; i < 40 && !(bv && bv.__ready); i++) await wait(250);
+                await wait(1500);
+                if (bv && bv.__ready) {
+                  await bv.webContents.executeJavaScript(`(() => { const c = document.getElementById('cv'), r = c.getBoundingClientRect(), o = { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0, bubbles: true, detail: 1 };
+                    c.dispatchEvent(new MouseEvent('mousedown', o)); window.dispatchEvent(new MouseEvent('mouseup', o)); return 1; })()`);
+                  await wait(800);
+                  await bv.webContents.executeJavaScript(`(() => { const c = document.getElementById('cv'); for (const k of ['k', 'l', 'm']) { c.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); c.dispatchEvent(new KeyboardEvent('keyup', { key: k, bubbles: true })); } return 1; })()`);
+                  await wait(1200);
+                  const pw = browsers.get(wid);
+                  const st = pw ? await pw.webContents.executeJavaScript('JSON.stringify({ bg: getComputedStyle(document.body).backgroundColor, val: document.getElementById("t").value })') : '{}';
+                  const px = await bv.webContents.executeJavaScript(`(() => { const c = document.getElementById('cv'); const d = c.getContext('2d').getImageData(c.width >> 1, c.height >> 1, 1, 1).data; return JSON.stringify([d[0], d[1], d[2], c.width, c.height]); })()`);
+                  log('Jendela klik Web Browser: ' + r + ' • halaman ' + st + ' • piksel jendela ' + px);
+                  const S = JSON.parse(st), P = JSON.parse(px);
+                  ok = /0, 176, 0/.test(S.bg) && S.val === 'klm' && P[1] > 150 && P[0] < 60;
+                }
+                if (!ok) { fail++; log('GAGAL: klik/ketik di jendela Web Browser tidak sampai ke halaman offscreen'); } else log('Jendela klik Web Browser: OK');
+                if (bv && !bv.isDestroyed()) bv.close();
+              }
+              await js('KM.inputs.remove(window.__vk); 1');
+            } catch (e) { fail++; log('GAGAL jendela klik Web Browser: ' + e.message); }
+            // --- Fase 8: rotasi/posisi input, transisi selain fade, overlay zoom, FTB, koreksi warna — tetap native
+            try {
+              await js(`(() => { const a = KM.inputs.create('colour', { title: 'F8 merah', color: '#ff0000' }), b = KM.inputs.create('colour', { title: 'F8 hijau', color: '#00ff00' });
+                window.__f8a = a.id; window.__f8b = b.id; Object.assign(a.pos, { fit: 'stretch', zoom: 0.5, rot: 90 }); KM.engine.cut(a.id); KM.engine.setPreview(b.id); return 1; })()`);
+              await wait(2500);
+              const near = (a, c, t) => Array.isArray(a) && c.every((x, i) => Math.abs(a[i] - x) <= t);
+              const pr = (pts) => js(`Promise.all(${JSON.stringify(pts)}.map((q) => KM.nengine.probe('pgm', q[0], q[1]))).then((p) => JSON.stringify({ p, pgm: KM.nengine.pgm, why: KM.nengine.why.pgm }))`).then(JSON.parse);
+              const r1 = await pr([[0.5, 0.12], [0.3, 0.5]]);
+              log('Fase 8 rotasi input 90° native: ' + JSON.stringify(r1));
+              if (!r1.pgm || !near(r1.p[0], [255, 0, 0], 6) || !near(r1.p[1], [0, 0, 0], 6)) { fail++; log('GAGAL: input berotasi tidak tampil native'); } else log('Rotasi input native: OK');
+              await js(`(() => { const a = KM.getInput(window.__f8a); Object.assign(a.pos, { fit: 'fit', zoom: 1, rot: 0 }); window.__f8t = KM.settings.transitions[0].type; KM.settings.transitions[0].type = 'wipe'; KM.engine.setTbar(0.5); return 1; })()`);
+              await wait(1500);
+              const r2 = await pr([[0.2, 0.5], [0.8, 0.5]]);
+              log('Fase 8 T-bar wipe 50% native: ' + JSON.stringify(r2));
+              if (!r2.pgm || !near(r2.p[0], [0, 255, 0], 6) || !near(r2.p[1], [255, 0, 0], 6)) { fail++; log('GAGAL: transisi wipe tidak native'); } else log('Transisi wipe native: OK');
+              await js('KM.engine.setTbar(0); KM.settings.transitions[0].type = window.__f8t; KM.engine.ftb(true); 1');
+              await wait(1800);
+              const r3 = await pr([[0.5, 0.5]]);
+              log('Fase 8 FTB native: ' + JSON.stringify(r3));
+              if (!r3.pgm || !near(r3.p[0], [0, 0, 0], 4)) { fail++; log('GAGAL: FTB tidak native'); } else log('FTB native: OK');
+              await js('KM.engine.ftb(false); window.__f8o = KM.settings.overlayFx[1].type; KM.settings.overlayFx[1] = Object.assign({}, KM.settings.overlayFx[1], { type: "zoom", dur: 3000 }); 1');
+              await wait(1500);
+              await js('KM.engine.overlay(1, window.__f8b, "in"); 1'); await wait(1200);
+              const r4 = await pr([[0.5, 0.5], [0.03, 0.05]]);
+              log('Fase 8 overlay zoom (sedang masuk) native: ' + JSON.stringify(r4));
+              if (!r4.pgm || !(r4.p[0] && r4.p[0][1] > 40) || !near(r4.p[1], [255, 0, 0], 6)) { fail++; log('GAGAL: overlay zoom tidak native'); } else log('Overlay zoom native: OK');
+              await js('KM.engine.overlay(1, null, "off"); KM.settings.overlayFx[1].type = window.__f8o; const a = KM.getInput(window.__f8a); a.cc = { on: true, bri: 0, con: 1, sat: 0, hue: 0, gam: 1 }; 1');
+              await wait(1500);
+              const r5 = await pr([[0.5, 0.5]]);
+              log('Fase 8 koreksi warna native: ' + JSON.stringify(r5));
+              if (!r5.pgm || !near(r5.p[0], [54, 54, 54], 5)) { fail++; log('GAGAL: koreksi warna tidak native'); } else log('Koreksi warna native: OK');
+              await js('KM.inputs.remove(window.__f8a); KM.inputs.remove(window.__f8b); 1');
+            } catch (e) { fail++; log('GAGAL Fase 8 native: ' + e.message); }
             await js('["__vs","__vt","__vb","__vc"].forEach((k) => KM.inputs.remove(window[k])); 1');
           } catch (e) { fail++; log('GAGAL video/gambar native: ' + e.message); }
           await js('KM.nengine.relaxInputs = false; KM.inputs.remove(window.__ocam); 1');

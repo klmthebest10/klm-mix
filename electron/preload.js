@@ -12,7 +12,7 @@ const INVOKE = ['app:info', 'desktop:sources', 'dialog:open', 'dialog:save', 'di
   'procaudio:start', 'procaudio:stop', 'procaudio:available',
   'nengine:start', 'nengine:stop', 'nengine:status', 'nengine:screen-rect', 'nengine:download', 'browser:hwnd',
   'update:info', 'update:check', 'update:download', 'update:install'];
-const SEND = ['file:write-chunk', 'utc:start', 'utc:stop', 'utc:ack', 'utc:reload', 'utc:full', 'utc:pause', 'utc:resume', 'utc:zc-ready', 'utc:zc-set', 'nengine:cmd', 'nengine:utc', 'nengine:kenc', 'nengine:aud', 'nengine:raster'];
+const SEND = ['file:write-chunk', 'utc:start', 'utc:stop', 'utc:ack', 'utc:reload', 'utc:full', 'utc:pause', 'utc:resume', 'utc:zc-ready', 'utc:zc-set', 'nengine:cmd', 'nengine:utc', 'nengine:segm', 'nengine:kenc', 'nengine:aud', 'nengine:raster'];
 const ON = ['utc:frame', 'utc:tk', 'utc:zc', 'vst:event', 'airplay:status', 'procaudio:status', 'update:status', 'nengine:ev', 'nengine:pcm'];
 
 // port audio plugin VST (MessagePort ke broker) diteruskan ke dunia halaman → AudioWorklet

@@ -16,7 +16,7 @@ function findExe() {
   return c.find((p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }) || '';
 }
 // hanya perintah yang dikenal mesin, tanpa baris baru / karakter kendali (perintah utex/utk/ublob hanya dari proses utama)
-const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff|ostart|ostop|vt|naud|camaud|avoff|comp|ovl)( [\w.,\- ]{0,4000})?$/;
+const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff|ostart|ostop|vt|naud|camaud|avoff|comp|ovl|ftb|ipos|fx|seg)( [\w.,\- ]{0,4000})?$/;
 
 // DuplicateHandle (kernel32) lewat koffi: handle NT tekstur lapisan UTC → disalin ke proses klm-engine
 let K = null;
@@ -221,6 +221,14 @@ function setup({ win, log = () => {} }) {
     const b = Buffer.isBuffer(data) ? data : data instanceof ArrayBuffer ? Buffer.from(data) : ArrayBuffer.isView(data) ? Buffer.from(data.buffer, data.byteOffset, data.byteLength) : null;
     w |= 0; h |= 0; if (!b || w < 1 || h < 1 || w > 8192 || h > 8192 || b.length < w * h * 4) return;
     P.stdin.write('srcimg ' + id + ' ' + w + ' ' + h + ' ' + (w * h * 4) + '\n'); P.stdin.write(b.subarray(0, w * h * 4));
+  });
+  // Fase 8: mask latar AI (8-bit, kecil, per frame) dari model segmentasi KLM → mesin native
+  ipcMain.on('nengine:segm', (e, id, w, h, data) => {
+    if (!P || st.state !== 'ready' || !P.stdin.writable || !/^[\w.-]{1,64}$/.test(String(id))) return;
+    const b = Buffer.isBuffer(data) ? data : data instanceof ArrayBuffer ? Buffer.from(data) : ArrayBuffer.isView(data) ? Buffer.from(data.buffer, data.byteOffset, data.byteLength) : null;
+    w |= 0; h |= 0; if (!b || w < 1 || h < 1 || w > 2048 || h > 2048 || b.length < w * h) return;
+    if (P.stdin.writableLength > 4 * 1024 * 1024) return; // mesin tertinggal → lewati frame mask ini
+    P.stdin.write('segm ' + id + ' ' + w + ' ' + h + ' ' + (w * h) + '\n'); P.stdin.write(b.subarray(0, w * h));
   });
   // Fase 6: gambar dari internet diunduh sekali ke cache lokal (tanpa batas CORS) lalu dibuka mesin native
   const dl = new Map();

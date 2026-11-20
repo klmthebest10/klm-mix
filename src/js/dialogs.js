@@ -599,7 +599,10 @@
       return h('div.sec', h('h4', 'Halaman web'), row('URL', u),
         h('div.row', h('button.btn.pri', { onclick: () => { inp.opts.url = u.value; KM.isElectron && window.klm.invoke('browser:navigate', inp.rt.winId, u.value); } }, 'Buka'),
           h('button.btn', { onclick: () => KM.isElectron && window.klm.invoke('browser:reload', inp.rt.winId) }, '↻ Muat ulang'),
-          h('button.btn', { onclick: async () => { inp.rt.shown = !inp.rt.shown; const r = KM.isElectron && await window.klm.invoke('browser:show', inp.rt.winId, inp.rt.shown); if (r === 'osr') KM.toast('Mode mesin native: halaman dirender offscreen tanpa jendela. Untuk mengeklik halaman, matikan mesin native lalu buat ulang input ini.', 'info', 7000); } }, '🖱 Tampilkan/sembunyikan jendela (untuk klik)')));
+          h('button.btn', { onclick: async () => {
+            // halaman offscreen (mesin native): selalu buka/fokuskan jendela "lihat & klik" (ditutup lewat tombol X jendelanya)
+            if (inp.rt.osr) { const r = KM.isElectron && await window.klm.invoke('browser:show', inp.rt.winId, true); if (r === 'osr-view') KM.toast('Jendela Web Browser dibuka — klik, gulir & ketik di jendela itu; hasilnya langsung tampil di mixer.', 'info', 5000); return; }
+            inp.rt.shown = !inp.rt.shown; if (KM.isElectron) await window.klm.invoke('browser:show', inp.rt.winId, inp.rt.shown); } }, '🖱 Tampilkan/sembunyikan jendela (untuk klik)')));
     },
     virtualset(inp) {
       return h('div.sec', h('h4', 'Virtual Set'),

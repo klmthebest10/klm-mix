@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>KLM - Web Browser</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #111; color: #ddd; font: 13px system-ui, sans-serif; overflow: hidden; }
+  #bar { display: flex; gap: 6px; align-items: center; height: 40px; padding: 0 8px; box-sizing: border-box; background: #1b1d22; border-bottom: 1px solid #2c2f36; }
+  #bar button { background: #2a2d35; color: #ddd; border: 1px solid #3a3e48; border-radius: 6px; height: 28px; min-width: 32px; cursor: pointer; font-size: 14px; }
+  #bar button:hover { background: #343844; }
+  #url { flex: 1; height: 28px; background: #0f1013; color: #eee; border: 1px solid #3a3e48; border-radius: 6px; padding: 0 10px; font-size: 13px; min-width: 60px; }
+  #hint { color: #8a8f99; font-size: 12px; white-space: nowrap; }
+  #wrap { position: absolute; top: 40px; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; background: #000; }
+  #cv { max-width: 100%; max-height: 100%; outline: none; background: #000; }
+  #wait { position: absolute; color: #888; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button id="back" title="Kembali">◀</button>
+  <button id="fwd" title="Maju">▶</button>
+  <button id="reload" title="Muat ulang">⟳</button>
+  <input id="url" spellcheck="false" placeholder="https://…">
+  <button id="go" title="Buka">Buka</button>
+  <span id="hint">Halaman ini yang tampil di mixer — klik &amp; ketik langsung di sini</span>
+</div>
+<div id="wrap"><canvas id="cv" tabindex="0" width="1280" height="720"></canvas><div id="wait">Memuat halaman…</div></div>
+<script>
+'use strict';
+const cv = document.getElementById('cv'), g = cv.getContext('2d'), urlEl = document.getElementById('url'), wait = document.getElementById('wait');
+let pageW = 1280, pageH = 720, editingUrl = false;
+const V = window.klmView;
+
+// ---- frame halaman (tekstur GPU bersama) ----
+V.onFrame(async (imp, meta) => {
+  let vf = null;
+  try {
+    vf = imp.getVideoFrame();
+    const w = vf.displayWidth, h = vf.displayHeight;
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; fit(); }
+    g.drawImage(vf, 0, 0, w, h);
+    wait.style.display = 'none';
+  } finally { try { vf && vf.close(); } catch (e) {} try { imp.release(); } catch (e) {} }
+});
+V.onInfo((d) => {
+  if (d.size) { pageW = d.size[0]; pageH = d.size[1]; fit(); }
+  if (d.url != null && !editingUrl) urlEl.value = d.url;
+  if (d.title != null) document.title = 'KLM - Web Browser: ' + d.title;
+  if (d.cursor != null) cv.style.cursor = CURSORS[d.cursor] || 'default';
+});
+const CURSORS = { pointer: 'pointer', hand: 'pointer', text: 'text', crosshair: 'crosshair', move: 'move', wait: 'wait', progress: 'progress', help: 'help', 'not-allowed': 'not-allowed', grab: 'grab', grabbing: 'grabbing',
+  'col-resize': 'col-resize', 'row-resize': 'row-resize', 'ew-resize': 'ew-resize', 'ns-resize': 'ns-resize', 'e-resize': 'e-resize', 'w-resize': 'w-resize', 'n-resize': 'n-resize', 's-resize': 's-resize',
+  'ne-resize': 'ne-resize', 'nw-resize': 'nw-resize', 'se-resize': 'se-resize', 'sw-resize': 'sw-resize', 'nesw-resize': 'nesw-resize', 'nwse-resize': 'nwse-resize', 'zoom-in': 'zoom-in', 'zoom-out': 'zoom-out', 'vertical-text': 'vertical-text', 'context-menu': 'context-menu', copy: 'copy', alias: 'alias', none: 'none' };
+// kanvas mengikuti rasio halaman, sebesar mungkin di dalam jendela
+function fit() {
+  const wr = document.getElementById('wrap').getBoundingClientRect(), ar = cv.width / cv.height;
+  let w = wr.width, h = w / ar; if (h > wr.height) { h = wr.height; w = h * ar; }
+  cv.style.width = Math.floor(w) + 'px'; cv.style.height = Math.floor(h) + 'px';
+}
+window.addEventListener('resize', fit);
+
+// ---- input → halaman offscreen (koordinat halaman dalam DIP) ----
+function mods(e) { const m = []; if (e.shiftKey) m.push('shift'); if (e.ctrlKey) m.push('control'); if (e.altKey) m.push('alt'); if (e.metaKey) m.push('meta'); return m; }
+function pos(e) { const r = cv.getBoundingClientRect(); return { x: Math.round((e.clientX - r.left) / r.width * pageW), y: Math.round((e.clientY - r.top) / r.height * pageH) }; }
+const BTN = ['left', 'middle', 'right'], held = new Set();
+cv.addEventListener('mousedown', (e) => {
+  cv.focus(); e.preventDefault(); held.add(e.button);
+  V.input(Object.assign({ type: 'mouseDown', button: BTN[e.button] || 'left', clickCount: Math.max(1, e.detail || 1), modifiers: mods(e) }, pos(e)));
+});
+window.addEventListener('mouseup', (e) => {
+  if (!held.has(e.button)) return; held.delete(e.button);
+  V.input(Object.assign({ type: 'mouseUp', button: BTN[e.button] || 'left', clickCount: Math.max(1, e.detail || 1), modifiers: mods(e) }, pos(e)));
+});
+window.addEventListener('mousemove', (e) => {
+  if (e.target !== cv && !held.size) return;
+  const m = mods(e); if (held.has(0)) m.push('leftButtonDown'); if (held.has(1)) m.push('middleButtonDown'); if (held.has(2)) m.push('rightButtonDown');
+  V.input(Object.assign({ type: 'mouseMove', modifiers: m }, pos(e)));
+});
+cv.addEventListener('mouseleave', (e) => { if (!held.size) V.input(Object.assign({ type: 'mouseLeave' }, pos(e))); });
+cv.addEventListener('contextmenu', (e) => e.preventDefault());
+cv.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const k = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? pageH : 1;
+  V.input(Object.assign({ type: 'mouseWheel', deltaX: -e.deltaX * k, deltaY: -e.deltaY * k, canScroll: true, modifiers: mods(e) }, pos(e)));
+}, { passive: false });
+
+const KEYS = { ' ': 'Space', Enter: 'Enter', Tab: 'Tab', Backspace: 'Backspace', Delete: 'Delete', Insert: 'Insert', Escape: 'Escape', Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
+  ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right', Shift: 'Shift', Control: 'Control', Alt: 'Alt', Meta: 'Super', CapsLock: 'Capslock' };
+const EDIT = { c: 'copy', v: 'paste', x: 'cut', a: 'selectAll', z: 'undo', y: 'redo' };
+function keyCode(e) { if (KEYS[e.key]) return KEYS[e.key]; if (/^F\d{1,2}$/.test(e.key)) return e.key; return e.key.length === 1 ? e.key : null; }
+cv.addEventListener('keydown', (e) => {
+  const kc = keyCode(e); if (!kc) return;
+  e.preventDefault();
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && EDIT[e.key.toLowerCase()]) { V.input({ type: 'edit', cmd: EDIT[e.key.toLowerCase()] }); return; }
+  V.input({ type: 'keyDown', keyCode: kc, modifiers: mods(e) });
+  if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) V.input({ type: 'char', keyCode: e.key, modifiers: mods(e) });
+  else if (e.key === 'Enter') V.input({ type: 'char', keyCode: '\r', modifiers: mods(e) });
+});
+cv.addEventListener('keyup', (e) => { const kc = keyCode(e); if (!kc) return; e.preventDefault(); V.input({ type: 'keyUp', keyCode: kc, modifiers: mods(e) }); });
+cv.addEventListener('focus', () => V.input({ type: 'focus' }));
+cv.addEventListener('blur', () => V.input({ type: 'blur' }));
+// teks dari IME / tempel lewat menu sistem
+cv.addEventListener('paste', (e) => { e.preventDefault(); V.input({ type: 'edit', cmd: 'paste' }); });
+
+// ---- navigasi ----
+document.getElementById('back').onclick = () => V.nav('back');
+document.getElementById('fwd').onclick = () => V.nav('forward');
+document.getElementById('reload').onclick = () => V.nav('reload');
+function go() { let u = urlEl.value.trim(); if (!u) return; if (!/^[a-z][\w+.-]*:/i.test(u)) u = (/\s/.test(u) || !/\./.test(u) ? 'https://www.google.com/search?q=' + encodeURIComponent(u) : 'https://' + u); V.nav('url', u); editingUrl = false; cv.focus(); }
+document.getElementById('go').onclick = go;
+urlEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); if (e.key === 'Escape') { editingUrl = false; cv.focus(); } });
+urlEl.addEventListener('focus', () => { editingUrl = true; urlEl.select(); });
+urlEl.addEventListener('blur', () => { editingUrl = false; });
+fit();
+</script>
+</body>
+</html>

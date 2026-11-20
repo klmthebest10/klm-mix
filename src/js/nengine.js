@@ -14,8 +14,10 @@
  * Fase 4a: KLMCAM — frame H.264 terenkode dari WebRTC disalin (RTCRtpScriptTransform, tanpa dekode ulang di JS) ke
  * mesin native → didekode GPU (DXVA) → tampil di monitor native. Jalur JS tetap berjalan seperti biasa (rekam dll).
  * Fase 5: file video (dekode DXVA, posisi mengikuti elemen video KLM — audio tetap dari KLM) & gambar (WIC).
- * Bila monitor menampilkan hal lain (daftar putar, browser, overlay, efek, transisi selain fade/cut,
- * mode grid) atau ada menu/dialog di atas monitor, monitor itu otomatis kembali ke tampilan JS — tanpa kedip.
+ * Fase 8: posisi & rotasi input/kotak, koreksi warna, chroma/luma key, latar AI (mask dari model segmentasi KLM,
+ * komposit di GPU native), semua transisi kecuali stinger, overlay zoom, FTB.
+ * Bila monitor menampilkan hal lain (transisi stinger, mode grid, sumber yang belum didukung) atau ada menu/dialog di
+ * atas monitor, monitor itu otomatis kembali ke tampilan JS — tanpa kedip.
  */
 'use strict';
 (function (KM) {
@@ -34,7 +36,8 @@
     pvw: { want: false, shown: false, hideAt: -1, rect: '', id: null },
     pgm: { want: false, shown: false, hideAt: -1, rect: '', id: null }
   };
-  let out = '', transKey = '', tbarSent = '';
+  let out = '', transKey = '', tbarSent = '', ftbSent = '';
+  const attrSent = new Map(); // id mesin → { pos, fx, seg, segN } terakhir yang dikirim (Fase 8)
   // Fase 2: grafis UTC
   let utcWant = false, ulaySent = null, utcErr = '';
   const uready = new Set();
@@ -49,6 +52,62 @@
     if (scr.has(id)) return; scr.set(id, null);
     window.klm.invoke('nengine:screen-rect', id).then((r) => { scr.set(id, r || false); }).catch(() => scr.set(id, false));
   }
+  // ---- Fase 8: posisi input, efek, latar AI — dikirim per sumber yang dipakai
+  const SEG_MODE = { remove: 0, blur: 1, colour: 2, image: 3 };
+  const segBgId = (inp) => hashId('sg', inp.id + '|' + ((inp.seg || {}).bgUrl || ''));
+  // latar AI: model segmentasi KLM tetap berjalan (hanya mask, tanpa komposit kanvas) — komposit di GPU native
+  function segTick(inp) {
+    const rt = inp.rt; if (rt.segTickF === KM.engine.frame) return rt.segCrop;
+    rt.segTickF = KM.engine.frame; rt.segCrop = null;
+    const s = KM.inputs.source(inp); if (!s || !s.w || !s.h || s.src === rt.ph) return null;
+    try { rt.segCrop = KM.seg.process(inp, s, true) || null; } catch (e) { rt.segCrop = null; }
+    return rt.segCrop;
+  }
+  function segReady(inp) {
+    const c = segTick(inp); if (!c || !inp.rt.segA) return false;
+    if (inp.seg.mode === 'image' && inp.seg.bgUrl) { const m = media.get(segBgId(inp)); return !!(m && m.ok); }
+    return true;
+  }
+  function segEntries(inp) { // gambar latar AI → mesin native
+    const o = inp.seg; if (!o || o.mode !== 'image' || !o.bgUrl || !(KM.seg && KM.seg.on(inp))) return [];
+    const rt = inp.rt;
+    if (!rt.bgImg || rt.bgSrc !== o.bgUrl) { rt.bgSrc = o.bgUrl; const im = new Image(); im.crossOrigin = 'anonymous'; im.src = o.bgUrl; rt.bgImg = im; }
+    const e = imageEntry(o.bgUrl, rt.bgImg); return e ? [Object.assign(e, { id: segBgId(inp) })] : [];
+  }
+  function attrSync(inp) {
+    const k = rawEid(inp); if (!k) return;
+    let a = attrSent.get(k); if (!a) { a = { pos: '', fx: '', seg: '', segN: -1 }; attrSent.set(k, a); }
+    const p = inp.pos || {};
+    const pos = plainPos(p) ? '-' : [p.fit === 'fill' ? 0 : p.fit === 'stretch' ? 2 : 1, num(p.zoom == null ? 1 : p.zoom), num(p.x || 0), num(p.y || 0), num(p.cropL || 0), num(p.cropR || 0), num(p.cropT || 0), num(p.cropB || 0), num(p.rot || 0, 2)].join(' ');
+    if (pos !== a.pos) { a.pos = pos; cmd('ipos ' + k + ' ' + pos); }
+    let fx = '-';
+    if (KM.fx && KM.fx.needs(inp)) {
+      const c = inp.cc || {}, y = inp.key || {}, on = !!c.on, d = (v, def) => (v == null ? def : v);
+      fx = [on ? 1 : 0, num(on ? d(c.bri, 0) : 0), num(on ? d(c.con, 1) : 1), num(on ? d(c.sat, 1) : 1), num(on ? (c.hue || 0) * Math.PI / 180 : 0), num(on ? c.gam || 1 : 1),
+        y.on ? 1 : 0, hex6(y.color || '#00ff00') === '-' ? '00ff00' : hex6(y.color || '#00ff00'), num(d(y.sim, 0.4)), num(d(y.smooth, 0.08)), num(d(y.spill, 0.1)), y.lumaOn ? 1 : 0, num(d(y.lumaLo, 0.05)), num(d(y.lumaHi, 0.15))].join(' ');
+    }
+    if (fx !== a.fx) { a.fx = fx; cmd('fx ' + k + ' ' + fx); }
+    let sg = '-';
+    if (KM.seg && KM.seg.on(inp) && inp.rt.segA) {
+      const o = inp.seg, c = inp.rt.segCrop || { cx: 0, cy: 0, cw: 1 }, col = hex6(o.colour || '#00b140');
+      const bg = o.mode === 'image' && o.bgUrl && media.get(segBgId(inp)) && media.get(segBgId(inp)).ok ? segBgId(inp) : '-';
+      sg = [SEG_MODE[o.mode] == null ? 0 : SEG_MODE[o.mode], num(o.feather || 0, 2), num(o.blur || 0, 2), col === '-' ? '00b140' : col, bg, o.bgFit === 'fit' ? 1 : 0, num(c.cx), num(c.cy), num(c.cw), o.hideEmpty && !inp.rt.person ? 1 : 0].join(' ');
+    }
+    if (sg !== a.seg) { a.seg = sg; cmd('seg ' + k + ' ' + sg); if (sg === '-') a.segN = -1; }
+    if (sg !== '-' && inp.rt.segN !== a.segN) { // mask baru dari model → 8-bit ke mesin native
+      const A = inp.rt.segA, mc = inp.rt.segMask; if (!A || !mc || A.length !== mc.width * mc.height) return;
+      a.segN = inp.rt.segN; const b = new Uint8Array(A.length); for (let i = 0; i < A.length; i++) b[i] = A[i] * 255;
+      window.klm.send('nengine:segm', k, mc.width, mc.height, b.buffer);
+    }
+  }
+  // input yang sedang dipakai Preview / Program / transisi / overlay, termasuk isi kotak komposisi
+  function usedInputs() {
+    const S = KM.state, set = new Set();
+    const walk = (i, d) => { if (!i || d > 4 || set.has(i)) return; set.add(i); for (const l of i.layers || []) if (l && l.on && l.inputId) walk(KM.getInput(l.inputId), d + 1); };
+    for (const id of [S.previewId, S.programId, S.trans && S.trans.fromId, S.trans && S.trans.toId]) if (id) walk(KM.getInput(id), 0);
+    for (const ch of S.overlays || []) if (ch && ch.phase !== 'off' && ch.inputId) walk(KM.getInput(ch.inputId), 0);
+    return set;
+  }
   const hasLayers = (inp) => inp.type === 'virtualset' || (inp.layers || []).some((l) => l && l.on && l.inputId);
   function spec(inp) {
     if (!inp) return null;
@@ -58,8 +117,8 @@
   function rawSpec(inp, allowFit) {
     if (!inp) return null;
     if (srcErr.has(nid(inp))) return null;
-    if (!plainPos(inp.pos) && !(allowFit && plainPos(Object.assign({}, inp.pos, { fit: 'fit' })))) return null;
-    try { if (KM.fx && KM.fx.needs(inp)) return null; if (KM.seg && KM.seg.on(inp)) return null; } catch (e) { return null; }
+    // Fase 8: posisi/rotasi (ipos) & efek (fx) dirender native; latar AI menunggu mask pertama dari model segmentasi
+    try { if (KM.seg && KM.seg.on(inp) && !segReady(inp)) return null; } catch (e) { return null; }
     const o = inp.opts || {};
     if (inp.type === 'colour') {
       const a = hex(o.color), b = hex(o.color2 || '#000000'); if (!a || !b) return null;
@@ -101,21 +160,20 @@
       if (o.fgUrl) { const id = hashId('f', inp.id + '|' + o.fgUrl), m = media.get(id); if (!m || !m.ok) return null; fg = id; }
     } else {
       if (!rawSpec(inp, true)) return null;
-      base = rawEid(inp); baseFit = inp.pos.fit === 'fill' ? 0 : inp.pos.fit === 'stretch' ? 2 : 1;
+      base = rawEid(inp); baseFit = 3; // latar = input itu sendiri dengan posisinya (ipos)
     }
     const toks = [];
     for (const l of inp.layers || []) {
       if (!l || !l.on || !l.inputId) continue;
       const li = KM.getInput(l.inputId); if (!li || li === inp) continue;
-      if (l.rot) return null;
       let src;
       if (hasLayers(li)) { const c = compOf(li, depth + 1); if (!c || !c.ok) return null; src = 'C' + nid(li); }
       else { if (!(l.fit ? rawSpec(li, true) : rawSpec(li))) return null; src = rawEid(li); }
-      const fit = l.fit === 'fit' ? 1 : l.fit === 'stretch' ? 2 : l.fit ? 0 : (li.pos.fit === 'fill' ? 0 : 1);
+      const fit = l.fit === 'fit' ? 1 : l.fit === 'stretch' ? 2 : l.fit ? 0 : 3; // 3 = kotak lama: ikut posisi input sumber
       let lab = '-', lx = 0, ly = 0, lw = 0, lh = 0;
       if (l.label) { const L = labelImg(l, l.w * W, l.h * H, W / 1920); if (!L) return null; lab = L.id; lx = l.x + L.x / W; ly = l.y + L.y / H; lw = L.w / W; lh = L.h / H; }
       toks.push([src, num(l.x), num(l.y), num(l.w), num(l.h), fit, num(l.zoom || 1), num(l.px || 0), num(l.py || 0), num(l.cropL || 0), num(l.cropR || 0), num(l.cropT || 0), num(l.cropB || 0), l.flip ? 1 : 0,
-        num(l.op == null ? 1 : l.op), num(l.rad || 0), num(l.bw || 0, 2), (l.bw ? hex6(l.bc || '#ffffff') : '-'), hex6(l.bg), num(l.sh || 0, 2), lab, num(lx), num(ly), num(lw), num(lh)].join(','));
+        num(l.op == null ? 1 : l.op), num(l.rad || 0), num(l.bw || 0, 2), (l.bw ? hex6(l.bc || '#ffffff') : '-'), hex6(l.bg), num(l.sh || 0, 2), lab, num(lx), num(ly), num(lw), num(lh), num(l.rot || 0, 2)].join(','));
     }
     const line = ['comp', 'C' + nid(inp), base, baseFit, num(dim, 3), fg].concat(toks).join(' ');
     const id = 'C' + nid(inp);
@@ -158,20 +216,20 @@
       if (ch.phase === 'in') p = dur ? Math.min(1, (now - ch.t0) / dur) : 1;
       else if (ch.phase === 'out') p = isTitle ? 1 : (dur ? Math.max(0, 1 - (now - ch.t0) / dur) : 0);
       const e = KM.ease(KM.clamp(p, 0, 1)), type = isTitle ? 'cut' : fx.type;
-      let a = 1, dx = 0, dy = 0, clip = 1;
+      let a = 1, dx = 0, dy = 0, clip = 1, z = 1;
       if (type === 'fade') a = e; else if (type === 'slide') dx = 1 - e; else if (type === 'slideup') dy = 1 - e; else if (type === 'wipe') clip = e;
-      else if (type === 'zoom') return { why: 'overlay zoom' };
-      if (a > 0.001 && clip > 0.001) out.push([eidOf(inp), num(a, 3), num(dx, 4), num(dy, 4), num(clip, 4)].join(','));
+      else if (type === 'zoom') { a = e; z = Math.max(0.01, e); }
+      if (a > 0.001 && clip > 0.001) out.push([eidOf(inp), num(a, 3), num(dx, 4), num(dy, 4), num(clip, 4)].concat(z !== 1 ? [num(z, 4)] : []).join(','));
     }
     return { line: 'ovl' + (out.length ? ' ' + out.join(' ') : '') };
   }
+  const TR_NATIVE = new Set(['fade', 'cut', 'merge', 'wipe', 'wipeup', 'slide', 'slideup', 'fly', 'zoom', 'crosszoom', 'circle', 'barn', 'cube', 'dip', 'dipwhite', 'blur']);
   // tanpa memperhitungkan grafis UTC
   function pgmBaseWhy() {
     const S = KM.state;
-    if (S.ftb && (S.ftb.on || S.ftb.v > 0)) return 'FTB';
     const ov = ovlState(); if (ov.why) return ov.why;
     if (S.trans) {
-      if (S.trans.type !== 'fade' && S.trans.type !== 'cut') return 'transisi ' + S.trans.type;
+      if (!TR_NATIVE.has(S.trans.type)) return 'transisi ' + S.trans.type;
       for (const id of [S.trans.fromId, S.trans.toId]) { const i = KM.getInput(id); if (id && !spec(i)) return 'sumber ' + label(i); }
     }
     if (!S.programId) return '';
@@ -231,18 +289,22 @@
     mediaSync();
     for (const k of [...srcSent.keys()]) if (!need.has(k)) { srcSent.delete(k); cmd('del ' + k); }
     const idOf = (id) => { const i = id && KM.getInput(id); return i && (need.has(eid(i)) || (hasLayers(i) && spec(i))) ? eid(i) : '-'; };
-    // transisi: fade otomatis dikirim sekali; T-bar manual dikirim posisinya
-    const tr = S.trans;
-    if (tr && tr.type === 'fade' && !tr.manual) {
+    // posisi / efek / latar AI tiap input yang dipakai (Fase 8)
+    for (const i of usedInputs()) if (!hasLayers(i) || i.type !== 'virtualset') attrSync(i);
+    // transisi: otomatis dikirim sekali (mesin native menghitung waktunya sendiri); T-bar manual dikirim posisinya
+    const tr = S.trans, ttype = tr && TR_NATIVE.has(tr.type) && tr.type !== 'cut' ? tr.type : 'fade';
+    if (tr && !tr.manual && TR_NATIVE.has(tr.type)) {
       const k = tr.fromId + '>' + tr.toId + '@' + tr.t0;
-      if (k !== transKey) { transKey = k; cmd('trans ' + Math.max(1, Math.round(tr.dur || 1)) + ' ' + idOf(tr.fromId) + ' ' + idOf(tr.toId)); }
+      if (k !== transKey) { transKey = k; cmd('trans ' + Math.max(1, Math.round(tr.type === 'cut' ? 1 : tr.dur || 1)) + ' ' + idOf(tr.fromId) + ' ' + idOf(tr.toId) + ' ' + ttype); }
     } else if (tr && tr.manual) {
-      const v = Math.round(KM.clamp(tr.p || 0, 0, 1) * 1000) + ' ' + idOf(tr.fromId) + ' ' + idOf(tr.toId);
+      const v = Math.round(KM.clamp(tr.p || 0, 0, 1) * 1000) + ' ' + idOf(tr.fromId) + ' ' + idOf(tr.toId) + ' ' + ttype;
       if (v !== tbarSent) { tbarSent = v; cmd('tbar ' + v); }
     } else {
       if (tbarSent) { tbarSent = ''; cmd('tbar off'); }
       transKey = tr ? transKey : '';
     }
+    // Fade To Black: alpha hitam paling atas (di atas grafis UTC, sama dengan mesin JS)
+    { const f = S.ftb, v = f ? num(KM.clamp(f.v || 0, 0, 1), 3) : '0'; if (v !== ftbSent) { ftbSent = v; cmd('ftb ' + v); } }
     // grafis UTC: tekstur lapisan diminta dari proses utama selama Program bisa ditampilkan native
     const base = pgmBaseWhy(), U = KM.utc;
     const uw = !base && !utcErr && !!(U && U.zc && U.zc.on && U.dskIds);
@@ -297,7 +359,7 @@
     else if (t === 'uerr') { utcErr = rest.replace(/^\S+ /, '').slice(0, 80); KM.log && KM.log('mesin native UTC: ' + rest); }
     else if (t === 'exit' || t === 'restart') { if (t === 'exit') N.restarts = (N.restarts || 0) + 1; for (const x of outs.values()) { x.err = 'mesin native berhenti'; if (x.wait) x.wait.rej(new Error(x.err)); if (x.stopWait) x.stopWait(); else if (x.onEnd) x.onEnd(x); } outs.clear(); audStop(); ready = false; N.pvw = N.pgm = false; N.state = t === 'exit' ? 'berhenti' : 'memulai ulang'; resetSent(); camLost(); KM.changed('nengine'); }
   }
-  function resetSent() { wready.clear(); comps.clear(); labels.clear(); ovlSent = ''; for (const [id, m] of media) if (m.aud) pcmStop(m.owner, id); media.clear(); avSent = null; srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; uready.clear(); ulaySent = null; if (utcWant) { utcWant = false; if (el()) window.klm.send('nengine:utc', false); } for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
+  function resetSent() { wready.clear(); comps.clear(); labels.clear(); ovlSent = ''; for (const [id, m] of media) if (m.aud) pcmStop(m.owner, id); media.clear(); avSent = null; srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; ftbSent = ''; attrSent.clear(); uready.clear(); ulaySent = null; if (utcWant) { utcWant = false; if (el()) window.klm.send('nengine:utc', false); } for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
   // klik di jendela native diteruskan ke kanvas di bawahnya (pilih kotak grid, klik kanan menu monitor, dll.)
   function clickFwd(a) {
     const cv = document.getElementById(a[0]); if (!cv) return;
@@ -416,6 +478,7 @@
         if (es.length) curId.set(inp.id, es[0].id);
         for (const e of es) { e.owner = inp.id; e.cur = e === es[0]; want.set(e.id, e); }
       } else for (const e of extraEntries(inp)) { e.owner = inp.id; e.cur = false; want.set(e.id, e); }
+      for (const e of segEntries(inp)) { e.owner = inp.id; e.cur = false; want.set(e.id, e); }
     }
     for (const [id, m] of media) if (m.keep) want.set(id, { id, kind: 'raster', src: m.sig, keep: true });
     for (const [id, e] of want) {
