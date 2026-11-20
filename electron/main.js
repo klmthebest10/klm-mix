@@ -1040,7 +1040,7 @@ function smokeTest() {
             } catch (e) { fail++; log('GAGAL jendela klik Web Browser: ' + e.message); }
             // --- Fase 8: rotasi/posisi input, transisi selain fade, overlay zoom, FTB, koreksi warna — tetap native
             try {
-              await js(`(() => { const a = KM.inputs.create('colour', { title: 'F8 merah', color: '#ff0000' }), b = KM.inputs.create('colour', { title: 'F8 hijau', color: '#00ff00' });
+              await js(`(() => { const a = KM.inputs.create('colour', { title: 'F8 merah', opts: { color: '#ff0000' } }), b = KM.inputs.create('colour', { title: 'F8 hijau', opts: { color: '#00ff00' } });
                 window.__f8a = a.id; window.__f8b = b.id; Object.assign(a.pos, { fit: 'stretch', zoom: 0.5, rot: 90 }); KM.engine.cut(a.id); KM.engine.setPreview(b.id); return 1; })()`);
               await wait(2500);
               const near = (a, c, t) => Array.isArray(a) && c.every((x, i) => Math.abs(a[i] - x) <= t);

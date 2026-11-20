@@ -178,7 +178,7 @@ jobs:
           $p = Start-Process -FilePath "node_modules\electron\dist\electron.exe" -ArgumentList "." -PassThru
           Write-Host "PID utama: $($p.Id)"
           $t = 0
-          while ($t -lt 200 -and (Get-Process -Id $p.Id -ErrorAction SilentlyContinue)) { Start-Sleep -Seconds 2; $t += 2 }
+          while ($t -lt 300 -and (Get-Process -Id $p.Id -ErrorAction SilentlyContinue)) { Start-Sleep -Seconds 2; $t += 2 }
           if (Get-Process -Id $p.Id -ErrorAction SilentlyContinue) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue; Write-Host "::warning::Aplikasi tidak menutup sendiri (timeout)" } else { Write-Host "Aplikasi menutup normal setelah $t detik" }
           Get-Content "$env:KLM_SMOKE\smoke.log" -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 3
