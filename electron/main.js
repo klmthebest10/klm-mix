@@ -798,7 +798,7 @@ function smokeTest() {
           log('output native — alasan bila tidak bisa: "' + await js('KM.nengine.outWhy()') + '"');
           await js('KM.rec.startRecording()'); await wait(500);
           const rs = JSON.parse(await js('JSON.stringify({ native: KM.rec.recNative || null, outs: [...KM.nengine.outs.values()].map((x) => ({ kind: x.kind, enc: x.enc, hw: x.hw, cpu: x.cpu })) })'));
-          log('rekam native: ' + JSON.stringify(rs));
+          log('rekam native: ' + JSON.stringify(rs) + ' galat: ' + await js('KM.rec.nativeErr || ""'));
           await wait(2500);
           const pd = await js('JSON.stringify({ progIdleMs: Math.round(performance.now() - KM.engine.progDrawAt), pgmNative: KM.nengine.pgm, busy: KM.engine.outputBusy() })');
           log('rekam native — kanvas Program JS: ' + pd);
@@ -816,7 +816,7 @@ function smokeTest() {
           const sr = await js(`new Promise(async (res) => {
             const ws = new WebSocket('ws://' + location.host + '/hub/out'); ws.binaryType = 'arraybuffer'; window.__nws = ws;
             ws.onopen = () => ws.send(JSON.stringify({ kind: 'stream', native: true, cfg: { encoder: 'copy', videoBitrate: 3000, audioBitrate: 128, fps: KM.settings.fps, destinations: [{ enabled: true, url: ${JSON.stringify(flv)} }] } }));
-            ws.onmessage = async (e) => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (m.t === 'started') { try { const x = await KM.nengine.outStart('ts', { vk: 3000, ak: 128, cbr: true }); window.__nts = x.id; res('ok ' + x.enc); } catch (er) { res('gagal ' + er.message); } } else if (m.t === 'error') res('hub ' + m.msg); };
+            ws.onmessage = async (e) => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (m.t === 'log' || m.t === 'ended') window.__nlog = (window.__nlog || '') + ' ' + (m.msg || ('ended ' + m.code)); if (m.t === 'started') { try { const x = await KM.nengine.outStart('ts', { vk: 3000, ak: 128, cbr: true }); window.__nts = x.id; res('ok ' + x.enc); } catch (er) { res('gagal ' + er.message); } } else if (m.t === 'error') res('hub ' + m.msg); };
             setTimeout(() => res('waktu habis'), 8000);
           })`);
           log('streaming native: ' + sr);
@@ -824,7 +824,7 @@ function smokeTest() {
           await js('(async () => { if (window.__nts) await KM.nengine.outStop(window.__nts); setTimeout(() => window.__nws && window.__nws.close(), 1500); return 1; })()');
           await wait(4000);
           const ps = fs.existsSync(flv) ? await probe(flv) : { code: -1, info: 'tidak ada file' };
-          log('streaming native → ' + (fs.existsSync(flv) ? fs.statSync(flv).size : 0) + ' byte, ffmpeg ' + ps.code + ' ' + ps.info);
+          log('streaming native → ' + (fs.existsSync(flv) ? fs.statSync(flv).size : 0) + ' byte, ffmpeg ' + ps.code + ' ' + ps.info + ' • mesin: ' + await js('KM.nengine.status().then((x) => JSON.stringify({ tsBytes: x && x.tsBytes, taps: x && x.taps }))') + ' • log hub: ' + await js('(window.__nlog || "").slice(-600)'));
           if (!/^ok/.test(sr) || ps.code !== 0 || !/h264/.test(ps.info)) { fail++; log('GAGAL: streaming native tidak menghasilkan H.264 yang valid'); }
           else log('streaming native: OK — MPEG-TS dari mesin native diteruskan ffmpeg (-c copy)');
           await js('KM.nengine.relaxInputs = false; KM.inputs.remove(window.__ocam); 1');

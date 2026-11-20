@@ -38,7 +38,8 @@ function k32() {
 const ntHandleOf = (ti) => { const b = (ti && ti.handle && ti.handle.ntHandle) || (ti && ti.sharedTextureHandle); return b && b.length >= 8 ? b.readBigUInt64LE(0) : b && b.length >= 4 ? BigInt(b.readUInt32LE(0)) : 0n; };
 
 function setup({ win, log = () => {} }) {
-  const tsTaps = new Set(); // penerima aliran MPEG-TS (hub streaming)
+  const tsTaps = new Set(); // penerima aliran MPEG (hub streaming)
+  let tsBytes = 0;
   // ---- Fase 3: kamera native → tekstur bersama → mixer (VideoFrame, tanpa salinan CPU) ----
   const sharedTexture = require('electron').sharedTexture;
   const camBuf = new Map(); // "id/gen/slot" → { h (handle di proses ini), buf, w, h }
@@ -152,7 +153,8 @@ function setup({ win, log = () => {} }) {
     // fd 3 = keluaran MPEG-TS output native (streaming) → diteruskan ke ffmpeg (-c copy)
     const p = spawn(exe, [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
     P = p; buf = '';
-    if (p.stdio[3]) { p.stdio[3].on('data', (b) => { for (const f of tsTaps) { try { f(b); } catch (e) {} } }); p.stdio[3].on('error', () => {}); }
+    if (p.stdio[3]) { p.stdio[3].on('data', (b) => { tsBytes += b.length; for (const f of tsTaps) { try { f(b); } catch (e) {} } }); p.stdio[3].on('error', (e) => log('[nengine] fd3: ' + e.message)); }
+    else log('[nengine] fd3 tidak tersedia');
     p.stdout.setEncoding('utf8');
     p.stdout.on('data', (d) => {
       buf += d; let i;
@@ -167,7 +169,7 @@ function setup({ win, log = () => {} }) {
           const k = k32(); hProc = k ? k.OpenProcess(0x40 /* PROCESS_DUP_HANDLE */, 0, p.pid) : 0;
           if (utcOn) { resendTk(); if (onUtcWant) onUtcWant(); }
         }
-        else if (s.startsWith('err ') || s.startsWith('uerr ')) log('[nengine] ' + s);
+        else if (/^(err|uerr|oerr|ostarted|ostopped|kerr|camerr) /.test(s)) log('[nengine] ' + s);
         toWin(s);
       }
     });
@@ -187,7 +189,7 @@ function setup({ win, log = () => {} }) {
 
   ipcMain.handle('nengine:start', () => start());
   ipcMain.handle('nengine:stop', () => { stop(); return true; });
-  ipcMain.handle('nengine:status', () => Object.assign({ available: !!findExe(), utc: utcOn, utcErr, koffi: !!k32() }, st));
+  ipcMain.handle('nengine:status', () => Object.assign({ available: !!findExe(), utc: utcOn, utcErr, koffi: !!k32(), tsBytes, taps: tsTaps.size }, st));
   ipcMain.on('nengine:utc', (e, on) => setUtc(on));
   // Fase 4b: audio Program (PCM s16le stereo 48 kHz) untuk output native
   ipcMain.on('nengine:aud', (e, data) => {

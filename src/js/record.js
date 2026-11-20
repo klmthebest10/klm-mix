@@ -58,7 +58,7 @@
         KM.toast('● Merekam (mesin native, ' + (x.hw ? 'GPU ' : '') + (x.enc || 'H.264') + ') ke ' + name, 'rec');
         KM.changed('rec');
         return true;
-      } catch (e) { KM.toast('Rekam native gagal (' + e.message + ') — memakai perekam biasa', 'warn', 6000); }
+      } catch (e) { R.nativeErr = e.message; KM.toast('Rekam native gagal (' + e.message + ') — memakai perekam biasa', 'warn', 6000); }
     }
     const mime = pickMime(KM.settings.recFormat);
     if (!mime) { KM.toast('Browser tidak mendukung perekaman', 'err'); return false; }
@@ -160,7 +160,7 @@
         return true;
       } catch (e) {
         try { rN && rN.ws && rN.ws.close(); } catch (x) {}
-        KM.toast('Streaming native gagal (' + e.message + ') — memakai jalur biasa', 'warn', 6000);
+        R.nativeErr = e.message; KM.toast('Streaming native gagal (' + e.message + ') — memakai jalur biasa', 'warn', 6000);
       }
     }
     const h264 = H264_WEBM.find((m) => MediaRecorder.isTypeSupported(m));

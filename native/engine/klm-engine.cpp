@@ -997,7 +997,7 @@ static void kFeed(const std::string& id, bool key, LONGLONG ts, std::vector<uint
 
 // ---- output native (Fase 4b) ----
 struct HStream : public IStream { // IStream tulis-saja di atas HANDLE (pipa fd 3 / file) untuk sink MPEG-TS
-  LONG ref = 1; HANDLE h; ULONGLONG pos = 0; bool own;
+  LONG ref = 1; HANDLE h; ULONGLONG pos = 0; bool own, errSent = false;
   HStream(HANDLE x, bool o) : h(x), own(o) {}
   virtual ~HStream() { if (own && h && h != INVALID_HANDLE_VALUE) CloseHandle(h); }
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID r, void** p) override { if (r == IID_IUnknown || r == IID_IStream || r == IID_ISequentialStream) { *p = (IStream*)this; AddRef(); return S_OK; } *p = nullptr; return E_NOINTERFACE; }
@@ -1006,7 +1006,15 @@ struct HStream : public IStream { // IStream tulis-saja di atas HANDLE (pipa fd 
   HRESULT STDMETHODCALLTYPE Read(void*, ULONG, ULONG*) override { return E_NOTIMPL; }
   HRESULT STDMETHODCALLTYPE Write(const void* b, ULONG n, ULONG* w) override {
     DWORD k = 0; ULONG tot = 0; const char* c = (const char*)b;
-    while (tot < n) { if (!WriteFile(h, c + tot, n - tot, &k, nullptr)) { if (w) *w = tot; return STG_E_WRITEFAULT; } tot += k; }
+    while (tot < n) {
+      if (!WriteFile(h, c + tot, n - tot, &k, nullptr)) {
+        DWORD e = GetLastError();
+        if (e == ERROR_IO_PENDING) { DWORD k2 = 0; if (GetOverlappedResult(h, nullptr, &k2, TRUE)) { tot += k2; continue; } }
+        if (!errSent) { errSent = true; emit("oerr - menulis aliran keluaran gagal (kode %lu)", e); }
+        if (w) *w = tot; return STG_E_WRITEFAULT;
+      }
+      tot += k;
+    }
     pos += n; if (w) *w = n; return S_OK;
   }
   HRESULT STDMETHODCALLTYPE Seek(LARGE_INTEGER m, DWORD o, ULARGE_INTEGER* np) override {
