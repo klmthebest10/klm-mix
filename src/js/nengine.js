@@ -392,7 +392,7 @@
   function mediaIdOf(inp) { return curId.get(inp.id) || ''; }
   function rasterize(id, el) { // SVG / gambar internet: dirender KLM sesuai resolusi output, dikirim sekali
     try {
-      const W = KM.settings.width, H = KM.settings.height, nw = el.naturalWidth, nh = el.naturalHeight;
+      const W = KM.settings.width, H = KM.settings.height, nw = el.naturalWidth || el.width, nh = el.naturalHeight || el.height; // <img> atau <canvas>
       const k = Math.min(W / nw, H / nh, 4096 / Math.max(nw, nh)), w = Math.max(1, Math.round(nw * k)), h = Math.max(1, Math.round(nh * k));
       const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.drawImage(el, 0, 0, w, h);
       const d = g.getImageData(0, 0, w, h);
