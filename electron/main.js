@@ -815,12 +815,12 @@ function smokeTest() {
           const flv = path.join(out, 'native-stream.flv'); try { fs.unlinkSync(flv); } catch (e) {}
           const sr = await js(`new Promise(async (res) => {
             const ws = new WebSocket('ws://' + location.host + '/hub/out'); ws.binaryType = 'arraybuffer'; window.__nws = ws;
-            ws.onopen = () => ws.send(JSON.stringify({ kind: 'stream', native: true, cfg: { encoder: 'copy', videoBitrate: 3000, audioBitrate: 128, fps: KM.settings.fps, destinations: [{ enabled: true, url: ${JSON.stringify(flv)} }] } }));
+            ws.onopen = () => ws.send(JSON.stringify({ kind: 'stream', native: true, cfg: { encoder: 'copy', inputFormat: 'mpeg', videoBitrate: 3000, audioBitrate: 128, fps: KM.settings.fps, destinations: [{ enabled: true, url: ${JSON.stringify(flv)} }] } }));
             ws.onmessage = async (e) => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } if (m.t === 'log' || m.t === 'ended') window.__nlog = (window.__nlog || '') + ' ' + (m.msg || ('ended ' + m.code)); if (m.t === 'started') { try { const x = await KM.nengine.outStart('ts', { vk: 3000, ak: 128, cbr: true }); window.__nts = x.id; res('ok ' + x.enc); } catch (er) { res('gagal ' + er.message); } } else if (m.t === 'error') res('hub ' + m.msg); };
             setTimeout(() => res('waktu habis'), 8000);
           })`);
           log('streaming native: ' + sr);
-          await wait(5000);
+          await wait(8000);
           await js('(async () => { if (window.__nts) await KM.nengine.outStop(window.__nts); setTimeout(() => window.__nws && window.__nws.close(), 1500); return 1; })()');
           await wait(4000);
           const ps = fs.existsSync(flv) ? await probe(flv) : { code: -1, info: 'tidak ada file' };

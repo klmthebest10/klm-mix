@@ -1060,7 +1060,11 @@ static bool oStart(const std::string& id, bool ts, UINT W, UINT H, UINT F, UINT 
     if (FAILED(hr)) { emit("oerr %s byte stream 0x%08lx", id.c_str(), (unsigned long)hr); return false; }
     hr = MFCreateSinkWriterFromURL(L"klm.ts", bs.Get(), a.Get(), &o->sw);
     if (FAILED(hr)) hr = MFCreateSinkWriterFromURL(nullptr, bs.Get(), a.Get(), &o->sw);
-  } else hr = MFCreateSinkWriterFromURL(widen(path).c_str(), nullptr, a.Get(), &o->sw);
+  } else {
+    std::wstring wp = widen(path); // folder rekaman belum ada (instalasi baru) → buat dulu
+    for (size_t i = 3; i < wp.size(); i++) if (wp[i] == L'\\' || wp[i] == L'/') CreateDirectoryW(wp.substr(0, i).c_str(), nullptr);
+    hr = MFCreateSinkWriterFromURL(wp.c_str(), nullptr, a.Get(), &o->sw);
+  }
   if (FAILED(hr)) { emit("oerr %s tidak bisa membuat penulis (%s) 0x%08lx", id.c_str(), ts ? "TS" : "MP4", (unsigned long)hr); return false; }
   // video H.264
   ComPtr<IMFMediaType> vo; MFCreateMediaType(&vo);

@@ -4,7 +4,7 @@ function buildFfmpegArgs(cfg) {
   const fps = cfg.fps || 30;
   const vb = (cfg.videoBitrate || 4500) + 'k';
   const ab = (cfg.audioBitrate || 160) + 'k';
-  const args = ['-hide_banner', '-loglevel', 'info', '-fflags', '+genpts+nobuffer', '-thread_queue_size', '1024'].concat(cfg.inputFormat ? ['-f', cfg.inputFormat] : [], ['-i', 'pipe:0']);
+  const args = ['-hide_banner', '-loglevel', 'info', '-fflags', '+genpts+nobuffer', '-thread_queue_size', '1024'].concat(cfg.inputFormat ? ['-f', cfg.inputFormat, '-probesize', '1M', '-analyzeduration', '1500000'] : [], ['-i', 'pipe:0']);
   const enc = cfg.encoder || 'x264';
   if (enc === 'copy') args.push('-c:v', 'copy');
   else {
