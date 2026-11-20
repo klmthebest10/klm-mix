@@ -1043,6 +1043,7 @@ static LRESULT CALLBACK monProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(h, &ps); EndPaint(h, &ps); return 0; }
     case WM_SETCURSOR: SetCursor(LoadCursor(nullptr, IDC_ARROW)); return TRUE;
+    case WM_MOUSEWHEEL: if (b) emit("wheel %s %d", b->name, (int)(short)HIWORD(wp)); return 0; // daftar input tetap bisa digulir di atas kartu native
     case WM_LBUTTONDOWN: case WM_LBUTTONDBLCLK: case WM_RBUTTONUP: case WM_MBUTTONDOWN: {
       if (!b || !b->scW || !b->scH) break;
       int x = (short)LOWORD(lp), y = (short)HIWORD(lp);
@@ -1179,6 +1180,7 @@ static void fillPx(const Rc& d, float r, float g, float b, float a, const Mask& 
   g_ctx->PSSetShader(g_psFill.Get(), nullptr, 0);
   g_ctx->Draw(4, 0);
 }
+static void fillPxC(double x, double y, double w, double h, float r, float g, float b, float a) { fillPx(Rc{ x, y, w, h }, r, g, b, a, Mask{}); }
 // ---- efek per sumber (Fase 8)
 struct FxN { float bri = 0, con = 1, sat = 1, hue = 0, gam = 1; bool cc = false, key = false, luma = false; float kc[3] = { 0, 1, 0 }; float sim = 0.4f, smo = 0.08f, spill = 0.1f, lo = 0.05f, hi = 0.15f; };
 static std::map<std::string, FxN> g_fx;
@@ -1566,7 +1568,7 @@ static int kSlotFree(KDec& k) {
 static double kSchedule(KDec& k, LONGLONG ts, double at) {
   const double m = ts / 10000.0, d = at - m;
   if (k.lastTs < 0 || ts < k.lastTs - 900000000LL || ts > k.lastTs + 900000000LL) { k.base = d; k.jit = 8; } // awal / lompatan cap waktu (HP menyambung ulang)
-  if (d < k.base) k.base = d; else k.base += (d - k.base) * 0.002; // dasar = jalur tercepat, pelan-pelan mengikuti selisih jam
+  if (d < k.base || d - k.base > 1000) k.base = d; else k.base += (d - k.base) * 0.002; // dasar = jalur tercepat, pelan-pelan mengikuti selisih jam (jeda >1 dtk = mulai ulang)
   k.jit = k.jit * 0.96 + (d - k.base) * 0.04;
   k.lastTs = ts;
   const double delay = std::min(120.0, std::max(12.0, k.jit * 2.2 + 6));
@@ -2214,6 +2216,42 @@ static void hideBus(Bus& b) {
   if (b.hwnd && b.shown) { ShowWindow(b.hwnd, SW_HIDE); b.shown = false; emit("hidden %s", b.name); }
   b.presented = 0;
 }
+// ---- kartu daftar input native (Fase 10): tiap kartu = jendela anak kecil di atas thumbnail kartu, digambar mesin native
+// tiap frame (semulus Preview/Program). Lencana kartu (nomor, LIVE/PVW, ikon jenis) datang sebagai gambar raster dari KLM;
+// meter audio & progres video digambar di sini.
+struct CardN { Bus b{ nullptr }; std::string name, src, ovl; int x = 0, y = 0, w = 0, h = 0; RECT clip{}; double meter = -1, prog = -1, dpr = 1; bool want = false; };
+static std::map<std::string, std::unique_ptr<CardN>> g_cards;
+static void drawInput(const std::string& id, const Rc& box, float alpha, const struct Mask& m, int depth);
+static void drawView(const std::string& id, const Rc& box, int fit, double zoom, double px, double py, double cl, double cr, double ct, double cb, bool flip, float alpha, const struct Mask& m, int depth, double rot);
+static void fillPxC(double x, double y, double w, double h, float r, float g, float b, float a);
+static void cardsRender() {
+  for (auto& kv : g_cards) {
+    CardN& c = *kv.second; Bus& b = c.b;
+    const int cw = c.clip.right - c.clip.left, ch = c.clip.bottom - c.clip.top;
+    if (!c.want || cw < 4 || ch < 4 || c.w < 8 || c.h < 8) { hideBus(b); continue; }
+    if (!ensureWindow(b) || !ensureSwap(b, (UINT)cw, (UINT)ch)) continue;
+    ID3D11ShaderResourceView* none = nullptr; g_ctx->PSSetShaderResources(0, 1, &none);
+    g_ctx->OMSetRenderTargets(1, b.scRtv.GetAddressOf(), nullptr);
+    float black[4] = { 0, 0, 0, 1 }; g_ctx->ClearRenderTargetView(b.scRtv.Get(), black);
+    D3D11_VIEWPORT v{ (float)(c.x - c.clip.left), (float)(c.y - c.clip.top), (float)c.w, (float)c.h, 0, 1 }; g_ctx->RSSetViewports(1, &v); // kartu sebagian tergulir: hanya bagian terlihat yang punya jendela
+    const UINT oW = g_W, oH = g_H; g_W = (UINT)c.w; g_H = (UINT)c.h; g_G = Aff(); clipOff();
+    const Rc full{ 0, 0, (double)c.w, (double)c.h };
+    drawInput(c.src, full, 1, Mask{}, 0);
+    if (!c.ovl.empty()) drawView(c.ovl, full, 2, 1, 0, 0, 0, 0, 0, 0, false, 1, Mask{}, 0, 0);
+    const double k = c.dpr;
+    if (c.meter >= 0) { // meter audio: kanan, top 32px, bawah 6px, lebar 5px (sama dengan .ameter)
+      const double mx = c.w - 11 * k, my = 32 * k, mh = c.h - 38 * k, mw = 5 * k;
+      if (mh > 4) { fillPxC(mx, my, mw, mh, 0, 0, 0, 0.55f); const double lv = std::min(1.0, c.meter), lh = mh * lv;
+        const float r = lv > 0.85 ? 0.94f : lv > 0.7 ? 0.98f : 0.13f, g = lv > 0.85 ? 0.27f : lv > 0.7 ? 0.8f : 0.77f, bl = lv > 0.85 ? 0.27f : lv > 0.7 ? 0.08f : 0.37f;
+        if (lh > 0.5) fillPxC(mx, my + mh - lh, mw, lh, r, g, bl, 1); }
+    }
+    if (c.prog >= 0) fillPxC(0, c.h - 3 * k, c.w * std::min(1.0, c.prog), 3 * k, 0.416f, 0.651f, 1.0f, 1); // progres video (.pbar)
+    g_W = oW; g_H = oH;
+    if (FAILED(b.sc->Present(0, 0))) { b.sc.Reset(); b.scRtv.Reset(); b.scW = b.scH = 0; continue; }
+    if (!b.shown) { if (++b.presented >= 2) { SetWindowPos(b.hwnd, HWND_TOP, c.clip.left, c.clip.top, cw, ch, SWP_NOACTIVATE | SWP_SHOWWINDOW); b.shown = true; b.r = c.clip; emit("shown %s", b.name); } }
+    else if (memcmp(&b.r, &c.clip, sizeof(RECT))) { b.r = c.clip; SetWindowPos(b.hwnd, HWND_TOP, c.clip.left, c.clip.top, cw, ch, SWP_NOACTIVATE); }
+  }
+}
 
 // ---------------------------------------------------------------- perintah
 static int g_frames = 0; static double g_msAcc = 0;
@@ -2265,12 +2303,24 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
     if (!IsWindow(p)) { emit("err jendela induk tidak valid"); return; }
     if (p != g_parent) {
       for (Bus* b : { &g_pvw, &g_pgm }) { if (b->hwnd) DestroyWindow(b->hwnd); b->hwnd = nullptr; b->sc.Reset(); b->scRtv.Reset(); b->scW = b->scH = 0; b->shown = false; }
+      for (auto& kv : g_cards) { Bus* b = &kv.second->b; if (b->hwnd) DestroyWindow(b->hwnd); b->hwnd = nullptr; b->sc.Reset(); b->scRtv.Reset(); b->scW = b->scH = 0; b->shown = false; }
       g_parent = p;
     }
   } else if (c == "out") {
     UINT w = 0, h = 0, f = 0; is >> w >> h >> f;
     if (w >= 16 && h >= 16 && w <= 7680 && h <= 4320) { g_W = w; g_H = h; }
     if (f >= 1 && f <= 240) g_fps = f;
+  } else if (c == "card") { // card <id> <src|-> <x> <y> <w> <h> <cx> <cy> <cw> <ch> <ovl|-> <meter|-1> <prog|-1> <dpr>
+    std::string id, src, ovl; int x = 0, y = 0, w = 0, h = 0, cx = 0, cy = 0, cw = 0, ch = 0; double me = -1, pr = -1, dpr = 1;
+    is >> id >> src >> x >> y >> w >> h >> cx >> cy >> cw >> ch >> ovl >> me >> pr >> dpr; if (id.empty() || id.size() > 48) return;
+    auto& u = g_cards[id]; if (!u) { u = std::make_unique<CardN>(); u->name = "c:" + id; u->b.name = u->name.c_str(); }
+    CardN& cd = *u; cd.src = src == "-" ? "" : src; cd.ovl = ovl == "-" ? "" : ovl; cd.x = x; cd.y = y; cd.w = w; cd.h = h; cd.clip = RECT{ cx, cy, cx + cw, cy + ch };
+    cd.meter = me; cd.prog = pr; cd.dpr = dpr > 0.25 && dpr < 8 ? dpr : 1; cd.want = !cd.src.empty() && cw > 3 && ch > 3; cd.b.want = cd.want;
+  } else if (c == "cardoff") { // cardoff <id> | cardoff *  — hapus jendela kartu
+    std::string id; is >> id;
+    for (auto it = g_cards.begin(); it != g_cards.end();) {
+      if (id == "*" || it->first == id) { if (it->second->b.hwnd) DestroyWindow(it->second->b.hwnd); it = g_cards.erase(it); } else ++it;
+    }
   } else if (c == "rect") {
     std::string bn; int x = 0, y = 0, w = 0, h = 0, v = 0; is >> bn >> x >> y >> w >> h >> v;
     applyRect(bn == "pvw" ? g_pvw : g_pgm, x, y, w, h, v != 0);
@@ -2427,6 +2477,7 @@ static void frame(double now) {
       ref(ci->second.base, d + 1); for (auto& l : ci->second.L) ref(l.src, d + 1);
     };
     ref(g_pvw.id, 0); ref(g_pgm.id, 0); if (g_tr.on) { ref(g_tr.from, 0); ref(g_tr.to, 0); } for (auto& o : g_ovl) ref(o.src, 0);
+    for (auto& kv : g_cards) if (kv.second->want) ref(kv.second->src, 0); // kartu daftar input native
     for (auto& kv : g_src) if (kv.second->kind == "screen" && used.count(kv.first)) tickScreen(*kv.second, kv.first, now);
     segTick(now, used);
   }
@@ -2438,11 +2489,13 @@ static void frame(double now) {
   if (g_pvw.want || !g_parent) compose(g_pvw, false);
   present(g_pgm);
   present(g_pvw);
+  if (!g_cards.empty()) { pipeline(); cardsRender(); }
   // pastikan monitor tetap di atas kanvas Chromium (Chromium bisa membuat ulang jendela anaknya saat ukuran berubah)
   static double zAt = 0;
   if (now - zAt > 1000) {
     zAt = now;
     for (Bus* b : { &g_pgm, &g_pvw }) if (b->shown && GetWindow(b->hwnd, GW_HWNDPREV)) SetWindowPos(b->hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    for (auto& kv : g_cards) { Bus* b = &kv.second->b; if (b->shown && GetWindow(b->hwnd, GW_HWNDPREV)) SetWindowPos(b->hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE); }
   }
 }
 
@@ -2801,6 +2854,14 @@ static int selftest(bool warp) {
         const bool pass = (l[0] != l1[0] || l[1] != l1[1] || l[2] != l1[2]);
         emit("  %s zoom digital KLMCAM (szoom 8×): tepi kiri %d,%d,%d (tanpa zoom %d,%d,%d)", pass ? "OK " : "GAGAL", l[0], l[1], l[2], l1[0], l1[1], l1[2]); if (!pass) ok = 0; (void)bv; }
       command("pgm a"); run(1);
+      // ---- Fase 10: kartu daftar input native — jendela anak per kartu, terpotong bila kartu tergulir sebagian
+      command("card t1 b 20 30 256 144 20 60 256 114 - 0.6 0.4 1"); for (int r = 0; r < 4; r++) run(1);
+      { auto it = g_cards.find("t1"); RECT wr{}; bool vis = false; if (it != g_cards.end() && it->second->b.hwnd) { vis = IsWindowVisible(it->second->b.hwnd) != 0; GetWindowRect(it->second->b.hwnd, &wr); MapWindowPoints(HWND_DESKTOP, g_parent, (POINT*)&wr, 2); }
+        const bool pass = it != g_cards.end() && it->second->b.shown && vis && wr.left == 20 && wr.top == 60 && wr.right - wr.left == 256 && wr.bottom - wr.top == 114;
+        emit("  %s kartu input native: jendela %ld,%ld %ldx%ld (harap 20,60 256x114 — bagian atas tergulir)", pass ? "OK " : "GAGAL", wr.left, wr.top, wr.right - wr.left, wr.bottom - wr.top); if (!pass) ok = 0; }
+      command("card t1 - 0 0 0 0 0 0 0 0 - -1 -1 1"); run(2);
+      { auto it = g_cards.find("t1"); const bool hid = it != g_cards.end() && !it->second->b.shown; emit("  %s kartu input native disembunyikan", hid ? "OK " : "GAGAL"); if (!hid) ok = 0; }
+      command("cardoff *"); run(1);
       // ---- Fase 9: grid Preview (ukuran monitor khusus) & stinger transparan
       command("comp Gt - 1 0 - -,0,0,1,1,0,1,0,0,0,0,0,0,0,1,0,0,-,15181e,0,-,0,0,0,0 a,0.02,0.02,0.46,0.96,3,1,0,0,0,0,0,0,0,1,0,0,-,000000,0,-,0,0,0,0 gg,0.52,0.02,0.46,0.96,3,1,0,0,0,0,0,0,0,1,0,0,-,000000,0,-,0,0,0,0");
       command("bsize pvw 400 600"); command("pvw Gt"); run(2);
