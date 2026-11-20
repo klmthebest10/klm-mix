@@ -148,6 +148,7 @@ Versi uji (beta).
   - Batas bitrate awal/minimum kini benar-benar dibaca HP (dulu ditaruh di tempat yang diabaikan) → gambar langsung lancar tanpa masa "pemanasan". 60 fps otomatis mendapat bitrate minimal 9 Mbps (1080p) / 6 Mbps (720p).
   - Panel KLMCAM menampilkan fps nyata / fps pilihan, ikon 🔒 bila fps dikunci, dan penyebab bila masih rendah (HP berat / WiFi lemah / kamera HP lambat).
 - **UTC Acara: title, lokasi, opening/closing, panel lengkap & jendela panel tidak lagi kosong / macet.** Penyebabnya: Chromium hanya membuka 6 sambungan sekaligus ke satu alamat, dan setiap video yang diputar/dimuat di KLM memegang satu sambungan ke alamat KLM yang sama dengan panel UTC. Dengan beberapa video saja, permintaan panel (memuat, klik tampilkan title/lokasi/opening/closing) mengantre tanpa akhir. Kini video & suara opening/closing diputar dari alamat loopback tersendiri, dan sambungan event + monitor Preview panel juga memakai alamat sendiri.
+  - Di uji otomatis dengan 6 video panjang diputar sekaligus + 7 grafis UTC tampil: panel tetap tersambung, title/lokasi/lower third tampil.
 
 ### Baru di v1.18.0-beta.13
 Versi uji (beta).
