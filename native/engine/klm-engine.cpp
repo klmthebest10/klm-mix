@@ -1019,7 +1019,7 @@ struct HStream : public IStream { // IStream tulis-saja di atas HANDLE (pipa fd 
   HRESULT STDMETHODCALLTYPE Revert() override { return E_NOTIMPL; }
   HRESULT STDMETHODCALLTYPE LockRegion(ULARGE_INTEGER, ULARGE_INTEGER, DWORD) override { return STG_E_INVALIDFUNCTION; }
   HRESULT STDMETHODCALLTYPE UnlockRegion(ULARGE_INTEGER, ULARGE_INTEGER, DWORD) override { return STG_E_INVALIDFUNCTION; }
-  HRESULT STDMETHODCALLTYPE Stat(STATSTG* st, DWORD) override { memset(st, 0, sizeof *st); st->type = STGTY_STREAM; st->cbSize.QuadPart = pos; return S_OK; }
+  HRESULT STDMETHODCALLTYPE Stat(STATSTG* st, DWORD) override { memset(st, 0, sizeof *st); st->type = STGTY_STREAM; st->cbSize.QuadPart = pos; st->grfMode = STGM_WRITE; return S_OK; }
   HRESULT STDMETHODCALLTYPE Clone(IStream**) override { return E_NOTIMPL; }
 };
 struct Out {
@@ -1050,7 +1050,8 @@ static bool oStart(const std::string& id, bool ts, UINT W, UINT H, UINT F, UINT 
     IStream* st = new HStream(h, tsHandle != INVALID_HANDLE_VALUE);
     ComPtr<IMFByteStream> bs; hr = MFCreateMFByteStreamOnStream(st, &bs); st->Release();
     if (FAILED(hr)) { emit("oerr %s byte stream 0x%08lx", id.c_str(), (unsigned long)hr); return false; }
-    hr = MFCreateSinkWriterFromURL(nullptr, bs.Get(), a.Get(), &o->sw);
+    hr = MFCreateSinkWriterFromURL(L"klm.ts", bs.Get(), a.Get(), &o->sw);
+    if (FAILED(hr)) hr = MFCreateSinkWriterFromURL(nullptr, bs.Get(), a.Get(), &o->sw);
   } else hr = MFCreateSinkWriterFromURL(widen(path).c_str(), nullptr, a.Get(), &o->sw);
   if (FAILED(hr)) { emit("oerr %s tidak bisa membuat penulis (%s) 0x%08lx", id.c_str(), ts ? "TS" : "MP4", (unsigned long)hr); return false; }
   // video H.264
