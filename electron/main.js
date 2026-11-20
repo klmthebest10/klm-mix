@@ -364,6 +364,7 @@ ipcMain.handle('browser:show', (e, id, show) => {
   else { w.setPosition(-bw - 200, 0); w.setSkipTaskbar(true); w.setFocusable(false); }
   return true;
 });
+ipcMain.handle('browser:hwnd', (e, id) => { const w = browsers.get(id); if (!w || w.isDestroyed()) return null; const b = w.getNativeWindowHandle(); return b.length >= 8 ? b.readBigUInt64LE(0).toString() : String(b.readUInt32LE(0)); });
 ipcMain.handle('browser:close', (e, id) => { const w = browsers.get(id); if (w) w.destroy(); return true; });
 
 // ---------------- start ----------------
@@ -874,6 +875,29 @@ function smokeTest() {
             const dl = await js('KM.audio.master && KM.audio.master.odly ? KM.audio.master.odly.delayTime.value.toFixed(2) : "-"');
             log('geser A/V +200 ms → delay bus master ' + dl + ' s'); if (Math.abs(+dl - 0.2) > 0.02) { fail++; log('GAGAL: penundaan audio output tidak terpasang'); }
             await js('KM.settings.avOffset = 0; KM.inputs.remove(window.__nl); KM.inputs.remove(window.__ns); KM.inputs.remove(window.__nu); 1');
+            // --- Fase 7: Virtual Set (kotak berisi input lain), Title Cepat di overlay, Web Browser (tangkap jendela) ---
+            await js(`(() => {
+              const c = KM.inputs.create('colour', { title: 'Isi kotak native', opts: { color: '#2040ff' } });
+              const v = KM.inputs.create('virtualset', { title: 'Virtual Set native', layers: [{ on: true, inputId: c.id, x: 0.25, y: 0.25, w: 0.5, h: 0.5, fit: 'fill', zoom: 1, px: 0, py: 0, rad: 0.2, bw: 6, bc: '#ffffff' }] });
+              const t = KM.inputs.create('title', { title: 'Title native' });
+              const b = KM.inputs.create('browser', { title: 'Browser native', opts: { url: location.origin + '/src/utc/icons/icon-512.png', width: 640, height: 360 } });
+              window.__vc = c.id; window.__vs = v.id; window.__vt = t.id; window.__vb = b.id; return 1; })()`);
+            await wait(4000);
+            await js('KM.engine.cut(window.__vs); 1'); await wait(2500);
+            const v7 = JSON.parse(await js(`Promise.all([KM.nengine.probe('pgm', 0.5, 0.5), KM.nengine.probe('pgm', 0.05, 0.05)]).then((p) => JSON.stringify({ p, pgm: KM.nengine.pgm, why: KM.nengine.why.pgm }))`));
+            log('Virtual Set native: ' + JSON.stringify(v7) + ' (harap tengah 32,64,255)');
+            const nr7 = (a, c, t) => a && c.every((x, i) => Math.abs(a[i] - x) <= t);
+            if (!v7.pgm || !nr7(v7.p[0], [32, 64, 255], 6)) { fail++; log('GAGAL: Virtual Set tidak tampil native'); } else log('Virtual Set native: OK');
+            await js('KM.engine.overlay(0, window.__vt, "in"); 1'); await wait(2500);
+            const t7 = JSON.parse(await js('JSON.stringify({ pgm: KM.nengine.pgm, why: KM.nengine.why.pgm, title: (() => { const m = KM.nengine.media.get("i" + String(window.__vt).replace(/[^\\w.-]/g, "_").slice(0, 60)); return m ? { ok: m.ok } : null; })() })'));
+            log('Title Cepat di overlay native: ' + JSON.stringify(t7));
+            if (!t7.pgm) { fail++; log('GAGAL: Program dengan Title di overlay tidak native (' + t7.why + ')'); } else log('Title overlay native: OK');
+            await js('KM.engine.overlay(0, null, "off"); KM.engine.setPreview(window.__vb); 1'); await wait(3000);
+            const b7 = JSON.parse(await js('JSON.stringify({ pvw: KM.nengine.pvw, why: KM.nengine.why.pvw })'));
+            log('Web Browser native (tangkap jendela): ' + JSON.stringify(b7));
+            if (!b7.pvw) log('catatan: Web Browser belum tampil native di CI (' + b7.why + ') — jendela browser di luar layar mungkin tidak dirender saat tanpa sesi desktop');
+            else log('Web Browser native: OK');
+            await js('["__vs","__vt","__vb","__vc"].forEach((k) => KM.inputs.remove(window[k])); 1');
           } catch (e) { fail++; log('GAGAL video/gambar native: ' + e.message); }
           await js('KM.nengine.relaxInputs = false; KM.inputs.remove(window.__ocam); 1');
         } catch (e) { fail++; log('GAGAL output native: ' + e.message); }

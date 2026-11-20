@@ -10,7 +10,7 @@ const INVOKE = ['app:info', 'desktop:sources', 'dialog:open', 'dialog:save', 'di
   'app:boot', 'app:ready', 'live:auth-list', 'live:yt-connect', 'live:fb-connect', 'live:forget', 'live:prepare', 'live:end',
   'airplay:start', 'airplay:stop', 'airplay:status', 'airplay:firewall', 'airplay:hotspot', 'sys:open-settings',
   'procaudio:start', 'procaudio:stop', 'procaudio:available',
-  'nengine:start', 'nengine:stop', 'nengine:status', 'nengine:screen-rect', 'nengine:download',
+  'nengine:start', 'nengine:stop', 'nengine:status', 'nengine:screen-rect', 'nengine:download', 'browser:hwnd',
   'update:info', 'update:check', 'update:download', 'update:install'];
 const SEND = ['file:write-chunk', 'utc:start', 'utc:stop', 'utc:ack', 'utc:reload', 'utc:full', 'utc:pause', 'utc:resume', 'utc:zc-ready', 'utc:zc-set', 'nengine:cmd', 'nengine:utc', 'nengine:kenc', 'nengine:aud', 'nengine:raster'];
 const ON = ['utc:frame', 'utc:tk', 'utc:zc', 'vst:event', 'airplay:status', 'procaudio:status', 'update:status', 'nengine:ev', 'nengine:pcm'];
