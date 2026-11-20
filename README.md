@@ -150,6 +150,7 @@ Versi uji (beta).
   - **Transisi**: merge, wipe, wipe naik, slide, slide naik, fly, zoom, crosszoom, circle, barn door, cube, dip hitam/putih dan blur — otomatis maupun T-bar. Stinger masih jalur biasa.
   - **Overlay zoom** dan **FTB** (Fade To Black, di atas grafis UTC) kini native.
 - Yang masih jalur biasa: transisi stinger dan mode grid.
+- Bila sebuah fitur belum bisa native (mis. latar AI sebelum mask pertama siap), monitor otomatis memakai tampilan biasa tanpa kedip.
 
 ### Baru di v1.18.0-beta.10
 Versi uji (beta).
