@@ -314,7 +314,7 @@ img,video,iframe{max-width:100%}
     <div class="mons">
     <div class="scr" id="scrPvw">
       <div class="scr-h pvw">PREVIEW <span id="pvwInfo">pratinjau gaya — belum tayang</span><select class="srcsel" data-mon-src="pvw" title="Sumber gambar monitor"></select></div>
-      <div class="frame"><canvas class="feed" id="feedPvw"></canvas><video class="feed" id="vidPvw" autoplay muted playsinline></video><iframe id="pvw" src="/utc/overlay?mode=pvw"></iframe><div class="tagname" id="pvwName"></div></div>
+      <div class="frame"><canvas class="feed" id="feedPvw"></canvas><video class="feed" id="vidPvw" autoplay muted playsinline></video><iframe id="pvw" src="about:blank" data-src="/utc/overlay?mode=pvw"></iframe><div class="tagname" id="pvwName"></div></div>
     </div>
     <div class="scr hid" id="scrPgm">
       <div class="scr-h pgm">PROGRAM • LIVE <span id="pgmInfo">yang sedang tayang</span><select class="srcsel" data-mon-src="pgm" title="Sumber gambar monitor"></select></div>
@@ -352,6 +352,12 @@ try { if (document.documentElement.classList.contains('klm-embed')) { const f = 
 // jendela panel di PC: monitor Program dimuat dari alamat loopback lain agar sambungan event-nya tidak memakan jatah
 // 6 sambungan per alamat milik KLM (dulu: panel diam/tidak merespons saat banyak grafis tampil)
 try { const f = document.getElementById('pgm'); if (f && !document.documentElement.classList.contains('klm-embed') && location.hostname === '127.0.0.1') f.src = 'http://klm-panel.localhost:' + location.port + '/utc/overlay?bg=1'; } catch(e) {}
+// Di PC (alamat loopback): sambungan event (SSE) & monitor Preview panel memakai nama host loopback tersendiri, sehingga
+// tidak berebut jatah 6 sambungan per alamat dengan video/aset KLM → panel, tombol title/lokasi/opening/closing & jendela
+// panel tidak lagi macet / kosong. Dari HP (alamat IP jaringan) tetap alamat yang sama.
+const LOOP = /^(127\.0\.0\.1|localhost)$/.test(location.hostname);
+const ALT = (name) => LOOP ? 'http://klm-' + name + '.localhost:' + location.port : '';
+try { const f = document.getElementById('pvw'); if (f) f.src = ALT('ppvw') + f.dataset.src; } catch(e) {}
 const $ = s => document.querySelector(s);
 let S = null, INFO = { port: location.port, ips: [] };
 const ui = { tab: 'lt', sel: { lt: '', tt: '', loc: '', soc: '' }, ocKind: 'opening', n: 0, pending: false, bulk: false, presets: [] };
@@ -1369,7 +1375,7 @@ async function init(){
   renderAll();
   const conn = $('#conn');
   const connect = () => {
-    const es = new EventSource('/utc/events');
+    const es = new EventSource(ALT('pev') + '/utc/events');
     es.onopen = () => { conn.classList.add('ok'); conn.querySelector('span').textContent = 'Server aktif • port ' + (INFO.port||location.port); };
     es.onmessage = ev => {
       const d = JSON.parse(ev.data);
@@ -1622,7 +1628,7 @@ async function initSw(){
   renderSw(true); applyMon('pvw'); applyMon('pgm');
   let wasConn = SWS.connected;
   const go = () => {
-    const es = new EventSource('/utc/api/sw/events');
+    const es = new EventSource(ALT('pev') + '/utc/api/sw/events');
     es.onmessage = ev => {
       const d = JSON.parse(ev.data);
       const conn = d.connected, keep = { trans: SWS.trans, dur: SWS.dur };

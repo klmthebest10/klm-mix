@@ -140,6 +140,15 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.14
+Versi uji (beta).
+- **KLMCAM kini mengikuti fps yang dipilih (30/60):**
+  - Penyebab utama "mentok di fps rendah": Chrome/WebView di Android sengaja membiarkan kamera memperlambat diri di ruangan redup (rentang 8–30 fps) agar gambar terang. Kini bila fps kamera terukur jauh di bawah pilihan, **exposure dikunci ≤ 1/fps** dan kecerahan diatur otomatis lewat ISO → gerakan tetap mulus. Bisa dimatikan di Pengaturan KLMCAM di HP ("Kunci FPS saat cahaya redup"); bila gambar terlalu gelap kunci dilepas otomatis.
+  - Kamera dibuka dengan format yang **sanggup** fps pilihan (dulu hanya "diusahakan", HP sering memilih format 30 fps walau 60 dipilih).
+  - Batas bitrate awal/minimum kini benar-benar dibaca HP (dulu ditaruh di tempat yang diabaikan) → gambar langsung lancar tanpa masa "pemanasan". 60 fps otomatis mendapat bitrate minimal 9 Mbps (1080p) / 6 Mbps (720p).
+  - Panel KLMCAM menampilkan fps nyata / fps pilihan, ikon 🔒 bila fps dikunci, dan penyebab bila masih rendah (HP berat / WiFi lemah / kamera HP lambat).
+- **UTC Acara: title, lokasi, opening/closing, panel lengkap & jendela panel tidak lagi kosong / macet.** Penyebabnya: Chromium hanya membuka 6 sambungan sekaligus ke satu alamat, dan setiap video yang diputar/dimuat di KLM memegang satu sambungan ke alamat KLM yang sama dengan panel UTC. Dengan beberapa video saja, permintaan panel (memuat, klik tampilkan title/lokasi/opening/closing) mengantre tanpa akhir. Kini video & suara opening/closing diputar dari alamat loopback tersendiri, dan sambungan event + monitor Preview panel juga memakai alamat sendiri.
+
 ### Baru di v1.18.0-beta.13
 Versi uji (beta).
 - **KLMCAM jauh lebih mulus, tanpa bercak** (mesin video native):

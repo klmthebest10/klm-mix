@@ -7,7 +7,7 @@ window.KM = window.KM || {};
     const orig = Element.prototype[fn];
     Element.prototype[fn] = function (...kids) { return orig.apply(this, kids.filter((x) => x != null && x !== false)); };
   }
-  KM.version = '1.18.0-beta.13';
+  KM.version = '1.18.0-beta.14';
   KM.isElectron = !!(window.klm && window.klm.isElectron);
 
   // ---------- event bus ----------
@@ -142,6 +142,19 @@ window.KM = window.KM || {};
 
   // ---------- file helper (Electron / browser) ----------
   KM.fileUrl = (p) => '/localfile?p=' + encodeURIComponent(p);
+  // Video/audio lokal diputar dari nama host loopback tersendiri (klm-m0…7.localhost = komputer ini). Tiap video yang diputar /
+  // di-preload memegang 1 sambungan HTTP selama berjalan, sedangkan Chromium hanya membuka 6 sambungan per host. Dulu semuanya
+  // di alamat KLM (127.0.0.1) yang sama dengan panel UTC Acara → beberapa video saja sudah membuat panel, tombol title/lokasi/
+  // opening/closing dan jendela UTC menunggu tanpa akhir (kosong / grafis tidak muncul). Hanya elemen crossOrigin="anonymous"
+  // (server mengirim izin CORS) yang dipindah, jadi kanvas program tidak pernah "tercemar".
+  (function () {
+    if (!/^(127\.0\.0\.1|localhost)$/.test(location.hostname) || !window.HTMLMediaElement) return;
+    const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src'); if (!d || !d.set) return;
+    const host = (u) => { let h = 0; for (let i = 0; i < u.length; i++) h = (h * 31 + u.charCodeAt(i)) | 0; return 'http://klm-m' + ((h >>> 0) % 8) + '.localhost:' + location.port; };
+    KM.mediaUrl = (u) => (typeof u === 'string' && (u.startsWith('/localfile?') || u.startsWith('/uploads/')) ? host(u) + u : u); // juga suara video opening/closing UTC
+    Object.defineProperty(HTMLMediaElement.prototype, 'src', { configurable: true, enumerable: d.enumerable, get: d.get,
+      set(v) { d.set.call(this, this.crossOrigin === 'anonymous' ? KM.mediaUrl(v) : v); } });
+  })();
   KM.pickFiles = (accept, multiple) => new Promise((resolve) => {
     const inp = KM.h('input', { type: 'file', accept: accept || '', multiple: !!multiple, style: { display: 'none' } });
     inp.addEventListener('change', () => {

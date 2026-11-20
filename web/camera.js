@@ -5,7 +5,7 @@
   const video = $('local');
   const cfg = {
     slot: KMP.get('slot', 1), name: KMP.get('camname', KMP.deviceName()), facing: KMP.get('facing', 'environment'),
-    quality: KMP.get('quality', '1080p30'), ns: KMP.get('ns', false), mirror: KMP.get('mirror', true), mic: true
+    quality: KMP.get('quality', '1080p30'), ns: KMP.get('ns', false), mirror: KMP.get('mirror', true), mic: true, fpsLock: KMP.get('fpsLock', true)
   };
   // mode internet: kode ruang dari tautan (#r=KODE&s=slot) atau dari pengaturan
   const hp = new URLSearchParams(location.hash.replace(/^#/, ''));
@@ -17,7 +17,7 @@
   let vTrack = null, aTrack = null, pc = null, conn = null, started = false, tally = 'off', qPending = false;
   let lastBytes = 0, lastT = 0, kbps = 0, battery = null, torchOn = false;
 
-  function parseQ(q) { const m = /(\d+)p(\d+)/.exec(q || '1080p30') || [0, 1080, 30]; const hh = +m[1]; return { height: hh, width: Math.round(hh * 16 / 9), fps: +m[2], bitrate: hh >= 1080 ? 6000 : 4000, audio: true }; }
+  function parseQ(q) { const m = /(\d+)p(\d+)/.exec(q || '1080p30') || [0, 1080, 30]; const hh = +m[1], f = +m[2]; return { height: hh, width: Math.round(hh * 16 / 9), fps: f, bitrate: hh >= 1080 ? (f >= 50 ? 9000 : 6000) : (f >= 50 ? 6000 : 4000), audio: true }; }
 
   // ---------- UI ----------
   function setStatus(s) {
@@ -48,10 +48,15 @@
     try { const f = t.getSettings().facingMode; if (f === 'user' || f === 'environment') return f; } catch (e) {}
     const l = (t && t.label) || ''; return FRONT.test(l) ? 'user' : BACK.test(l) ? 'environment' : '';
   }
+  // FPS: format kamera dipilih yang SANGGUP fps pilihan (min = 90% target) — dulu hanya "ideal", HP sering memilih format
+  // 30 fps (atau lebih rendah) walau 60 dipilih. Bila HP tidak punya format itu, dibuka ulang tanpa syarat minimum.
   async function openVideo(facing) {
+    try { return await openVideoWith(facing, true); } catch (e) { if (e && e.name === 'NotAllowedError') throw e; return openVideoWith(facing, false); }
+  }
+  async function openVideoWith(facing, needFps) {
     facing = facing || cfg.facing;
     const s = settings;
-    const base = { width: { ideal: s.width }, height: { ideal: s.height }, frameRate: { ideal: s.fps, max: s.fps } };
+    const base = { width: { ideal: s.width }, height: { ideal: s.height }, frameRate: needFps ? { ideal: s.fps, max: s.fps, min: Math.round(s.fps * 0.9) } : { ideal: s.fps, max: s.fps } };
     // minta izin zoom optik/hardware (Chrome); di aplikasi Android (WebView) biasanya tidak tersedia → zoom digital di bawah
     let sup = {}; try { sup = navigator.mediaDevices.getSupportedConstraints() || {}; } catch (e) {}
     const gum = async (vc) => {
@@ -66,6 +71,7 @@
     if (!st) { try { st = await gum(Object.assign({ facingMode: { ideal: facing } }, base)); } catch (e) { throw err || e; } }
     const t = st.getVideoTracks()[0];
     try { t.contentHint = 'motion'; } catch (e) {}
+    fpsGuardReset();
     return t;
   }
   /** ganti trek kamera (depan/belakang atau resolusi baru) tanpa memutus sambungan ke PC.
@@ -210,6 +216,55 @@
     } catch (e) { console.warn(e); }
   }
 
+  // ---------- kunci FPS saat cahaya redup ----------
+  // Chrome/Android sengaja memilih rentang AE kamera dengan batas bawah serendah mungkin (mis. 8–30 fps) agar gambar terang
+  // di ruangan redup → kamera memperlambat diri ke 10–15 fps: inilah "mentok di fps rendah". Bila fps kamera terukur jauh di
+  // bawah pilihan, exposure dikunci ≤ 1/fps (kamera tidak bisa lagi memperlambat diri) dan kecerahan dijaga dengan ISO
+  // secara otomatis di sini (AE perangkat lunak). Bisa dimatikan di Pengaturan.
+  const FG = { low: 0, on: false, iso: 0, t: 0, dark: 0, img: null, cv: null, busy: false, capFps: 0 };
+  function fpsGuardReset() { FG.low = 0; FG.on = false; FG.iso = 0; FG.dark = 0; FG.img = null; clearInterval(FG.t); FG.t = 0; }
+  function expCaps() { try { const c = vTrack.getCapabilities ? vTrack.getCapabilities() : {}; return (c.exposureMode || []).includes('manual') && c.exposureTime && c.iso ? c : null; } catch (e) { return null; } }
+  async function fpsGuardCheck(capFps) {
+    FG.capFps = capFps;
+    if (!cfg.fpsLock || !vTrack || !capFps) return;
+    const target = settings.fps || 30;
+    if (FG.on) return;
+    FG.low = capFps < target * 0.85 ? FG.low + 1 : 0;
+    if (FG.low < 2) return; // 2 pengukuran berturut-turut (±4 detik)
+    const c = expCaps(); if (!c) { FG.low = -1000; return; } // kamera/peramban tanpa exposure manual: tidak bisa dibantu
+    let iso = 0; try { iso = vTrack.getSettings().iso || 0; } catch (e) {}
+    FG.iso = Math.max(c.iso.min, Math.min(c.iso.max, iso || Math.min(c.iso.max, Math.max(c.iso.min, 800))));
+    const exp = Math.max(c.exposureTime.min, Math.min(c.exposureTime.max, Math.floor(10000 / target * 0.95))); // satuan 100 µs
+    try { await vTrack.applyConstraints({ advanced: [{ exposureMode: 'manual', exposureTime: exp, iso: FG.iso }] }); FG.on = true; }
+    catch (e) { FG.low = -1000; return; }
+    KMP.toast('Cahaya redup: FPS dikunci ' + target + ' — kecerahan diatur otomatis', 3500);
+    FG.t = setInterval(fpsGuardMeter, 450);
+    sendInfo();
+  }
+  async function fpsGuardMeter() { // AE perangkat lunak: ukur kecerahan rata-rata, atur ISO menuju ±0,45
+    if (!FG.on || FG.busy || !vTrack || vTrack.readyState !== 'live') return;
+    FG.busy = true;
+    try {
+      let src = null;
+      if (video.srcObject && video.readyState >= 2) src = video;
+      else { if (!FG.img && window.ImageCapture) FG.img = new ImageCapture(vTrack); if (FG.img) src = await FG.img.grabFrame(); }
+      if (!src) return;
+      const cv = FG.cv || (FG.cv = document.createElement('canvas')); cv.width = 32; cv.height = 18;
+      const g = cv.getContext('2d', { willReadFrequently: true }); g.drawImage(src, 0, 0, 32, 18); if (src.close) src.close();
+      const d = g.getImageData(0, 0, 32, 18).data; let y = 0; for (let i = 0; i < d.length; i += 4) y += d[i] * 0.2126 + d[i + 1] * 0.7152 + d[i + 2] * 0.0722;
+      const luma = y / (d.length / 4) / 255, c = expCaps(); if (!c) return;
+      const want = Math.max(c.iso.min, Math.min(c.iso.max, FG.iso * Math.max(0.75, Math.min(1.35, 0.45 / Math.max(0.02, luma)))));
+      if (luma < 0.06 && FG.iso >= c.iso.max * 0.98) { if (++FG.dark >= 6) { await fpsGuardOff('terlalu gelap'); return; } } else FG.dark = 0;
+      if (Math.abs(want - FG.iso) / FG.iso > 0.06) { FG.iso = Math.round(want); await vTrack.applyConstraints({ advanced: [{ exposureMode: 'manual', iso: FG.iso }] }).catch(() => {}); }
+    } catch (e) {} finally { FG.busy = false; }
+  }
+  async function fpsGuardOff(why) {
+    clearInterval(FG.t); FG.t = 0; FG.on = false; FG.low = -1000;
+    try { await vTrack.applyConstraints({ advanced: [{ exposureMode: 'continuous' }] }); } catch (e) {}
+    if (why) KMP.toast('Kunci FPS dilepas: ' + why, 3500);
+    sendInfo();
+  }
+
   // ---------- WebRTC ----------
   async function startPeer() {
     if (pc) { try { pc.close(); } catch (e) {} }
@@ -254,7 +309,17 @@
       }
       case 'signal':
         if (!pc) return;
-        try { if (m.data.sdp) await pc.setRemoteDescription(m.data.sdp); else if (m.data.ice) await pc.addIceCandidate(m.data.ice); } catch (e) { console.warn(e); }
+        try {
+          if (m.data.sdp) {
+            let d = m.data.sdp;
+            // batas bitrate awal/minimum dibaca pengirim dari jawaban PC (bukan dari offer sendiri) → gambar langsung tajam & lancar
+            if (d.type === 'answer' && d.sdp) {
+              const kb = Math.round((settings.bitrate || 6000) * netRate);
+              d = { type: 'answer', sdp: d.sdp.replace(/(a=fmtp:\d+ [^\r\n]*profile-level-id=[0-9a-fA-F]+[^\r\n]*)/g, (l) => /x-google-start-bitrate/.test(l) ? l : l + ';x-google-start-bitrate=' + Math.round(kb * 0.75) + ';x-google-min-bitrate=' + Math.min(2500, Math.round(kb * 0.3)) + ';x-google-max-bitrate=' + kb) };
+            }
+            await pc.setRemoteDescription(d);
+          } else if (m.data.ice) await pc.addIceCandidate(m.data.ice);
+        } catch (e) { console.warn(e); }
         break;
       case 'cam-ctl':
         if (m.cmd === 'zoom') applyZoom(+m.value);
@@ -292,7 +357,7 @@
   setInterval(async () => {
     if (!vTrack) return;
     const s = vTrack.getSettings ? vTrack.getSettings() : {};
-    let fps = s.frameRate ? Math.round(s.frameRate) : settings.fps, loss = 0, rtt = 0;
+    let fps = s.frameRate ? Math.round(s.frameRate) : settings.fps, loss = 0, rtt = 0, capFps = 0, limit = '';
     if (pc) {
       try {
         const st = await pc.getStats();
@@ -300,7 +365,9 @@
           if (r.type === 'outbound-rtp' && r.kind === 'video') {
             const now = r.timestamp; if (lastT) kbps = Math.round((r.bytesSent - lastBytes) * 8 / (now - lastT));
             lastBytes = r.bytesSent; lastT = now; if (r.framesPerSecond) fps = Math.round(r.framesPerSecond);
+            if (r.qualityLimitationReason && r.qualityLimitationReason !== 'none') limit = r.qualityLimitationReason;
           }
+          if (r.type === 'media-source' && r.kind === 'video' && r.framesPerSecond) capFps = Math.round(r.framesPerSecond); // fps kamera sebenarnya
           if (r.type === 'remote-inbound-rtp' && r.kind === 'video') { loss = r.fractionLost || 0; rtt = Math.round((r.roundTripTime || 0) * 1000); }
         });
         // jaringan berat (paket hilang / jeda tinggi) → turunkan bitrate agar gerakan tetap mulus & latensi tidak menumpuk; pulih perlahan
@@ -310,8 +377,9 @@
         if (Math.abs(netRate - before) > 0.01) tuneSender();
       } catch (e) {}
     }
-    $('stats').innerHTML = (s.width || '?') + '×' + (s.height || '?') + ' • ' + fps + 'fps<br>' + (pc ? kbps + ' kbps' + (rtt ? ' • ' + rtt + ' ms' : '') + (netRate < 0.99 ? ' • hemat ' + Math.round(netRate * 100) + '%' : '') : '') + (battery != null ? '<br>🔋 ' + battery + '%' : '');
-    lastInfo = { w: s.width, h: s.height, fps, kbps, battery, rtt, loss: Math.round(loss * 100), net: !!cfg.room };
+    fpsGuardCheck(capFps || fps);
+    $('stats').innerHTML = (s.width || '?') + '×' + (s.height || '?') + ' • ' + fps + '/' + settings.fps + ' fps' + (FG.on ? ' 🔒' : '') + (limit ? ' (' + (limit === 'cpu' ? 'HP berat' : limit === 'bandwidth' ? 'WiFi' : limit) + ')' : '') + '<br>' + (pc ? kbps + ' kbps' + (rtt ? ' • ' + rtt + ' ms' : '') + (netRate < 0.99 ? ' • hemat ' + Math.round(netRate * 100) + '%' : '') : '') + (battery != null ? '<br>🔋 ' + battery + '%' : '');
+    lastInfo = { w: s.width, h: s.height, fps, capFps: capFps || 0, want: settings.fps, limit, fpsLock: FG.on, kbps, battery, rtt, loss: Math.round(loss * 100), net: !!cfg.room };
     sendInfo();
   }, 2000);
   let lastInfo = {};
@@ -341,7 +409,7 @@
   function openPanel() {
     $('srvBox').style.display = KMP.servedByPc || KMP.hosted ? 'none' : ''; $('sRoom').value = cfg.room || '';
     $('sSrv').value = KMP.get('server', ''); $('sName').value = cfg.name; slotSel.value = cfg.slot; $('sFacing').value = cfg.facing; $('sQual').value = cfg.quality;
-    $('sNs').checked = !!cfg.ns; $('sMirror').checked = !!cfg.mirror;
+    $('sNs').checked = !!cfg.ns; $('sMirror').checked = !!cfg.mirror; $('sFpsLock').checked = !!cfg.fpsLock;
     $('panel').classList.add('show');
   }
   $('openSet').onclick = openPanel; $('startSet').onclick = openPanel;
@@ -353,6 +421,7 @@
     cfg.name = $('sName').value.trim() || KMP.deviceName(); cfg.slot = +slotSel.value; cfg.ns = $('sNs').checked; cfg.mirror = $('sMirror').checked;
     const facing = $('sFacing').value, quality = $('sQual').value;
     KMP.set('camname', cfg.name); KMP.set('slot', cfg.slot); KMP.set('ns', cfg.ns); KMP.set('mirror', cfg.mirror);
+    const fl = $('sFpsLock').checked; if (fl !== cfg.fpsLock) { cfg.fpsLock = fl; KMP.set('fpsLock', fl); if (!fl && FG.on) fpsGuardOff(''); else if (fl) FG.low = 0; }
     $('panel').classList.remove('show');
     const qChanged = quality !== before.quality;
     if (qChanged) { cfg.quality = quality; KMP.set('quality', quality); settings = Object.assign({}, settings, parseQ(quality)); qPending = true; }

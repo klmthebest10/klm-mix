@@ -166,7 +166,9 @@
   function qualityOf(inp) {
     const q = inp.opts.quality || '1080p30';
     const m = /(\d+)p(\d+)/.exec(q) || [0, 1080, 30];
-    const h = +m[1]; return { height: h, width: Math.round(h * 16 / 9), fps: +m[2], bitrate: inp.opts.bitrate || 6000, audio: inp.opts.audio !== false };
+    // 50/60 fps butuh bitrate lebih besar agar encoder HP tidak menurunkan fps / kualitas (min 9 Mbps 1080p60, 6 Mbps 720p60)
+    const h = +m[1], f = +m[2], br = inp.opts.bitrate || 6000;
+    return { height: h, width: Math.round(h * 16 / 9), fps: f, bitrate: f >= 50 ? Math.max(br, h >= 1080 ? 9000 : 6000) : br, audio: inp.opts.audio !== false };
   }
   function startCam(inp, peer) {
     inp.rt.camId = peer.id;
