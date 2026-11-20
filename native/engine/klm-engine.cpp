@@ -1036,6 +1036,7 @@ static void viewport(UINT w, UINT h) { D3D11_VIEWPORT v{ 0, 0, (float)w, (float)
 struct SrcView { ComPtr<ID3D11ShaderResourceView> srv; UINT w = 0, h = 0; bool opaque = false; };
 struct Rc { double x = 0, y = 0, w = 0, h = 0; };
 struct Mask { bool on = false; Rc r; double rad = 0; };
+static bool ulSrv(const std::string& id, SrcView& v); // tekstur bersama dari KLM (didefinisikan di bagian UTC)
 static bool getSrv(const std::string& id, SrcView& v) {
   auto it = g_src.find(id);
   if (it != g_src.end()) {
@@ -1049,7 +1050,7 @@ static bool getSrv(const std::string& id, SrcView& v) {
     }
     return true;
   }
-  auto ci = g_cams.find(id); if (ci == g_cams.end()) return false;
+  auto ci = g_cams.find(id); if (ci == g_cams.end()) return ulSrv(id, v);
   Cam& c = *ci->second; std::lock_guard<std::mutex> l(c.mx); if (!c.got || !c.srv) return false;
   v.srv = c.srv; v.w = c.w; v.h = c.h; v.opaque = true; return true;
 }
@@ -1139,11 +1140,15 @@ struct Ticker {
 };
 struct ULayer {
   ComPtr<ID3D11Texture2D> tex; ComPtr<ID3D11ShaderResourceView> srv; UINT w = 0, h = 0; DXGI_FORMAT fmt = DXGI_FORMAT_UNKNOWN;
-  bool valid = false, readySent = false;
+  bool valid = false, readySent = false, opaque = false;
   Ticker cur, next;
   HANDLE pend = nullptr; unsigned long long pendSeq = 0; UINT pW = 0, pH = 0; // handle terbaru yang menunggu disalin
 };
 static std::map<std::string, ULayer> g_ul;
+static bool ulSrv(const std::string& id, SrcView& v) {
+  auto it = g_ul.find(id); if (it == g_ul.end() || !it->second.valid || !it->second.srv) return false;
+  v.srv = it->second.srv; v.w = it->second.w; v.h = it->second.h; v.opaque = it->second.opaque; return true;
+}
 static std::vector<std::string> g_ulay;
 static long long g_frameNo = 0;
 static unsigned long long g_utexN = 0;
@@ -1715,8 +1720,9 @@ static void utcCommand(const std::string& c, std::istringstream& is, const std::
   if (c == "uclear") { for (auto& kv : g_ul) { if (kv.second.pend) ackHandle(kv.first, kv.second.pend, kv.second.pendSeq); kv.second.pend = nullptr; kv.second.valid = false; kv.second.readySent = false; } return; }
   if (lid.empty() || lid.size() > 16) return;
   ULayer& L = g_ul[lid];
-  if (c == "utex") {
+  if (c == "utex" || c == "stex") { // stex = sumber biasa (Web Browser offscreen): ditampilkan buram, bukan lapisan DSK
     unsigned long long hv = 0, seq = 0; UINT W = 0, H = 0; is >> hv >> W >> H >> seq;
+    if (c == "stex") L.opaque = true;
     if (L.pend) ackHandle(lid, L.pend, L.pendSeq); // frame lama yang belum sempat disalin: lewati, kembalikan
     L.pend = (HANDLE)(uintptr_t)hv; L.pendSeq = seq; L.pW = W; L.pH = H;
   } else if (c == "ureset") {
@@ -1801,7 +1807,7 @@ static void applyRect(Bus& b, int x, int y, int w, int h, bool vis) {
 static bool readPixel(Bus& b, UINT x, UINT y, int rgb[3]);
 static void command(const std::string& line, const std::vector<uint8_t>& data = {}) {
   std::istringstream is(line); std::string c; is >> c;
-  if (c == "utex" || c == "ulay" || c == "uclear" || c == "ureset" || c == "utk" || c == "ublob" || c == "utkgeo" || c == "utklive") { utcCommand(c, is, data); return; }
+  if (c == "utex" || c == "stex" || c == "ulay" || c == "uclear" || c == "ureset" || c == "utk" || c == "ublob" || c == "utkgeo" || c == "utklive") { utcCommand(c, is, data); return; }
   if (c == "cam" || c == "camtest" || c == "camoff" || c == "camexp" || c == "crel" || c == "camlist") { camCommand(c, is); return; }
   if (c == "kenc") {
     std::string id; int key = 0; long long ts = 0; size_t n = 0; is >> id >> key >> ts >> n;
@@ -2102,6 +2108,12 @@ static int selftest(bool warp) {
       chk(g_pgm, 50, 250, 255, 128, 128, 3, "Running text dilepas (kembali ke halaman)");
       command("ulay -"); run(2);
       chk(g_pgm, 100, 100, 255, 0, 0, 2, "UTC disembunyikan");
+      { // tekstur bersama sebagai SUMBER biasa (Web Browser offscreen): alpha diabaikan → abu buram
+        HANDLE h2 = nullptr; ComPtr<IDXGIResource1> r2; if (SUCCEEDED(sh.As(&r2))) r2->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &h2);
+        char c3[128]; snprintf(c3, sizeof c3, "stex wb %llu %u %u 9", (unsigned long long)(uintptr_t)h2, W, H); command(c3); command("pgm wb"); run(3);
+        chk(g_pgm, 100, 100, 128, 128, 128, 3, "Tekstur bersama sebagai sumber (Web Browser offscreen)");
+        command("pgm a"); run(1);
+      }
     }
   }
   // ---- Fase 3: kamera (pola uji) → monitor native + ekspor tekstur bersama ke KLM

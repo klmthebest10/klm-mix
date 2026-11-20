@@ -38,6 +38,7 @@
   // Fase 2: grafis UTC
   let utcWant = false, ulaySent = null, utcErr = '';
   const uready = new Set();
+  const wready = new Set(); // sumber tekstur offscreen (Web Browser) yang sudah sampai di mesin native
   const cmd = (l) => { if (running) window.klm.send('nengine:cmd', l); };
   const nid = (inp) => 'i' + String(inp.id).replace(/[^\w.-]/g, '_').slice(0, 60);
 
@@ -67,6 +68,7 @@
     if (inp.type === 'bars') return 'bars';
     if (inp.type === 'camera') { const c = inp.rt.ncam && cams.get(inp.rt.ncam); return c && c.frames > 0 ? 'cam' : null; }
     if (MEDIA_TYPES.has(inp.type)) { const id = mediaIdOf(inp), m = id && media.get(id); return m && m.ok ? 'media' : null; }
+    if (inp.type === 'browser' && inp.rt.osr) return inp.rt.winId && wready.has('w' + inp.rt.winId) ? 'media' : null; // offscreen: tekstur GPU langsung
     if (inp.type === 'browser' || inp.type === 'title') { const m = media.get(nid(inp)); return m && m.ok ? 'media' : null; }
     if (inp.type === 'screen' && /^window:\d+/.test((inp.opts || {}).sourceId || '')) { const m = media.get(nid(inp)); return m && m.ok ? 'media' : null; }
     if (inp.type === 'klmcam') { const k = kcams.get(kidOf(inp)); return k && k.ok && !k.err && Date.now() - k.last < 3000 ? 'cam' : null; }
@@ -81,7 +83,7 @@
   const label = (inp) => (inp ? (KM.inputTypes[inp.type] && KM.inputTypes[inp.type].label) || inp.type : '');
 
   // ---------- apakah monitor bisa ditampilkan native sekarang ----------
-  const rawEid = (i) => (i.type === 'camera' && i.rt.ncam ? i.rt.ncam : i.type === 'klmcam' ? kidOf(i) : MEDIA_TYPES.has(i.type) ? (mediaIdOf(i) || nid(i)) : nid(i));
+  const rawEid = (i) => (i.type === 'browser' && i.rt.osr ? 'w' + i.rt.winId : i.type === 'camera' && i.rt.ncam ? i.rt.ncam : i.type === 'klmcam' ? kidOf(i) : MEDIA_TYPES.has(i.type) ? (mediaIdOf(i) || nid(i)) : nid(i));
   const eidOf = (i) => (hasLayers(i) ? 'C' + nid(i) : rawEid(i));
   // ---- komposisi berlapis (Fase 7): Virtual Set & input dengan kotak PiP
   const comps = new Map(); // id komposisi → string perintah terakhir
@@ -286,7 +288,7 @@
       if (cm) for (const part of cm[1].split(',')) { const [id, f] = part.split(':'); const k = kcams.get(id); if (k) { if (+f !== k.n) k.last = Date.now(); k.n = +f; } } }
     else if (t === 'probe') { const f = probeWait.shift(); if (f) f(rest.split(' ').map(Number)); }
     else if (t === 'click') clickFwd(rest.split(' '));
-    else if (t === 'uready') uready.add(rest);
+    else if (t === 'uready') { uready.add(rest); if (rest[0] === 'w') wready.add(rest); }
     else if (t === 'camok' || t === 'camerr') camEv(t, rest);
     else if (t === 'kok' || t === 'kerr' || t === 'kneedkey') kEv(t, rest);
     else if (t === 'ostarted' || t === 'oerr' || t === 'ostopped') oEv(t, rest);
@@ -295,7 +297,7 @@
     else if (t === 'uerr') { utcErr = rest.replace(/^\S+ /, '').slice(0, 80); KM.log && KM.log('mesin native UTC: ' + rest); }
     else if (t === 'exit' || t === 'restart') { if (t === 'exit') N.restarts = (N.restarts || 0) + 1; for (const x of outs.values()) { x.err = 'mesin native berhenti'; if (x.wait) x.wait.rej(new Error(x.err)); if (x.stopWait) x.stopWait(); else if (x.onEnd) x.onEnd(x); } outs.clear(); audStop(); ready = false; N.pvw = N.pgm = false; N.state = t === 'exit' ? 'berhenti' : 'memulai ulang'; resetSent(); camLost(); KM.changed('nengine'); }
   }
-  function resetSent() { comps.clear(); labels.clear(); ovlSent = ''; for (const [id, m] of media) if (m.aud) pcmStop(m.owner, id); media.clear(); avSent = null; srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; uready.clear(); ulaySent = null; if (utcWant) { utcWant = false; if (el()) window.klm.send('nengine:utc', false); } for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
+  function resetSent() { wready.clear(); comps.clear(); labels.clear(); ovlSent = ''; for (const [id, m] of media) if (m.aud) pcmStop(m.owner, id); media.clear(); avSent = null; srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; uready.clear(); ulaySent = null; if (utcWant) { utcWant = false; if (el()) window.klm.send('nengine:utc', false); } for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
   // klik di jendela native diteruskan ke kanvas di bawahnya (pilih kotak grid, klik kanan menu monitor, dll.)
   function clickFwd(a) {
     const cv = document.getElementById(a[0]); if (!cv) return;
@@ -370,7 +372,7 @@
   function extraEntries(inp) { // Web Browser, jendela, Title, latar/depan Virtual Set
     const o = inp.opts || {}, rt = inp.rt;
     if (inp.type === 'browser') {
-      if (!rt.winId) return [];
+      if (!rt.winId || rt.osr) return [];
       if (!hwnds.has(rt.winId)) { hwnds.set(rt.winId, null); window.klm.invoke('browser:hwnd', rt.winId).then((h) => hwnds.set(rt.winId, h || false)).catch(() => hwnds.set(rt.winId, false)); }
       const h = hwnds.get(rt.winId); return h ? [{ id: nid(inp), kind: 'window', src: String(h) }] : [];
     }
@@ -653,6 +655,16 @@ onrtctransform = (ev) => {
     let vf; try { vf = imp.getVideoFrame(); } catch (e) { try { imp.release(); } catch (x) {} return; }
     camFree(c); c.cur = { imp, vf }; c.frames++;
     if (c.frames === 1) KM.changed('input');
+  };
+  // Web Browser offscreen: frame GPU untuk mixer (mesin native menerima tekstur yang sama langsung dari proses utama)
+  N.osrWanted = () => el() && KM.settings.nativeEngine === true;
+  N.osrFrame = function (imp, id, meta) {
+    const inp = KM.state.inputs.find((i) => i.type === 'browser' && i.rt.osr && String(i.rt.winId) === String(id));
+    if (!inp) { try { imp.release(); } catch (e) {} return; }
+    let vf; try { vf = imp.getVideoFrame(); } catch (e) { try { imp.release(); } catch (x) {} return; }
+    const old = inp.rt.osrF; inp.rt.osrF = { imp, vf };
+    if (old) { try { old.vf.close(); } catch (e) {} try { old.imp.release(); } catch (e) {} }
+    if (!old) KM.changed('input');
   };
   N.camSrc = (id) => { const c = cams.get(id); return c && c.cur ? { src: c.cur.vf, w: c.cur.vf.displayWidth, h: c.cur.vf.displayHeight } : null; };
   N.camErr = (id) => { const c = cams.get(id); return c ? c.err : ''; };

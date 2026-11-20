@@ -340,7 +340,44 @@ ipcMain.handle('server:set', (e, cfg) => { server.saveConfig(Object.assign(serve
 ipcMain.handle('app:relaunch', () => { app.relaunch(); app.exit(0); });
 
 // ---- Input "Web Browser" (jendela tersembunyi yang di-capture) ----
-ipcMain.handle('browser:open', async (e, { url, width, height, visible }) => {
+// Web Browser offscreen (mesin video native): halaman dirender di GPU tanpa jendela, tekstur yang sama dikirim ke mesin native
+// (sumber "w<id>") dan ke mixer (VideoFrame "osr:<id>") — tanpa tangkap layar
+const osrFly = new Map();
+function osrPaint(id, tex) {
+  const { sharedTexture } = require('electron');
+  const hold = { tex, n: 1 }, unref = (h) => { if (h && --h.n <= 0 && h.tex) { const t = h.tex; h.tex = null; try { t.release(); } catch (er) {} } };
+  const cs = (tex.textureInfo && tex.textureInfo.codedSize) || {}, meta = { W: cs.width | 0, H: cs.height | 0 };
+  if (nEngine.ready && nEngine.ready()) { hold.n++; try { nEngine.extPush('w' + id, hold, meta, unref); } catch (er) { unref(hold); } }
+  osrSend(id, hold, meta, unref);
+}
+function osrSend(id, hold, meta, unref) {
+  const { sharedTexture } = require('electron');
+  const fr = mainWin && !mainWin.isDestroyed() ? mainWin.webContents.mainFrame : null;
+  if (!fr || !sharedTexture || !sharedTexture.importSharedTexture) { unref(hold); return; }
+  const f = osrFly.get(id);
+  if (f) { if (f.pend) f.pend.unref(f.pend.hold); f.pend = { hold, meta, unref }; return; } // satu kiriman per halaman; yang menunggu hanya frame terbaru
+  let imp;
+  try { imp = sharedTexture.importSharedTexture({ textureInfo: hold.tex.textureInfo, allReferencesReleased: () => unref(hold) }); } catch (er) { unref(hold); return; }
+  const st = { pend: null }; osrFly.set(id, st);
+  sharedTexture.sendSharedTexture({ frame: fr, importedSharedTexture: imp }, 'osr:' + id, meta).catch(() => {}).finally(() => {
+    try { imp.release(); } catch (er) {}
+    if (osrFly.get(id) === st) osrFly.delete(id);
+    if (st.pend && st.pend.hold.tex) osrSend(id, st.pend.hold, st.pend.meta, st.pend.unref); else if (st.pend) st.pend.unref(st.pend.hold);
+  });
+}
+ipcMain.handle('browser:open', async (e, { url, width, height, visible, osr }) => {
+  if (osr) {
+    const w = new BrowserWindow({ show: false, width: width || 1280, height: height || 720, useContentSize: true, frame: false, skipTaskbar: true,
+      webPreferences: { offscreen: { useSharedTexture: true }, backgroundThrottling: false, contextIsolation: true } });
+    w.webContents.setAudioMuted(true);
+    w.webContents.setFrameRate(30);
+    const id = w.id;
+    w.webContents.on('paint', (ev) => { const t = ev && ev.texture; if (t) osrPaint(id, t); });
+    browsers.set(id, w); w.on('closed', () => { browsers.delete(id); osrFly.delete(id); });
+    await w.loadURL(url).catch(() => {});
+    w.webContents.invalidate();
+    return { winId: id, osr: true };
+  }
   const w = new BrowserWindow({
     width: width || 1280, height: height || 720, useContentSize: true,
     x: visible ? 100 : -(width || 1280) - 200, y: visible ? 100 : 0,
@@ -359,6 +396,7 @@ ipcMain.handle('browser:navigate', async (e, id, url) => { const w = browsers.ge
 ipcMain.handle('browser:reload', (e, id) => { const w = browsers.get(id); if (w) w.reload(); return !!w; });
 ipcMain.handle('browser:show', (e, id, show) => {
   const w = browsers.get(id); if (!w) return false;
+  if (w.webContents.isOffscreen && w.webContents.isOffscreen()) return 'osr'; // halaman offscreen tidak punya jendela untuk diklik
   const [bw] = w.getSize();
   if (show) { w.setPosition(100, 100); w.setSkipTaskbar(false); w.setFocusable(true); w.focus(); }
   else { w.setPosition(-bw - 200, 0); w.setSkipTaskbar(true); w.setFocusable(false); }

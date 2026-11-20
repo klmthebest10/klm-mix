@@ -78,7 +78,7 @@ function setup({ win, log = () => {} }) {
   const tkCache = new Map();  // lapisan → { strip, geo } (dikirim ulang saat mesin / UTC native dinyalakan)
   const lay = (id) => { let x = ul.get(id); if (!x) { x = { fly: null, pend: null, seq: 0 }; ul.set(id, x); } return x; };
   function dropUtc() { for (const x of ul.values()) { if (x.fly) { x.fly.unref(x.fly.h); x.fly = null; } if (x.pend) { x.pend.unref(x.pend.h); x.pend = null; } } }
-  function sendTex(id, x, h, meta, unref) {
+  function sendTex(id, x, h, meta, unref, cmdName) {
     const k = k32(), src = ntHandleOf(h.tex && h.tex.textureInfo);
     if (!k || !hProc || !src || !P) { unref(h); return; }
     const out = [0];
@@ -86,8 +86,8 @@ function setup({ win, log = () => {} }) {
       unref(h); if (!utcErr) { utcErr = 'DuplicateHandle gagal'; toWin('uerr - DuplicateHandle gagal'); } return;
     }
     const seq = ++x.seq;
-    x.fly = { seq, h, unref, t: Date.now() };
-    write('utex ' + id + ' ' + String(out[0]) + ' ' + (meta.W | 0) + ' ' + (meta.H | 0) + ' ' + seq);
+    x.fly = { seq, h, unref, t: Date.now() }; x.cmd = cmdName || 'utex';
+    write(x.cmd + ' ' + id + ' ' + String(out[0]) + ' ' + (meta.W | 0) + ' ' + (meta.H | 0) + ' ' + seq);
   }
   // dipanggil utc-osr.js untuk tiap gambar lapisan GPU; h = penampung tekstur ber-refcount, unref(h) wajib dipanggil
   function utcPush(id, h, meta, unref) {
@@ -101,7 +101,15 @@ function setup({ win, log = () => {} }) {
     const x = ul.get(id); if (!x || !x.fly || x.fly.seq !== seq) return;
     x.fly.unref(x.fly.h); x.fly = null;
     const p = x.pend; x.pend = null;
-    if (p) { if (utcOn && P) sendTex(id, x, p.h, p.meta, p.unref); else p.unref(p.h); }
+    if (p) { if ((utcOn || x.cmd === 'stex') && P) sendTex(id, x, p.h, p.meta, p.unref, x.cmd); else p.unref(p.h); }
+  }
+  // sumber tekstur GPU lain (Web Browser offscreen) → mesin native sebagai sumber biasa
+  function extPush(id, h, meta, unref) {
+    if (!P || st.state !== 'ready') { unref(h); return; }
+    const x = lay(id);
+    if (x.fly && Date.now() - x.fly.t > 1000) { x.fly.unref(x.fly.h); x.fly = null; }
+    if (x.fly) { if (x.pend) x.pend.unref(x.pend.h); x.pend = { h, meta, unref }; return; }
+    sendTex(id, x, h, meta, unref, 'stex');
   }
   // running text native: pesan dari halaman overlay ({k:'strip'|'geo'|'live'|'reset'})
   const num = (v) => (Number.isFinite(+v) ? +(+v).toFixed(3) : 0);
@@ -272,7 +280,8 @@ function setup({ win, log = () => {} }) {
     // dipakai utc-osr.js
     utcWants: () => utcOn && !!P && st.state === 'ready', utcPush, utcTk, onUtcWant: (fn) => { onUtcWant = fn; },
     // dipakai hub.js (streaming output native): terima potongan MPEG-TS dari mesin
-    tsTap: (fn) => { tsTaps.add(fn); return () => tsTaps.delete(fn); }
+    tsTap: (fn) => { tsTaps.add(fn); return () => tsTaps.delete(fn); },
+    extPush, ready: () => !!P && st.state === 'ready'
   };
 }
 

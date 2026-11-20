@@ -353,6 +353,13 @@
     async create(inp) {
       inp.opts = Object.assign({ url: 'https://www.google.com', width: 1280, height: 720 }, inp.opts);
       if (!KM.isElectron) { inp.rt.err = 'Hanya di versi PC (.exe)'; return; }
+      // mesin video native menyala: halaman dirender offscreen di GPU (tanpa tangkap layar) → mesin native & mixer
+      if (KM.nengine && KM.nengine.osrWanted && KM.nengine.osrWanted()) {
+        try {
+          const r = await window.klm.invoke('browser:open', { url: inp.opts.url, width: inp.opts.width, height: inp.opts.height, osr: true });
+          inp.rt.winId = r.winId; inp.rt.osr = true; inp.rt.ready = true; KM.changed('input'); return;
+        } catch (e) { console.warn('browser offscreen gagal, pakai jalur biasa', e); }
+      }
       try {
         const r = await window.klm.invoke('browser:open', { url: inp.opts.url, width: inp.opts.width, height: inp.opts.height });
         inp.rt.winId = r.winId;
@@ -361,8 +368,8 @@
         inp.rt.stream = st; inp.rt.el = streamVideo(st); inp.rt.ready = true; KM.changed('input');
       } catch (e) { inp.rt.err = 'Browser gagal: ' + e.message; KM.changed('input'); }
     },
-    destroy(inp) { if (inp.rt.winId) window.klm.invoke('browser:close', inp.rt.winId); },
-    source: (inp) => vSrc(inp) || placeholder(inp, '🌐 ' + inp.title, inp.rt.err || 'Memuat halaman…')
+    destroy(inp) { if (inp.rt.winId) window.klm.invoke('browser:close', inp.rt.winId); if (inp.rt.osrF) { try { inp.rt.osrF.vf.close(); inp.rt.osrF.imp.release(); } catch (e) {} inp.rt.osrF = null; } },
+    source: (inp) => (inp.rt.osr ? (inp.rt.osrF ? { src: inp.rt.osrF.vf, w: inp.rt.osrF.vf.displayWidth, h: inp.rt.osrF.vf.displayHeight } : placeholder(inp, '🌐 ' + inp.title, 'Memuat halaman…')) : vSrc(inp) || placeholder(inp, '🌐 ' + inp.title, inp.rt.err || 'Memuat halaman…'))
   };
 
   T.replay = {
