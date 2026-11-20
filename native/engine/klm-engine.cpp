@@ -1592,9 +1592,10 @@ static int selftest(bool warp) {
     if (th == INVALID_HANDLE_VALUE || !oStart("o2", true, 640, 360, 30, 2000, 128, true, "", th)) { emit("  GAGAL output MPEG-TS tidak mulai"); ok = 0; }
     else {
       realtime(60); oStop("o2");
-      unsigned char b0 = 0; HANDLE rh = CreateFileW(tsf.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr); DWORD rd2 = 0;
-      if (rh != INVALID_HANDLE_VALUE) { ReadFile(rh, &b0, 1, &rd2, nullptr); CloseHandle(rh); }
-      emit("  %s MPEG-TS diawali byte sinkron 0x47 (0x%02x)", b0 == 0x47 ? "OK " : "GAGAL", b0); if (b0 != 0x47) ok = 0;
+      unsigned char b5[5] = { 0 }; HANDLE rh = CreateFileW(tsf.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr); DWORD rd2 = 0;
+      if (rh != INVALID_HANDLE_VALUE) { ReadFile(rh, b5, 5, &rd2, nullptr); CloseHandle(rh); }
+      bool sync = b5[0] == 0x47 || b5[4] == 0x47; // TS 188 byte, atau M2TS 192 byte (4 byte kode waktu di depan)
+      emit("  %s MPEG-TS punya byte sinkron 0x47 (%s)", sync ? "OK " : "GAGAL", b5[0] == 0x47 ? "TS 188" : b5[4] == 0x47 ? "M2TS 192" : "tidak ada"); if (!sync) ok = 0;
       verify(tsf, "streaming MPEG-TS native", 30);
     }
     command("camoff c9"); command("pgm a"); command("out 1920 1080 30"); run(2);

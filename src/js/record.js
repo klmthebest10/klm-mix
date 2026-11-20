@@ -43,8 +43,23 @@
   }
 
   // ---------- REKAM ----------
+  // output native (mesin video native): Program dikodekan langsung di GPU, kanvas Program JS tidak perlu dicat
+  const nativeOk = () => !!(KM.nengine && KM.nengine.outWhy && KM.isElectron && KM.nengine.outWhy() === '');
   R.startRecording = async function () {
     if (S.recording) return true;
+    if (nativeOk()) {
+      try {
+        const name = 'KLM-' + KM.stamp() + '.mp4', folder = await KM.defaultFolder('rec'), path = KM.joinPath(folder, name);
+        const x = await KM.nengine.outStart('file', { path, vk: KM.settings.recVideoKbps * R.fpsScale(), ak: KM.settings.recAudioKbps, bus: { A: 'A', B: 'B' }[KM.settings.recSource] || 'M' });
+        x.path = path;
+        x.onEnd = (y) => { if (R.recNative !== y.id) return; R.recNative = null; S.recording = false; KM.toast('Rekaman native berhenti' + (y.err ? ': ' + y.err : '') + ' — tersimpan: ' + path, y.err ? 'warn' : 'ok', 7000); R.lastRecording = path; KM.changed('rec'); };
+        R.recNative = x.id; R.recT0 = Date.now(); S.recording = true;
+        R.recDone = new Promise((r) => { R.recDoneRes = r; });
+        KM.toast('● Merekam (mesin native, ' + (x.hw ? 'GPU ' : '') + (x.enc || 'H.264') + ') ke ' + name, 'rec');
+        KM.changed('rec');
+        return true;
+      } catch (e) { KM.toast('Rekam native gagal (' + e.message + ') — memakai perekam biasa', 'warn', 6000); }
+    }
     const mime = pickMime(KM.settings.recFormat);
     if (!mime) { KM.toast('Browser tidak mendukung perekaman', 'err'); return false; }
     const name = 'KLM-' + KM.stamp() + '.' + ext(mime);
@@ -62,6 +77,11 @@
   };
   R.stopRecording = function () {
     if (!S.recording) return true;
+    if (R.recNative) {
+      const id = R.recNative, x = KM.nengine.outs.get(id), path = x && x.path; R.recNative = null; S.recording = false; KM.changed('rec');
+      KM.nengine.outStop(id).then((y) => { KM.toast('Rekaman tersimpan: ' + path + (y && y.frames ? ' (' + y.frames + ' frame' + (y.skipped ? ', ' + y.skipped + ' terlewat' : '') + ')' : ''), 'ok', 5000); R.lastRecording = path; KM.changed('rec'); if (R.recDoneRes) R.recDoneRes(path); });
+      return true;
+    }
     try { R.recorder.stop(); } catch (e) {}
     R.recorder = null; S.recording = false; KM.changed('rec');
     return true;
@@ -121,6 +141,28 @@
       dests = sc.destinations.filter((d) => d.enabled && (d.url || '').trim()).map((d) => ({ enabled: true, url: joinKey(d.url.trim(), (d.key || '').trim()) }));
       if (!dests.length) { KM.toast('Isi URL & stream key dulu di Pengaturan Streaming', 'warn'); KM.ui && KM.ui.openSettings('stream'); return false; }
     }
+    if (nativeOk()) { // output native: MPEG-TS H.264+AAC dari mesin native → ffmpeg -c copy
+      const cfgN = { encoder: 'copy', inputFormat: 'mpegts', videoBitrate: sc.videoBitrate, audioBitrate: sc.audioBitrate, fps: KM.settings.fps, destinations: dests };
+      let rN = null, xN = null;
+      try {
+        rN = await openHubOut('stream', { cfg: cfgN, native: true }, (m) => {
+          if (m.t === 'stats') { R.stats = m; KM.emit('stream-stats', m); }
+          else if (m.t === 'log') { R.log = ((R.log || '') + m.msg).slice(-6000); KM.emit('stream-log', m.msg); }
+          else if ((m.t === 'ended' || m.t === 'closed') && S.streaming && R.streamNative) { KM.toast('Streaming terputus. Cek internet / stream key (lihat log di Pengaturan > Streaming).', 'err', 7000); R.stopStreaming(true); }
+        });
+        if (!rN.ok) throw new Error(rN.msg || 'hub');
+        xN = await KM.nengine.outStart('ts', { vk: sc.videoBitrate, ak: sc.audioBitrate, cbr: true, bus: 'M' });
+        xN.onEnd = (y) => { if (R.streamNative === y.id && S.streaming) { KM.toast('Output native berhenti' + (y.err ? ': ' + y.err : ''), 'err', 7000); R.stopStreaming(true); } };
+        S.streaming = true; R.streamWs = rN.ws; R.streamNative = xN.id; R.streamer = null;
+        R.streamT0 = Date.now(); R.streamEncoder = 'native';
+        KM.toast('● LIVE — streaming dimulai (mesin native, ' + (xN.hw ? 'GPU ' : '') + (xN.enc || 'H.264') + ')', 'rec', 4000);
+        KM.changed('stream');
+        return true;
+      } catch (e) {
+        try { rN && rN.ws && rN.ws.close(); } catch (x) {}
+        KM.toast('Streaming native gagal (' + e.message + ') — memakai jalur biasa', 'warn', 6000);
+      }
+    }
     const h264 = H264_WEBM.find((m) => MediaRecorder.isTypeSupported(m));
     const mime = h264 || 'video/webm;codecs=vp8,opus';
     let encoder = sc.encoder || 'auto';
@@ -154,7 +196,8 @@
   R.stopStreaming = async function (silent) {
     if (!S.streaming) return true;
     S.streaming = false;
-    try { R.streamer.stop(); } catch (e) {}
+    if (R.streamNative) { const id = R.streamNative; R.streamNative = null; KM.nengine.outStop(id); }
+    try { R.streamer && R.streamer.stop(); } catch (e) {}
     setTimeout(() => { try { R.streamWs && R.streamWs.close(); } catch (e) {} R.streamWs = null; }, 400);
     R.streamer = null; R.stats = null;
     if (KM.live) R.liveEnd = KM.live.finish(); // akhiri siaran YouTube/Facebook yang dibuat lewat API

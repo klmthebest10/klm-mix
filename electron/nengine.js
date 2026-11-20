@@ -16,7 +16,7 @@ function findExe() {
   return c.find((p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }) || '';
 }
 // hanya perintah yang dikenal mesin, tanpa baris baru / karakter kendali (perintah utex/utk/ublob hanya dari proses utama)
-const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff)( [\w.,\- ]{0,600})?$/;
+const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff|ostart|ostop)( [\w.,\- ]{0,2000})?$/;
 
 // DuplicateHandle (kernel32) lewat koffi: handle NT tekstur lapisan UTC → disalin ke proses klm-engine
 let K = null;
@@ -38,6 +38,7 @@ function k32() {
 const ntHandleOf = (ti) => { const b = (ti && ti.handle && ti.handle.ntHandle) || (ti && ti.sharedTextureHandle); return b && b.length >= 8 ? b.readBigUInt64LE(0) : b && b.length >= 4 ? BigInt(b.readUInt32LE(0)) : 0n; };
 
 function setup({ win, log = () => {} }) {
+  const tsTaps = new Set(); // penerima aliran MPEG-TS (hub streaming)
   // ---- Fase 3: kamera native → tekstur bersama → mixer (VideoFrame, tanpa salinan CPU) ----
   const sharedTexture = require('electron').sharedTexture;
   const camBuf = new Map(); // "id/gen/slot" → { h (handle di proses ini), buf, w, h }
@@ -148,8 +149,10 @@ function setup({ win, log = () => {} }) {
     const exe = findExe();
     if (!exe) { st = { state: 'error', msg: process.platform === 'win32' ? 'klm-engine.exe tidak ada di instalasi ini' : 'khusus Windows' }; return st; }
     st = { state: 'starting' };
-    const p = spawn(exe, [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    // fd 3 = keluaran MPEG-TS output native (streaming) → diteruskan ke ffmpeg (-c copy)
+    const p = spawn(exe, [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
     P = p; buf = '';
+    if (p.stdio[3]) { p.stdio[3].on('data', (b) => { for (const f of tsTaps) { try { f(b); } catch (e) {} } }); p.stdio[3].on('error', () => {}); }
     p.stdout.setEncoding('utf8');
     p.stdout.on('data', (d) => {
       buf += d; let i;
@@ -186,6 +189,13 @@ function setup({ win, log = () => {} }) {
   ipcMain.handle('nengine:stop', () => { stop(); return true; });
   ipcMain.handle('nengine:status', () => Object.assign({ available: !!findExe(), utc: utcOn, utcErr, koffi: !!k32() }, st));
   ipcMain.on('nengine:utc', (e, on) => setUtc(on));
+  // Fase 4b: audio Program (PCM s16le stereo 48 kHz) untuk output native
+  ipcMain.on('nengine:aud', (e, data) => {
+    if (!P || st.state !== 'ready' || !P.stdin.writable) return;
+    const b = Buffer.isBuffer(data) ? data : data instanceof ArrayBuffer ? Buffer.from(data) : ArrayBuffer.isView(data) ? Buffer.from(data.buffer, data.byteOffset, data.byteLength) : null;
+    if (!b || !b.length || b.length > 1024 * 1024 || P.stdin.writableLength > 32 * 1024 * 1024) return;
+    P.stdin.write('aud ' + b.length + '\n'); P.stdin.write(b);
+  });
   // Fase 4a: frame H.264 KLMCAM (dari WebRTC di mixer) → dekoder GPU mesin native
   ipcMain.on('nengine:kenc', (e, id, key, n, data) => {
     if (!P || st.state !== 'ready' || !P.stdin.writable || !/^\w{1,40}$/.test(String(id))) return;
@@ -214,7 +224,9 @@ function setup({ win, log = () => {} }) {
   return {
     start, stop, status: () => st, available: () => !!findExe(),
     // dipakai utc-osr.js
-    utcWants: () => utcOn && !!P && st.state === 'ready', utcPush, utcTk, onUtcWant: (fn) => { onUtcWant = fn; }
+    utcWants: () => utcOn && !!P && st.state === 'ready', utcPush, utcTk, onUtcWant: (fn) => { onUtcWant = fn; },
+    // dipakai hub.js (streaming output native): terima potongan MPEG-TS dari mesin
+    tsTap: (fn) => { tsTaps.add(fn); return () => tsTaps.delete(fn); }
   };
 }
 

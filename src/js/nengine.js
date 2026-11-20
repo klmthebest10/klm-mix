@@ -23,6 +23,7 @@
   if (KM.settings.nativeEngine == null) KM.settings.nativeEngine = false;
   if (KM.settings.nativeCam == null) KM.settings.nativeCam = true; // berlaku hanya bila mesin native menyala
   if (KM.settings.nativeKlmcam == null) KM.settings.nativeKlmcam = true;
+  if (KM.settings.nativeOut == null) KM.settings.nativeOut = true; // rekam/streaming lewat mesin native bila semua sumber didukung
 
   let running = false, ready = false, frameN = 0;
   const srcSent = new Map();   // id native → spesifikasi terakhir
@@ -150,6 +151,7 @@
     const ids = utcWant ? U.dskIds() : [];
     if (utcWant) { const l = ids.join(',') || '-'; if (l !== ulaySent) { ulaySent = l; cmd('ulay ' + l); } }
     const pgWhy = base || utcWhy(U && U.dskIds ? (utcWant ? ids : U.dskIds()) : []);
+    if (outs.size) { const w = base || utcWhy(ids); if (w && w !== 'menunggu grafis UTC' && w !== warnedWhy) { warnedWhy = w; KM.toast('⚠ Output native: ' + w + ' — bagian itu tidak ikut terekam/tersiar', 'warn', 8000); } if (!w) warnedWhy = ''; }
     const pg = idOf(S.programId), pv = idOf(S.previewId);
     if (!tr && pg !== bus.pgm.id) { bus.pgm.id = pg; cmd('pgm ' + pg); }
     if (pv !== bus.pvw.id) { bus.pvw.id = pv; cmd('pvw ' + pv); }
@@ -190,8 +192,9 @@
     else if (t === 'uready') uready.add(rest);
     else if (t === 'camok' || t === 'camerr') camEv(t, rest);
     else if (t === 'kok' || t === 'kerr' || t === 'kneedkey') kEv(t, rest);
+    else if (t === 'ostarted' || t === 'oerr' || t === 'ostopped') oEv(t, rest);
     else if (t === 'uerr') { utcErr = rest.replace(/^\S+ /, '').slice(0, 80); KM.log && KM.log('mesin native UTC: ' + rest); }
-    else if (t === 'exit' || t === 'restart') { ready = false; N.pvw = N.pgm = false; N.state = t === 'exit' ? 'berhenti' : 'memulai ulang'; resetSent(); camLost(); KM.changed('nengine'); }
+    else if (t === 'exit' || t === 'restart') { for (const x of outs.values()) { x.err = 'mesin native berhenti'; if (x.wait) x.wait.rej(new Error(x.err)); if (x.stopWait) x.stopWait(); else if (x.onEnd) x.onEnd(x); } outs.clear(); audStop(); ready = false; N.pvw = N.pgm = false; N.state = t === 'exit' ? 'berhenti' : 'memulai ulang'; resetSent(); camLost(); KM.changed('nengine'); }
   }
   function resetSent() { srcSent.clear(); out = ''; transKey = ''; tbarSent = ''; uready.clear(); ulaySent = null; if (utcWant) { utcWant = false; if (el()) window.klm.send('nengine:utc', false); } for (const k in bus) Object.assign(bus[k], { want: false, shown: false, hideAt: -1, rect: '', id: null }); N.pvw = N.pgm = false; }
   // klik di jendela native diteruskan ke kanvas di bawahnya (pilih kotak grid, klik kanan menu monitor, dll.)
@@ -204,6 +207,73 @@
     cv.dispatchEvent(new MouseEvent('mousedown', o)); cv.dispatchEvent(new MouseEvent('mouseup', o)); cv.dispatchEvent(new MouseEvent('click', o));
     if (dbl) cv.dispatchEvent(new MouseEvent('dblclick', o));
   }
+
+  // ---------- output native (Fase 4b): rekam & streaming dikodekan mesin native dari Program native ----------
+  const outs = new Map(); // oid → { kind, enc, hw, wait, stopWait, err, frames }
+  N.outs = outs;
+  let oSeq = 0, warnedWhy = '';
+  N.outWhy = function () {
+    if (!el() || !running || !ready) return 'mesin native mati';
+    if (KM.settings.nativeOut === false) return 'dimatikan di pengaturan';
+    const base = pgmBaseWhy(); if (base) return base;
+    for (const i of KM.state.inputs) {
+      if (N.relaxInputs && i.id !== KM.state.programId && i.id !== KM.state.previewId) continue; // (uji otomatis)
+      const t = KM.inputTypes[i.type]; if (!t || t.noVideo) continue;
+      if (KM.utc && ((KM.utc.input && KM.utc.input() === i) || (KM.utc.score && KM.utc.score.input && KM.utc.score.input() === i)) && i.id !== KM.state.programId) continue; // grafis UTC → lapisan DSK
+      if (!spec(i)) return 'input "' + i.title + '" (' + label(i) + ') belum didukung mesin native';
+    }
+    const U = KM.utc, ids = U && U.dskIds ? U.dskIds() : [];
+    const uw = utcWhy(ids); if (uw && uw !== 'menunggu grafis UTC') return uw;
+    return '';
+  };
+  N.outStart = function (kind, o) {
+    const id = 'o' + (++oSeq);
+    const st = KM.settings, W = st.width, H = st.height, F = st.fps;
+    const hx = o.path ? hexStr(o.path) : '-';
+    const x = { id, kind, err: '', frames: 0, bus: o.bus || 'M' };
+    outs.set(id, x);
+    cmd(['ostart', id, kind, W, H, F, Math.round(o.vk || 6000), Math.round(o.ak || 160), o.cbr ? 1 : 0, hx].join(' '));
+    return new Promise((res, rej) => {
+      const t = setTimeout(() => { outs.delete(id); rej(new Error('mesin native tidak menjawab')); }, 10000);
+      x.wait = { res: () => { clearTimeout(t); audStart(); res(x); }, rej: (e) => { clearTimeout(t); outs.delete(id); rej(e); } };
+    });
+  };
+  N.outStop = function (id) {
+    const x = outs.get(id); if (!x) return Promise.resolve(null);
+    cmd('ostop ' + id);
+    return new Promise((res) => { const t = setTimeout(() => { outs.delete(id); audCheck(); res(x); }, 20000); x.stopWait = () => { clearTimeout(t); res(x); }; });
+  };
+  function oEv(t, rest) {
+    const a = rest.split(' '), x = outs.get(a[0]); if (!x) return;
+    if (t === 'ostarted') { x.enc = a[1] === '-' ? '' : new TextDecoder().decode(new Uint8Array((a[1].match(/../g) || []).map((h) => parseInt(h, 16)))); x.hw = a[2] === '1'; x.cpu = a[3] === '1'; if (x.wait) x.wait.res(); x.wait = null; }
+    else if (t === 'oerr') { x.err = rest.slice(a[0].length + 1); if (x.wait) { x.wait.rej(new Error(x.err)); x.wait = null; } else KM.toast('Output native: ' + x.err, 'warn', 7000); }
+    else if (t === 'ostopped') { x.frames = +a[1] || 0; x.skipped = +a[2] || 0; outs.delete(a[0]); audCheck(); if (x.stopWait) x.stopWait(); else if (x.onEnd) x.onEnd(x); }
+  }
+  // audio Program → PCM s16le stereo 48 kHz → mesin native
+  let actx = null, anode = null, asrc = null, abuf = [], alen = 0, abus = '';
+  const AW = `class P extends AudioWorkletProcessor { process(inp) { const c = inp[0]; if (c && c.length) { const l = c[0], r = c[1] || c[0], o = new Int16Array(l.length * 2);
+    for (let i = 0; i < l.length; i++) { const a = Math.max(-1, Math.min(1, l[i])), b = Math.max(-1, Math.min(1, r[i])); o[i * 2] = a * 32767; o[i * 2 + 1] = b * 32767; }
+    this.port.postMessage(o, [o.buffer]); } return true; } } registerProcessor('klm-pcm', P);`;
+  async function audStart() {
+    const bus = [...outs.values()][0].bus || 'M';
+    if (actx && abus === bus) return;
+    audStop(); abus = bus;
+    try {
+      actx = new AudioContext({ sampleRate: 48000 });
+      await actx.audioWorklet.addModule(URL.createObjectURL(new Blob([AW], { type: 'text/javascript' })));
+      asrc = actx.createMediaStreamSource(KM.audio.streamOf(bus));
+      anode = new AudioWorkletNode(actx, 'klm-pcm', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 2, channelCountMode: 'explicit' });
+      const g = actx.createGain(); g.gain.value = 0;
+      asrc.connect(anode); anode.connect(g); g.connect(actx.destination);
+      anode.port.onmessage = (e) => {
+        abuf.push(e.data); alen += e.data.length;
+        if (alen >= 1920) { const o = new Int16Array(alen); let k = 0; for (const b of abuf) { o.set(b, k); k += b.length; } abuf = []; alen = 0; if (outs.size) window.klm.send('nengine:aud', o.buffer); }
+      };
+      if (actx.state !== 'running') actx.resume().catch(() => {});
+    } catch (e) { console.warn('audio output native', e); KM.toast('Audio output native gagal: ' + e.message + ' — rekaman tanpa suara', 'warn', 7000); }
+  }
+  function audStop() { try { asrc && asrc.disconnect(); anode && anode.disconnect(); } catch (e) {} try { actx && actx.close(); } catch (e) {} actx = anode = asrc = null; abuf = []; alen = 0; }
+  function audCheck() { if (!outs.size) audStop(); }
 
   // ---------- KLMCAM native (Fase 4a): frame H.264 terenkode → dekoder GPU mesin native ----------
   const kcams = new Map(); // id dekoder → { ok, err, w, h, dxva, last, codec, n }
@@ -345,6 +415,7 @@ onrtctransform = (ev) => {
     for (const k in bus) cmd('rect ' + k + ' 0 0 0 0 0');
     running = false; ready = false; N.state = 'off';
     camLost(); // kamera kembali dibuka jalur biasa
+    for (const x of outs.values()) { if (x.stopWait) x.stopWait(); else if (x.onEnd) x.onEnd(x); } outs.clear(); audStop();
     for (const k of kcams.values()) k.ok = false; kSync();
     window.klm.invoke('nengine:stop').catch(() => {});
     KM.changed('nengine');

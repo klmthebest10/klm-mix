@@ -480,7 +480,7 @@
     return movingInput(inp) || !!E.liveStream(inp) || !!KM.inputs.isPlaying(inp) || !!(inp.rt && inp.rt.anim) || compMoving(inp, 0);
   }
   /** output/rekam/monitor eksternal aktif → Program harus selalu digambar (frame keluar terus) */
-  E.outputBusy = () => !!(S.recording || S.streaming || S.ndiOut || S.multicorder || S.srt || S.externalOn || E.mvOn || (KM.replay && KM.replay.enabled));
+  E.outputBusy = () => !!((S.recording && !(KM.rec && KM.rec.recNative)) || (S.streaming && !(KM.rec && KM.rec.streamNative)) || S.ndiOut || S.multicorder || S.srt || S.externalOn || E.mvOn || (KM.replay && KM.replay.enabled));
   function previewMoving() {
     if (E.gridActive()) return E.gridIds().some((id) => feedMoving(KM.getInput(id)));
     return feedMoving(KM.getInput(S.previewId));

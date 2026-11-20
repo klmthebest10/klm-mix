@@ -234,7 +234,7 @@ function srtSession(cfg, tell) {
 // ====================== OUTPUT via WebSocket ======================
 const wssOut = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
 wssOut.on('connection', (ws) => {
-  let proc = null, kind = null, srt = null;
+  let proc = null, kind = null, srt = null, untap = null;
   const tell = (o) => { try { ws.send(JSON.stringify(o)); } catch (e) {} };
   ws.on('message', async (data, isBinary) => {
     if (!isBinary) {
@@ -252,7 +252,9 @@ wssOut.on('connection', (ws) => {
           if (x) tell({ t: 'stats', frame: +x[1] || 0, fps: +x[2] || +m.cfg.fps || 0, time: x[3], bitrate: x[4] === 'N/A' ? ((m.cfg.videoBitrate || 0) + (m.cfg.audioBitrate || 0)) + 'kbits/s' : x[4], speed: x[5] === 'N/A' ? '' : x[5] });
           if (!x || /failed|error|refused|denied|Slave/i.test(s)) tell({ t: 'log', msg: s.slice(0, 600) });
         });
-        proc.on('close', (code) => { tell({ t: 'ended', code }); proc = null; });
+        proc.on('close', (code) => { tell({ t: 'ended', code }); proc = null; if (untap) { untap(); untap = null; } });
+        // output native (mesin video native): MPEG-TS H.264+AAC dari klm-engine langsung ke ffmpeg, bukan dari WebSocket
+        if (m.native && nativeTap) untap = nativeTap((b) => { if (proc && proc.stdin.writable && proc.stdin.writableLength < 32e6) proc.stdin.write(b); });
         proc.on('error', (e) => tell({ t: 'error', msg: 'ffmpeg: ' + e.message }));
         tell({ t: 'started', args: args.join(' ').replace(/(rtmps?:\/\/[^\s|]*\/)[^\s|]+/g, '$1••••') });
       } else if (kind === 'srt') {
@@ -268,6 +270,7 @@ wssOut.on('connection', (ws) => {
     else if (kind === 'ndi') ndi.data(data);
   });
   ws.on('close', () => {
+    if (untap) { untap(); untap = null; }
     if (proc) { try { proc.stdin.end(); } catch (e) {} const p = proc; setTimeout(() => { try { p.kill('SIGKILL'); } catch (e) {} }, 4000); }
     if (kind === 'ndi') ndi.call({ cmd: 'send-stop' });
     if (srt) srt.stop();
@@ -309,4 +312,5 @@ function shutdown() {
   if (ndi.w) try { ndi.w.kill(); } catch (e) {}
 }
 
-module.exports = { handle, wssOut, ffmpegPath, setConfig: (fn) => { cfgFn = fn; }, shutdown };
+let nativeTap = null;
+module.exports = { handle, wssOut, ffmpegPath, setConfig: (fn) => { cfgFn = fn; }, shutdown, setNativeTap: (fn) => { nativeTap = fn; } };
