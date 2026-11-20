@@ -83,6 +83,10 @@
 //   segm <id> <w> <h> <n>                 + n byte mask orang 8-bit (dari model segmentasi KLM)
 //   trans <ms> <from> <to> [jenis] / tbar <v> <from> <to> [jenis]   jenis: fade merge wipe wipeup slide slideup fly zoom crosszoom circle barn cube dip dipwhite blur
 //   ftb <0..1>                            Fade To Black di atas semuanya (termasuk grafis UTC)
+// Fase 9 — stinger, grid Preview, latar AI native:
+//   trans <ms> <from> <to> stinger <sumber> <cut ms>   video stinger (sumber transparan) di atas, ganti sumber di titik cut
+//   ptex <id> <handle NT> <w> <h> <seq>  sumber tekstur bersama ber-alpha premultiplied (halaman video stinger offscreen)
+//   bsize <pvw|pgm> <w> <h>              ukuran gambar monitor (0 0 = output) — grid Preview memakai rasio panelnya
 //
 // Keluaran stdout (satu baris per kejadian): ready <adapter> | shown <bus> | hidden <bus> | click <bus> <x> <y> <btn> <dbl>
 //   | srcerr <id> <pesan> | srcok <id> <w> <h> | stats fps=.. ms=.. mem=.. utex=.. | err <pesan>
@@ -126,6 +130,8 @@
 #include <cstring>
 #include <deque>
 #include <map>
+#include <functional>
+#include <set>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -250,7 +256,7 @@ float gclip(float2 sp) {
   if (p8.x < 1.5) { float2 a = saturate(sp - p7.xy + 0.5) * saturate(p7.zw - sp + 0.5); return a.x * a.y; }
   return saturate(p7.z - length(sp - p7.xy) + 0.5);
 }
-float4 psLayer(O i) : SV_Target { float4 c = tx.Sample(sm, i.t); return float4(c.rgb, (p4.y > 0.5 ? 1 : c.a) * col.a * msk(lp(i)) * gclip(i.p.xy)); }
+float4 psLayer(O i) : SV_Target { float4 c = tx.Sample(sm, i.t); if (p2.w > 0.5) c.rgb /= max(c.a, 0.0001); return float4(c.rgb, (p4.y > 0.5 ? 1 : c.a) * col.a * msk(lp(i)) * gclip(i.p.xy)); }
 float4 psFill(O i) : SV_Target { return float4(col.rgb, col.a * msk(lp(i)) * gclip(i.p.xy)); }
 // efek (Fase 8) — rumus sama dengan effects.js (WebGL) agar hasil native = hasil mesin JS
 float2 chroma(float3 c) { return float2(-0.1687 * c.r - 0.3313 * c.g + 0.5 * c.b, 0.5 * c.r - 0.4187 * c.g - 0.0813 * c.b); }
@@ -262,7 +268,7 @@ float4 srcSample(float2 t) {
   return s / ws;
 }
 float4 psFx(O i) : SV_Target {
-  float4 s = srcSample(i.t); float3 c = s.rgb; float a = p4.y > 0.5 ? 1 : s.a;
+  float4 s = srcSample(i.t); if (p2.w > 0.5) s.rgb /= max(s.a, 0.0001); float3 c = s.rgb; float a = p4.y > 0.5 ? 1 : s.a;
   if (f4.x > 0.5) { float m = 0; [unroll] for (int y = -1; y <= 1; y++) [unroll] for (int x = -1; x <= 1; x++) m += mk.Sample(sm, i.t + float2(x, y) * f4.yz).r; a *= m / 9; }
   if (f1.y > 0.5) {
     float d = distance(chroma(c), chroma(f3.rgb)); a *= smoothstep(f1.z, f1.z + f1.w, d);
@@ -1012,14 +1018,15 @@ struct Bus {
   RECT r{}; bool want = false, shown = false; int presented = 0;
   ComPtr<ID3D11Texture2D> rt; ComPtr<ID3D11RenderTargetView> rtv; ComPtr<ID3D11ShaderResourceView> rtSrv;
   std::string id;
+  UINT cw = 0, ch = 0; // ukuran khusus (mode grid Preview: rasio panel monitor, bukan rasio output); 0 = ukuran output
 };
 static Bus g_pvw{ "pvw" }, g_pgm{ "pgm" };
 static HWND g_parent = nullptr;
 static UINT g_W = 1920, g_H = 1080, g_fps = 30;
-struct Trans { bool on = false, manual = false; double t0 = 0, dur = 0, k = 0; std::string from, to; int type = 0; } g_tr;
+struct Trans { bool on = false, manual = false; double t0 = 0, dur = 0, k = 0; std::string from, to; int type = 0; std::string sid; double cut = 500; } g_tr;
 // jenis transisi (= engine.js): 0 fade … 14 blur
-static const char* kTrNames[] = { "fade", "merge", "wipe", "wipeup", "slide", "slideup", "fly", "zoom", "crosszoom", "circle", "barn", "cube", "dip", "dipwhite", "blur" };
-static int trType(const std::string& s) { for (int i = 0; i < 15; i++) if (s == kTrNames[i]) return i; return 0; }
+static const char* kTrNames[] = { "fade", "merge", "wipe", "wipeup", "slide", "slideup", "fly", "zoom", "crosszoom", "circle", "barn", "cube", "dip", "dipwhite", "blur", "stinger" };
+static int trType(const std::string& s) { for (int i = 0; i < 16; i++) if (s == kTrNames[i]) return i; return 0; }
 static double g_ftb = 0; // Fade To Black (alpha hitam di atas semuanya)
 
 static LRESULT CALLBACK monProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
@@ -1117,15 +1124,15 @@ static Aff affR(double rad) { Aff r; r.a = std::cos(rad); r.b = -std::sin(rad); 
 static Aff affZoom(double z, double cx, double cy) { return affMul(affT(cx, cy), affMul(affS(z, z), affT(-cx, -cy))); } // = zoomTf di engine.js
 static Aff g_G;                       // transformasi global saat ini
 static int g_clipMode = 0; static float g_clipP[4] = { 0, 0, 0, 0 }; // klip global layar
-static void setCBX(const float dst[4], const float uv[4], const float col[4], const float p3[4], const float p4[4]) {
-  const float p2[4] = { 0, 0, 1, 0 };
+static void setCBX(const float dst[4], const float uv[4], const float col[4], const float p3[4], const float p4[4], bool pm = false) {
+  const float p2[4] = { 0, 0, 1, pm ? 1.f : 0.f };
   float p5[4] = { (float)g_G.a, (float)g_G.b, (float)g_G.tx, g_G.on ? 1.f : 0.f }, p6[4] = { (float)g_G.c, (float)g_G.d, (float)g_G.ty, 0 };
   float p8[4] = { (float)g_clipMode, (float)g_W, (float)g_H, 0 };
   setCB6(dst, uv, col, p2, p3, p4, p5, p6, g_clipP, p8);
 }
 // sumber "fit": rasio terjaga, di tengah (sama dengan posisi bawaan input KLM)
 // ---- sumber → kotak mana pun (Fase 7): fit / fill / stretch, zoom, geser, pangkas, cermin, klip bersudut bulat
-struct SrcView { ComPtr<ID3D11ShaderResourceView> srv; UINT w = 0, h = 0; bool opaque = false; };
+struct SrcView { ComPtr<ID3D11ShaderResourceView> srv; UINT w = 0, h = 0; bool opaque = false, pm = false; }; // pm = alpha premultiplied (video stinger transparan)
 struct Rc { double x = 0, y = 0, w = 0, h = 0; };
 struct Mask { bool on = false; Rc r; double rad = 0; };
 static bool ulSrv(const std::string& id, SrcView& v); // tekstur bersama dari KLM (didefinisikan di bagian UTC)
@@ -1147,11 +1154,11 @@ static bool getSrv(const std::string& id, SrcView& v) {
   v.srv = c.srv; v.w = c.w; v.h = c.h; v.opaque = true; return true;
 }
 static void ndcOf(const Rc& d, float dst[4]) { dst[0] = (float)(d.x / g_W * 2 - 1); dst[1] = (float)(1 - d.y / g_H * 2); dst[2] = (float)((d.x + d.w) / g_W * 2 - 1); dst[3] = (float)(1 - (d.y + d.h) / g_H * 2); }
-static void quadPx(const Rc& d, float u0, float v0, float u1, float v1, ID3D11ShaderResourceView* srv, float alpha, bool opaque, const Mask& m, double rot = 0) {
+static void quadPx(const Rc& d, float u0, float v0, float u1, float v1, ID3D11ShaderResourceView* srv, float alpha, bool opaque, const Mask& m, double rot = 0, bool pm = false) {
   float dst[4]; ndcOf(d, dst);
   float uv[4] = { u0, v0, u1, v1 }, col[4] = { 1, 1, 1, alpha };
   float p3[4] = { (float)m.r.x, (float)m.r.y, (float)(m.r.x + m.r.w), (float)(m.r.y + m.r.h) }, p4[4] = { (float)m.rad, opaque ? 1.f : 0.f, m.on ? 1.f : 0.f, (float)rot };
-  setCBX(dst, uv, col, p3, p4);
+  setCBX(dst, uv, col, p3, p4, pm);
   g_ctx->PSSetShader(g_psLayer.Get(), nullptr, 0);
   g_ctx->PSSetShaderResources(0, 1, &srv);
   g_ctx->Draw(4, 0);
@@ -1192,11 +1199,11 @@ static void setFx(const FxN* f, const SegN* sg, bool mask, bool blur, double blu
   if (blur && sw && sh) { const int n = 4; const double st = std::max(0.5, blurPx / 2); c->f5[0] = 1; c->f5[1] = (float)(st / sw); c->f5[2] = (float)(st / sh); c->f5[3] = (float)n; }
   g_ctx->Unmap(g_cbFx.Get(), 0);
 }
-static void quadFx(const Rc& d, float u0, float v0, float u1, float v1, ID3D11ShaderResourceView* srv, ID3D11ShaderResourceView* msk, float alpha, bool opaque, const Mask& m, double rot) {
+static void quadFx(const Rc& d, float u0, float v0, float u1, float v1, ID3D11ShaderResourceView* srv, ID3D11ShaderResourceView* msk, float alpha, bool opaque, const Mask& m, double rot, bool pm = false) {
   float dst[4]; ndcOf(d, dst);
   float uv[4] = { u0, v0, u1, v1 }, col[4] = { 1, 1, 1, alpha };
   float p3[4] = { (float)m.r.x, (float)m.r.y, (float)(m.r.x + m.r.w), (float)(m.r.y + m.r.h) }, p4[4] = { (float)m.rad, opaque ? 1.f : 0.f, m.on ? 1.f : 0.f, (float)rot };
-  setCBX(dst, uv, col, p3, p4);
+  setCBX(dst, uv, col, p3, p4, pm);
   g_ctx->PSSetShader(g_psFx.Get(), nullptr, 0);
   ID3D11ShaderResourceView* sr[2] = { srv, msk };
   g_ctx->PSSetShaderResources(0, 2, sr);
@@ -1208,7 +1215,7 @@ static void drawView(const std::string& id, const Rc& box, int fit, double zoom,
 static void srcQuad(const std::string& id, const SrcView& v, const Rc& d, float u0, float v0, float u1, float v1, float alpha, const Mask& m, double rot, int depth) {
   auto fi = g_fx.find(id); const FxN* fx = fi == g_fx.end() ? nullptr : &fi->second;
   auto si = g_seg.find(id); SegN* sg = si == g_seg.end() || !si->second.srv ? nullptr : &si->second;
-  if (!fx && !sg) { quadPx(d, u0, v0, u1, v1, v.srv.Get(), alpha, v.opaque, m, rot); return; }
+  if (!fx && !sg) { quadPx(d, u0, v0, u1, v1, v.srv.Get(), alpha, v.opaque, m, rot, v.pm); return; }
   if (sg) {
     if (sg->hide) return; // "sembunyikan bila tidak ada orang"
     // bingkai otomatis mengikuti orang: sumber & mask dipotong bersama (kotak persegi relatif)
@@ -1228,7 +1235,7 @@ static void srcQuad(const std::string& id, const SrcView& v, const Rc& d, float 
     }
   }
   setFx(fx, sg, sg != nullptr, false, 0, v.w, v.h);
-  quadFx(d, u0, v0, u1, v1, v.srv.Get(), sg ? sg->srv.Get() : nullptr, alpha, v.opaque, m, rot);
+  quadFx(d, u0, v0, u1, v1, v.srv.Get(), sg ? sg->srv.Get() : nullptr, alpha, v.opaque, m, rot, v.pm);
 }
 struct LayerN {
   std::string src, lab; double x = 0, y = 0, w = 1, h = 1, zoom = 1, px = 0, py = 0, cl = 0, cr = 0, ct = 0, cb = 0, op = 1, rad = 0, bw = 0, sh = 0, lx = 0, ly = 0, lw = 0, lh = 0, rot = 0;
@@ -1318,14 +1325,14 @@ struct Ticker {
 };
 struct ULayer {
   ComPtr<ID3D11Texture2D> tex; ComPtr<ID3D11ShaderResourceView> srv; UINT w = 0, h = 0; DXGI_FORMAT fmt = DXGI_FORMAT_UNKNOWN;
-  bool valid = false, readySent = false, opaque = false;
+  bool valid = false, readySent = false, opaque = false, pm = false;
   Ticker cur, next;
   HANDLE pend = nullptr; unsigned long long pendSeq = 0; UINT pW = 0, pH = 0; // handle terbaru yang menunggu disalin
 };
 static std::map<std::string, ULayer> g_ul;
 static bool ulSrv(const std::string& id, SrcView& v) {
   auto it = g_ul.find(id); if (it == g_ul.end() || !it->second.valid || !it->second.srv) return false;
-  v.srv = it->second.srv; v.w = it->second.w; v.h = it->second.h; v.opaque = it->second.opaque; return true;
+  v.srv = it->second.srv; v.w = it->second.w; v.h = it->second.h; v.opaque = it->second.opaque; v.pm = it->second.pm; return true;
 }
 static std::vector<std::string> g_ulay;
 static long long g_frameNo = 0;
@@ -1898,9 +1905,10 @@ static void utcCommand(const std::string& c, std::istringstream& is, const std::
   if (c == "uclear") { for (auto& kv : g_ul) { if (kv.second.pend) ackHandle(kv.first, kv.second.pend, kv.second.pendSeq); kv.second.pend = nullptr; kv.second.valid = false; kv.second.readySent = false; } return; }
   if (lid.empty() || lid.size() > 16) return;
   ULayer& L = g_ul[lid];
-  if (c == "utex" || c == "stex") { // stex = sumber biasa (Web Browser offscreen): ditampilkan buram, bukan lapisan DSK
+  if (c == "utex" || c == "stex" || c == "ptex") { // stex = sumber biasa (Web Browser offscreen): buram; ptex = sumber transparan premultiplied (video stinger)
     unsigned long long hv = 0, seq = 0; UINT W = 0, H = 0; is >> hv >> W >> H >> seq;
     if (c == "stex") L.opaque = true;
+    if (c == "ptex") { L.opaque = false; L.pm = true; }
     if (L.pend) ackHandle(lid, L.pend, L.pendSeq); // frame lama yang belum sempat disalin: lewati, kembalikan
     L.pend = (HANDLE)(uintptr_t)hv; L.pendSeq = seq; L.pW = W; L.pH = H;
   } else if (c == "ureset") {
@@ -1976,11 +1984,17 @@ static void drawTrans(Bus& b, float p) {
       blurPass(g_tmp[0].srv.Get(), g_tmp[1].rtv.Get(), st / (float)W, 0);
       blurPass(g_tmp[1].srv.Get(), b.rtv.Get(), 0, st / (float)H);
       break; }
+    case 15: { // stinger: sumber lama sampai titik cut, lalu sumber baru; video stinger (transparan) di atasnya
+      const double el = g_tr.manual ? g_tr.k * g_tr.dur : nowMs() - g_tr.t0;
+      drawSource(el < g_tr.cut ? A : B, 1); drawSource(g_tr.sid, 1); break; }
     default: drawSource(A, 1); drawSource(B, p); // fade
   }
   (void)I;
 }
 static void compose(Bus& b, bool program) {
+  const UINT oW = g_W, oH = g_H;
+  if (!program && b.cw && b.ch) { g_W = b.cw; g_H = b.ch; } // gambar ke ukuran khusus monitor ini (semua rumus memakai g_W/g_H)
+  struct Rst { UINT w, h; ~Rst() { g_W = w; g_H = h; } } rst{ oW, oH };
   ensureRT(b); if (!b.rtv) return;
   ID3D11ShaderResourceView* none = nullptr; g_ctx->PSSetShaderResources(0, 1, &none);
   g_ctx->OMSetRenderTargets(1, b.rtv.GetAddressOf(), nullptr);
@@ -2004,7 +2018,8 @@ static void present(Bus& b) {
   float black[4] = { 0, 0, 0, 1 }; g_ctx->ClearRenderTargetView(b.scRtv.Get(), black);
   // monitor = rasio output: isi penuh (bila sedikit berbeda karena pembulatan, tetap direntangkan ±1 px)
   float dst[4] = { -1, 1, 1, -1 }, uv[4] = { 0, 0, 1, 1 }, col[4] = { 1, 1, 1, 1 };
-  double scale = std::max((double)g_W / b.scW, (double)g_H / b.scH);
+  D3D11_TEXTURE2D_DESC bd{}; if (b.rt) b.rt->GetDesc(&bd); const UINT bw = bd.Width ? bd.Width : g_W, bh = bd.Height ? bd.Height : g_H;
+  double scale = std::max((double)bw / b.scW, (double)bh / b.scH);
   int n = (int)std::ceil(scale); n = n < 1 ? 1 : n > 6 ? 6 : n;
   float p2[4] = { 1.0f / b.scW, 1.0f / b.scH, (float)n, 0 };
   setCB(dst, uv, col, p2);
@@ -2043,7 +2058,7 @@ static void applyRect(Bus& b, int x, int y, int w, int h, bool vis) {
 static bool readPixel(Bus& b, UINT x, UINT y, int rgb[3]);
 static void command(const std::string& line, const std::vector<uint8_t>& data = {}) {
   std::istringstream is(line); std::string c; is >> c;
-  if (c == "utex" || c == "stex" || c == "ulay" || c == "uclear" || c == "ureset" || c == "utk" || c == "ublob" || c == "utkgeo" || c == "utklive") { utcCommand(c, is, data); return; }
+  if (c == "utex" || c == "stex" || c == "ptex" || c == "ulay" || c == "uclear" || c == "ureset" || c == "utk" || c == "ublob" || c == "utkgeo" || c == "utklive") { utcCommand(c, is, data); return; }
   if (c == "cam" || c == "camtest" || c == "camoff" || c == "camexp" || c == "crel" || c == "camlist") { camCommand(c, is); return; }
   if (c == "kenc") {
     std::string id; int key = 0; long long ts = 0; size_t n = 0; is >> id >> key >> ts >> n;
@@ -2063,7 +2078,8 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
   if (c == "probe") {
     std::string bn; double fx = 0, fy = 0; is >> bn >> fx >> fy; int px[3] = { -1, -1, -1 };
     Bus& b = bn == "pvw" ? g_pvw : g_pgm;
-    readPixel(b, (UINT)std::min<double>(g_W - 1, std::max(0.0, fx * g_W)), (UINT)std::min<double>(g_H - 1, std::max(0.0, fy * g_H)), px);
+    D3D11_TEXTURE2D_DESC bd{}; if (b.rt) b.rt->GetDesc(&bd); const double bw = bd.Width ? bd.Width : g_W, bh = bd.Height ? bd.Height : g_H;
+    readPixel(b, (UINT)std::min<double>(bw - 1, std::max(0.0, fx * bw)), (UINT)std::min<double>(bh - 1, std::max(0.0, fy * bh)), px);
     emit("probe %d %d %d", px[0], px[1], px[2]);
     return;
   }
@@ -2154,11 +2170,15 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
   } else if (c == "trans") {
     double ms = 0; std::string a, b, ty; is >> ms >> a >> b >> ty;
     g_tr = Trans(); g_tr.on = true; g_tr.t0 = nowMs(); g_tr.dur = std::max(1.0, ms); g_tr.from = a == "-" ? "" : a; g_tr.to = b == "-" ? "" : b; g_tr.type = trType(ty);
+    if (g_tr.type == 15) { is >> g_tr.sid >> g_tr.cut; if (g_tr.sid == "-") g_tr.sid.clear(); } // trans <ms> a b stinger <sumber> <cut ms>
   } else if (c == "tbar") {
     std::string v; is >> v;
     if (v == "off") { g_tr.on = false; return; }
     std::string a, b, ty; is >> a >> b >> ty;
     g_tr.on = true; g_tr.manual = true; g_tr.k = std::atoi(v.c_str()) / 1000.0; g_tr.from = a == "-" ? "" : a; g_tr.to = b == "-" ? "" : b; g_tr.type = trType(ty);
+  } else if (c == "bsize") { // bsize <pvw|pgm> <w> <h>: ukuran gambar monitor (0 0 = ukuran output). Mode grid Preview memakai rasio panelnya
+    std::string n; int w = 0, h = 0; is >> n >> w >> h; Bus* b = n == "pvw" ? &g_pvw : n == "pgm" ? &g_pgm : nullptr; if (!b) return;
+    if (w < 16 || h < 16 || w > 7680 || h > 4320) { b->cw = b->ch = 0; } else { b->cw = (UINT)w; b->ch = (UINT)h; }
   } else if (c == "ftb") {
     double a = 0; is >> a; g_ftb = std::max(0.0, std::min(1.0, a));
   } else if (c == "ipos") { // ipos <id> <fit 0/1/2> <zoom> <x> <y> <cl> <cr> <ct> <cb> <rot°>  |  ipos <id> -
@@ -2206,10 +2226,16 @@ static void frame(double now) {
     if (g_tr.k >= 1) { g_tr.on = false; g_pgm.id = g_tr.to; }
   }
   for (auto& kv : g_src) if (kv.second->kind == "window") tickWin(*kv.second); // jendela: ambil frame terbaru (murah)
-  for (auto& kv : g_src) if (kv.second->kind == "screen") {
-    const std::string& id = kv.first;
-    bool used = id == g_pvw.id || id == g_pgm.id || (g_tr.on && (id == g_tr.from || id == g_tr.to));
-    if (used) tickScreen(*kv.second, id, now);
+  bool anyScreen = false; for (auto& kv : g_src) if (kv.second->kind == "screen") { anyScreen = true; break; }
+  if (anyScreen) { // layar: hanya ditangkap bila dipakai (langsung, lewat komposisi / grid Preview, transisi, overlay)
+    std::set<std::string> used;
+    std::function<void(const std::string&, int)> ref = [&](const std::string& id, int d) {
+      if (id.empty() || d > 5 || !used.insert(id).second) return;
+      auto ci = g_comp.find(id); if (ci == g_comp.end()) return;
+      ref(ci->second.base, d + 1); for (auto& l : ci->second.L) ref(l.src, d + 1);
+    };
+    ref(g_pvw.id, 0); ref(g_pgm.id, 0); if (g_tr.on) { ref(g_tr.from, 0); ref(g_tr.to, 0); } for (auto& o : g_ovl) ref(o.src, 0);
+    for (auto& kv : g_src) if (kv.second->kind == "screen" && used.count(kv.first)) tickScreen(*kv.second, kv.first, now);
   }
   pipeline();
   camTick();
@@ -2564,6 +2590,31 @@ static int selftest(bool warp) {
       chk(g_pgm, 80, 180, 0, 255, 0, 3, "Latar AI native: orang (mask) tetap");
       chk(g_pgm, 560, 180, 0, 0, 255, 3, "Latar AI native: latar diganti warna");
       command("seg gg -"); command("pgm a"); run(1);
+      // ---- Fase 9: grid Preview (ukuran monitor khusus) & stinger transparan
+      command("comp Gt - 1 0 - -,0,0,1,1,0,1,0,0,0,0,0,0,0,1,0,0,-,15181e,0,-,0,0,0,0 a,0.02,0.02,0.46,0.96,3,1,0,0,0,0,0,0,0,1,0,0,-,000000,0,-,0,0,0,0 gg,0.52,0.02,0.46,0.96,3,1,0,0,0,0,0,0,0,1,0,0,-,000000,0,-,0,0,0,0");
+      command("bsize pvw 400 600"); command("pvw Gt"); run(2);
+      { D3D11_TEXTURE2D_DESC bd{}; if (g_pvw.rt) g_pvw.rt->GetDesc(&bd); const bool okSz = bd.Width == 400 && bd.Height == 600;
+        emit("  %s grid Preview: ukuran monitor khusus %ux%u", okSz ? "OK " : "GAGAL", bd.Width, bd.Height); if (!okSz) ok = 0; }
+      chk(g_pvw, 100, 300, 255, 0, 0, 2, "Grid Preview: kotak 1 (fit, tidak gepeng)");
+      chk(g_pvw, 300, 300, 0, 255, 0, 2, "Grid Preview: kotak 2");
+      chk(g_pvw, 100, 30, 0, 0, 0, 2, "Grid Preview: latar hitam kotak (sumber 16:9 di kotak tegak)");
+      chk(g_pvw, 200, 300, 21, 24, 30, 2, "Grid Preview: garis antar kotak");
+      command("bsize pvw 0 0"); command("del Gt"); command("pvw b"); run(1);
+      { // stinger: tekstur premultiplied setengah transparan (biru 50%) + cut 200 ms
+        D3D11_TEXTURE2D_DESC d{}; d.Width = 64; d.Height = 36; d.MipLevels = 1; d.ArraySize = 1; d.Format = DXGI_FORMAT_B8G8R8A8_UNORM; d.SampleDesc.Count = 1;
+        d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET; d.MiscFlags = D3D11_RESOURCE_MISC_SHARED | D3D11_RESOURCE_MISC_SHARED_NTHANDLE;
+        std::vector<uint32_t> px(64 * 36, (0x80u << 24) | 0x80u); // BGRA premultiplied: biru 50% (B = 128, A = 128)
+        D3D11_SUBRESOURCE_DATA sd{ px.data(), 64 * 4, 0 };
+        ComPtr<ID3D11Texture2D> t; ComPtr<IDXGIResource1> r; HANDLE h2 = nullptr;
+        if (SUCCEEDED(g_dev->CreateTexture2D(&d, &sd, &t)) && SUCCEEDED(t.As(&r)) && SUCCEEDED(r->CreateSharedHandle(nullptr, DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE, nullptr, &h2))) {
+          char c3[128]; snprintf(c3, sizeof c3, "ptex stg %llu 64 36 1", (unsigned long long)(uintptr_t)h2); command(c3); run(2);
+          command("pgm a"); command("trans 100000 a gg stinger stg 300"); run(2);
+          chk(g_pgm, 320, 180, 128, 0, 128, 3, "Stinger: sumber lama + video transparan premultiplied sebelum cut");
+          Sleep(350); run(2);
+          chk(g_pgm, 320, 180, 0, 128, 128, 3, "Stinger: sumber baru setelah titik cut");
+          command("tbar off"); g_tr.on = false; command("pgm a"); run(1);
+        } else { emit("  GAGAL membuat tekstur uji stinger"); ok = 0; }
+      }
       { // jendela uji berwarna, ditangkap lewat Windows.Graphics.Capture
         WNDCLASSEXW wc{ sizeof wc }; wc.lpfnWndProc = DefWindowProcW; wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"KLMWgcTest"; wc.hbrBackground = CreateSolidBrush(RGB(30, 200, 90));
         RegisterClassExW(&wc);
