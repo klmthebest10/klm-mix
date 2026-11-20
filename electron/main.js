@@ -1129,6 +1129,23 @@ function smokeTest() {
                 await wait(4000);
                 await js('KM.settings.stingers[0] = window.__sg0; KM.inputs.remove(window.__stv); 1');
               }
+              // --- Fase 9: Latar AI native — model segmentasi dijalankan mesin native (tanpa MediaPipe di KLM)
+              try {
+                const sn = JSON.parse(await js('JSON.stringify({ on: KM.nengine.segNative, info: KM.nengine.segInfo })'));
+                log('Fase 9 model Latar AI native: ' + JSON.stringify(sn));
+                if (!sn.on) { fail++; log('GAGAL: model Latar AI tidak dimuat mesin native'); }
+                else {
+                  const pf = path.join(require('os').tmpdir(), 'klm-seg-uji.png');
+                  { const W = 160, H = 90, bm = Buffer.alloc(W * H * 4); for (let i = 0; i < W * H; i++) { bm[i * 4] = 40; bm[i * 4 + 1] = 180; bm[i * 4 + 2] = 60; bm[i * 4 + 3] = 255; } fs.writeFileSync(pf, require('electron').nativeImage.createFromBitmap(bm, { width: W, height: H }).toPNG()); }
+                  await js(`(() => { const g = KM.inputs.create('image', { title: 'Latar AI uji', opts: { url: KM.fileUrl(${JSON.stringify(pf)}) } }); window.__sgi = g.id; g.seg = Object.assign({}, KM.seg.DEF, { mode: 'colour', colour: '#0000ff', feather: 0 }); KM.engine.cut(g.id); return 1; })()`);
+                  await wait(3500);
+                  const r9 = JSON.parse(await js(`KM.nengine.probe('pgm', 0.5, 0.5).then((p) => JSON.stringify({ p, pgm: KM.nengine.pgm, why: KM.nengine.why.pgm, mp: !!(KM.getInput(window.__sgi).rt.segger) }))`));
+                  log('Fase 9 Latar AI native (gambar tanpa orang → seluruhnya latar biru): ' + JSON.stringify(r9));
+                  if (!r9.pgm || !near(r9.p, [0, 0, 255], 12)) { fail++; log('GAGAL: Latar AI tidak dirender native'); } else log('Latar AI native: OK');
+                  if (r9.mp) log('catatan: MediaPipe di KLM ikut dimuat (mis. untuk miniatur) walau monitor memakai model native');
+                  await js('KM.inputs.remove(window.__sgi); 1');
+                }
+              } catch (e) { fail++; log('GAGAL Latar AI native: ' + e.message); }
               await js('KM.inputs.remove(window.__f8a); KM.inputs.remove(window.__f8b); 1');
             } catch (e) { fail++; log('GAGAL Fase 8 native: ' + e.message); }
             await js('["__vs","__vt","__vb","__vc"].forEach((k) => KM.inputs.remove(window[k])); 1');
