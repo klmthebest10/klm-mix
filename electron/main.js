@@ -844,7 +844,36 @@ function smokeTest() {
             if (!ms.pvw || !near(ip, [200, 50, 100], 4)) { fail++; log('GAGAL: gambar native tidak tampil benar di monitor Preview'); }
             else if (!ms.pgm || !(near(vp[0], [32, 160, 224], 16) || near(vp[1], [32, 160, 224], 16))) { fail++; log('GAGAL: file video native tidak tampil benar di monitor Program'); }
             else log('video/gambar native: OK — file video & gambar digambar mesin native');
+            // --- Fase 6: audio file video native, daftar putar, SVG, gambar dari URL (http), geser A/V ---
+            await js('(() => { const v = KM.getInput(window.__nvid); v.rt.el.currentTime = 0.2; v.rt.el.play().catch(() => {}); return 1; })()');
+            await wait(2500);
+            const na = JSON.parse(await js('JSON.stringify((() => { const v = KM.getInput(window.__nvid); return { nAudio: !!v.rt.nAudio, pcmNode: !!v.rt.pcmNode, playing: !v.rt.el.paused }; })())'));
+            log('audio native file video: ' + JSON.stringify(na));
+            if (!na.nAudio || !na.pcmNode) { fail++; log('GAGAL: audio file video tidak datang dari mesin native'); } else log('audio native: OK — suara file video didekode mesin native & masuk mixer');
             await js('KM.inputs.remove(window.__nvid); KM.inputs.remove(window.__nimg); 1');
+            const svg = path.join(out, 'native.svg');
+            fs.writeFileSync(svg, '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="#14a050"/></svg>');
+            await js(`(() => {
+              const l = KM.inputs.create('list', { title: 'Daftar native', opts: { items: [{ kind: 'image', url: KM.fileUrl(${JSON.stringify(png)}) }, { kind: 'video', url: KM.fileUrl(${JSON.stringify(file || '')}) }] } });
+              const s = KM.inputs.create('image', { title: 'SVG native', opts: { url: KM.fileUrl(${JSON.stringify(svg)}) } });
+              const u = KM.inputs.create('image', { title: 'Gambar URL native', opts: { url: location.origin + '/src/utc/icons/favicon-64.png' } });
+              window.__nl = l.id; window.__ns = s.id; window.__nu = u.id; return 1; })()`);
+            await wait(4000);
+            await js('KM.engine.cut(window.__nl); KM.engine.setPreview(window.__ns); 1'); await wait(2000);
+            const p6 = JSON.parse(await js(`Promise.all([KM.nengine.probe('pgm', 0.5, 0.5), KM.nengine.probe('pvw', 0.5, 0.5)]).then((p) => JSON.stringify({ p, pgm: KM.nengine.pgm, pvw: KM.nengine.pvw, why: KM.nengine.why, media: [...KM.nengine.media.values()].map((m) => m.kind + ':' + (m.ok ? 'ok' : (m.err || '…'))) }))`));
+            log('daftar putar + SVG native: ' + JSON.stringify(p6) + ' (harap Program 200,50,100 • Preview 20,160,80)');
+            const nr = (a, c, t) => a && c.every((v, i) => Math.abs(a[i] - v) <= t);
+            if (!p6.pgm || !nr(p6.p[0], [200, 50, 100], 6)) { fail++; log('GAGAL: daftar putar tidak tampil native'); }
+            else if (!p6.pvw || !nr(p6.p[1], [20, 160, 80], 8)) { fail++; log('GAGAL: SVG tidak tampil native'); }
+            else log('daftar putar & SVG native: OK');
+            await js('KM.engine.setPreview(window.__nu); 1'); await wait(2000);
+            const pu = JSON.parse(await js('JSON.stringify({ pvw: KM.nengine.pvw, why: KM.nengine.why.pvw })'));
+            log('gambar dari URL (diunduh ke cache) native: ' + JSON.stringify(pu));
+            if (!pu.pvw) { fail++; log('GAGAL: gambar dari URL tidak tampil native'); } else log('gambar URL native: OK');
+            await js('KM.settings.avOffset = 200; 1'); await wait(800);
+            const dl = await js('KM.audio.master && KM.audio.master.odly ? KM.audio.master.odly.delayTime.value.toFixed(2) : "-"');
+            log('geser A/V +200 ms → delay bus master ' + dl + ' s'); if (Math.abs(+dl - 0.2) > 0.02) { fail++; log('GAGAL: penundaan audio output tidak terpasang'); }
+            await js('KM.settings.avOffset = 0; KM.inputs.remove(window.__nl); KM.inputs.remove(window.__ns); KM.inputs.remove(window.__nu); 1');
           } catch (e) { fail++; log('GAGAL video/gambar native: ' + e.message); }
           await js('KM.nengine.relaxInputs = false; KM.inputs.remove(window.__ocam); 1');
         } catch (e) { fail++; log('GAGAL output native: ' + e.message); }

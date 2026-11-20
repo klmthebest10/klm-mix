@@ -41,8 +41,10 @@
         A.limiter = { wet, dry };
       } else g.connect(mute);
       const dest = ctx.createMediaStreamDestination(); dest.channelCount = 2;
-      mute.connect(dest);
-      return { name, gain: g, mute, dest, meter: meterNodes(mute), vol: 100, muted: false };
+      // penundaan audio output (penyelarasan suara & gambar rekam / streaming) — tidak memengaruhi monitor
+      const odly = ctx.createDelay(2.5); odly.delayTime.value = KM.clamp((+KM.settings.avOffset || 0) / 1000, 0, 2);
+      mute.connect(odly); odly.connect(dest);
+      return { name, gain: g, mute, dest, odly, meter: meterNodes(mute), vol: 100, muted: false };
     };
     A.master = bus('M'); A.busA = bus('A'); A.busB = bus('B');
     A.soloBus = ctx.createGain();
@@ -83,6 +85,7 @@
     try { if (el.setSinkId) await el.setSinkId(deviceId); await el.play(); } catch (e) { KM.toast('Gagal output bus ' + b + ': ' + e.message, 'warn'); }
   };
   A.busOf = (n) => (n === 'A' ? A.busA : n === 'B' ? A.busB : A.master);
+  A.setOutDelay = (ms) => { if (!ctx) return; for (const b of [A.master, A.busA, A.busB]) if (b && b.odly) b.odly.delayTime.setTargetAtTime(KM.clamp((ms || 0) / 1000, 0, 2), ctx.currentTime, 0.02); };
   A.setBusVol = (n, v) => { const b = A.busOf(n); b.vol = KM.clamp(v, 0, 100); b.gain.gain.setTargetAtTime(A.volToGain(b.vol), ctx.currentTime, 0.02); KM.changed('audio'); };
   A.setBusMute = (n, m) => { const b = A.busOf(n); b.muted = m == null ? !b.muted : !!m; b.mute.gain.setTargetAtTime(b.muted ? 0 : 1, ctx.currentTime, 0.01); KM.changed('audio'); };
   A.setMonitor = (on) => { KM.settings.monitorAudio = !!on; if (A.monitor) A.monitor.gain.value = on ? 1 : 0; };
@@ -96,7 +99,8 @@
     if (st && force) { try { st.src.disconnect(); } catch (e) {} }
     let src = null;
     try {
-      if (inp.type === 'video' || inp.type === 'audiofile' || inp.type === 'urlvideo' || inp.type === 'stream') {
+      if (inp.rt.nAudio && inp.rt.pcmNode) src = inp.rt.pcmNode; // suara didekode / ditangkap mesin video native
+      else if (inp.type === 'video' || inp.type === 'audiofile' || inp.type === 'urlvideo' || inp.type === 'stream') {
         const el = inp.rt.el;
         if (!el._klmSrc) el._klmSrc = ctx.createMediaElementSource(el);
         src = el._klmSrc;

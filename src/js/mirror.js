@@ -76,6 +76,7 @@
     if (rt.pcmWait) return;
     rt.pcmWait = true; pcmNode(inp, rate || 44100).catch((x) => { rt.pcmWait = false; console.warn('[mirror] suara', x); });
   }
+  KM.pcmFeed = feedPcm; // dipakai juga oleh audio sumber mesin video native
   /** suara PC tanpa suara KLM (helper klm-procaudio, Windows): dipakai input tangkap layar / Miracast */
   MR.pcAudioStart = function (inp) {
     const rt = inp.rt, o = inp.opts;

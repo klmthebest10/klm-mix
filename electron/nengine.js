@@ -2,7 +2,7 @@
  * Monitor Preview / Program dirender native di jendela anak yang ditempel di atas jendela utama KLM.
  * Renderer mengirim perintah teks (lihat native/engine/klm-engine.cpp), kejadian dari mesin diteruskan ke renderer. */
 'use strict';
-const { app, ipcMain, screen, desktopCapturer } = require('electron');
+const { app, ipcMain, screen, desktopCapturer, net } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -16,7 +16,7 @@ function findExe() {
   return c.find((p) => { try { return fs.statSync(p).isFile(); } catch (e) { return false; } }) || '';
 }
 // hanya perintah yang dikenal mesin, tanpa baris baru / karakter kendali (perintah utex/utk/ublob hanya dari proses utama)
-const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff|ostart|ostop|vt)( [\w.,\- ]{0,2000})?$/;
+const OK = /^(parent|out|rect|src|del|pvw|pgm|trans|tbar|stats|quit|ulay|probe|cam|camtest|camoff|camexp|camlist|kdecoff|ostart|ostop|vt|naud|camaud|avoff)( [\w.,\- ]{0,2000})?$/;
 
 // DuplicateHandle (kernel32) lewat koffi: handle NT tekstur lapisan UTC → disalin ke proses klm-engine
 let K = null;
@@ -151,8 +151,24 @@ function setup({ win, log = () => {} }) {
     if (!exe) { st = { state: 'error', msg: process.platform === 'win32' ? 'klm-engine.exe tidak ada di instalasi ini' : 'khusus Windows' }; return st; }
     st = { state: 'starting' };
     // fd 3 = keluaran MPEG-TS output native (streaming) → diteruskan ke ffmpeg (-c copy)
-    const p = spawn(exe, [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
+    // fd 4 = PCM audio sumber native (file video / capture card) → strip mixer KLM
+    const p = spawn(exe, [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'] });
     P = p; buf = '';
+    if (p.stdio[4]) {
+      let pb = Buffer.alloc(0);
+      p.stdio[4].on('data', (d) => {
+        pb = pb.length ? Buffer.concat([pb, d]) : d;
+        while (pb.length >= 4) {
+          const n = pb.readUInt32LE(0); if (n > 8 * 1024 * 1024) { pb = Buffer.alloc(0); break; }
+          if (pb.length < 4 + n) break;
+          const f = pb.subarray(4, 4 + n); pb = pb.subarray(4 + n);
+          const il = f[0], id = f.toString('latin1', 1, 1 + il), rate = f.readUInt32LE(1 + il), ch = f[5 + il];
+          const pcm = Buffer.from(f.subarray(6 + il)); // salinan (pb berikutnya bisa menimpa)
+          const w = win(); if (w && !w.isDestroyed()) w.webContents.send('nengine:pcm', { id, rate, ch, pcm });
+        }
+      });
+      p.stdio[4].on('error', () => {});
+    }
     if (p.stdio[3]) { p.stdio[3].on('data', (b) => { tsBytes += b.length; for (const f of tsTaps) { try { f(b); } catch (e) {} } }); p.stdio[3].on('error', (e) => log('[nengine] fd3: ' + e.message)); }
     else log('[nengine] fd3 tidak tersedia');
     p.stdout.setEncoding('utf8');
@@ -191,6 +207,34 @@ function setup({ win, log = () => {} }) {
   ipcMain.handle('nengine:stop', () => { stop(); return true; });
   ipcMain.handle('nengine:status', () => Object.assign({ available: !!findExe(), utc: utcOn, utcErr, koffi: !!k32(), tsBytes, taps: tsTaps.size }, st));
   ipcMain.on('nengine:utc', (e, on) => setUtc(on));
+  // Fase 6: gambar yang sudah dirender KLM (SVG / gambar internet) → tekstur mesin native
+  ipcMain.on('nengine:raster', (e, id, w, h, data) => {
+    if (!P || st.state !== 'ready' || !P.stdin.writable || !/^\w{1,64}$/.test(String(id))) return;
+    const b = Buffer.isBuffer(data) ? data : data instanceof ArrayBuffer ? Buffer.from(data) : ArrayBuffer.isView(data) ? Buffer.from(data.buffer, data.byteOffset, data.byteLength) : null;
+    w |= 0; h |= 0; if (!b || w < 1 || h < 1 || w > 8192 || h > 8192 || b.length < w * h * 4) return;
+    P.stdin.write('srcimg ' + id + ' ' + w + ' ' + h + ' ' + (w * h * 4) + '\n'); P.stdin.write(b.subarray(0, w * h * 4));
+  });
+  // Fase 6: gambar dari internet diunduh sekali ke cache lokal (tanpa batas CORS) lalu dibuka mesin native
+  const dl = new Map();
+  ipcMain.handle('nengine:download', (e, url) => {
+    url = String(url || '');
+    if (!/^https?:\/\//i.test(url)) return null;
+    if (dl.has(url)) return dl.get(url);
+    const job = (async () => {
+      const crypto = require('crypto'), dir = path.join(app.getPath('temp'), 'klm-media');
+      fs.mkdirSync(dir, { recursive: true });
+      const ext = (/\.(png|jpe?g|gif|bmp|webp|tiff?|svg)(?:[?#]|$)/i.exec(url) || [0, 'img'])[1].toLowerCase();
+      const f = path.join(dir, crypto.createHash('sha1').update(url).digest('hex').slice(0, 20) + '.' + ext);
+      if (fs.existsSync(f) && fs.statSync(f).size > 0) return f;
+      const r = await net.fetch(url, { headers: { 'User-Agent': 'KLM' } });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const ab = await r.arrayBuffer(); if (ab.byteLength > 200 * 1024 * 1024) throw new Error('terlalu besar');
+      fs.writeFileSync(f, Buffer.from(ab));
+      return f;
+    })().catch((er) => { dl.delete(url); log('[nengine] unduh ' + url + ': ' + er.message); return null; });
+    dl.set(url, job);
+    return job;
+  });
   // Fase 4b: audio Program (PCM s16le stereo 48 kHz) untuk output native
   ipcMain.on('nengine:aud', (e, data) => {
     if (!P || st.state !== 'ready' || !P.stdin.writable) return;

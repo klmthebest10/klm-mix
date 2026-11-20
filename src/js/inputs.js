@@ -206,9 +206,15 @@
             if (inp.rt.el) { try { inp.rt.el.srcObject = null; inp.rt.el.remove(); } catch (e) {} inp.rt.el = null; }
             await N.camOpen(inp, label, o);
             if (inp.rt.gone) { N.camClose(inp); return; }
-            if (o.audioDeviceId) { // suara capture card / mic kamera tetap lewat jalur audio biasa
-              const st = await navigator.mediaDevices.getUserMedia({ video: false, audio: { deviceId: { exact: o.audioDeviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false } }).catch(() => null);
-              if (st) { inp.rt.stream = st; KM.audio && KM.audio.attach(inp); }
+            if (o.audioDeviceId) {
+              let nativeAud = false;
+              if (N.audioWanted && N.audioWanted()) { // suara capture card ditangkap mesin native (Media Foundation)
+                try { const d = (await navigator.mediaDevices.enumerateDevices()).find((x) => x.kind === 'audioinput' && x.deviceId === o.audioDeviceId); if (d && d.label) { await N.camAudio(inp, d.label); nativeAud = true; } } catch (e) { console.warn('audio kamera native:', e.message); }
+              }
+              if (!nativeAud) { // jalur audio biasa
+                const st = await navigator.mediaDevices.getUserMedia({ video: false, audio: { deviceId: { exact: o.audioDeviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false } }).catch(() => null);
+                if (st) { inp.rt.stream = st; KM.audio && KM.audio.attach(inp); }
+              }
             }
             inp.rt.ready = true; inp.rt.err = ''; inp.rt.retry = 0; inp.rt.nfail = 0;
             KM.changed('input');
@@ -246,7 +252,7 @@
     },
     destroy(inp) { inp.rt.gone = true; clearTimeout(inp.rt.retryT); if (inp.rt.ncam && KM.nengine) KM.nengine.camClose(inp); },
     source: (inp) => (inp.rt.ncam && KM.nengine ? KM.nengine.camSrc(inp.rt.ncam) || placeholder(inp, inp.title, KM.nengine.camErr(inp.rt.ncam) || 'Membuka kamera (mesin native)…') : vSrc(inp) || placeholder(inp, inp.title, inp.rt.err || 'Membuka kamera…')),
-    hasAudio: (inp) => !!(inp.rt.stream && inp.rt.stream.getAudioTracks().length)
+    hasAudio: (inp) => !!(inp.rt.nAudio || (inp.rt.stream && inp.rt.stream.getAudioTracks().length))
   };
 
   T.audio = {
