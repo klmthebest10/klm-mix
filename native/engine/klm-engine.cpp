@@ -2230,6 +2230,8 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
     std::string id; double t = 0, rate = 1; int play = 0; is >> id >> t >> play >> rate; vTime(id, t, play != 0, rate);
   } else if (c == "pvw" || c == "pgm") {
     std::string id; is >> id; (c == "pvw" ? g_pvw : g_pgm).id = id == "-" ? "" : id;
+    // KLM menetapkan Program = transisi otomatis sudah selesai / dibatalkan di KLM (mis. stinger berakhir lebih cepat, cut baru) → hentikan di sini juga
+    if (c == "pgm" && g_tr.on && !g_tr.manual) g_tr.on = false;
   } else if (c == "trans") {
     double ms = 0; std::string a, b, ty; is >> ms >> a >> b >> ty;
     g_tr = Trans(); g_tr.on = true; g_tr.t0 = nowMs(); g_tr.dur = std::max(1.0, ms); g_tr.from = a == "-" ? "" : a; g_tr.to = b == "-" ? "" : b; g_tr.type = trType(ty);
