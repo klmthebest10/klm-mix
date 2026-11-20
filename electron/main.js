@@ -364,7 +364,21 @@ ipcMain.handle('browser:show', (e, id, show) => {
   else { w.setPosition(-bw - 200, 0); w.setSkipTaskbar(true); w.setFocusable(false); }
   return true;
 });
-ipcMain.handle('browser:hwnd', (e, id) => { const w = browsers.get(id); if (!w || w.isDestroyed()) return null; const b = w.getNativeWindowHandle(); return b.length >= 8 ? b.readBigUInt64LE(0).toString() : String(b.readUInt32LE(0)); });
+// mesin video native menangkap jendela browser lewat Windows.Graphics.Capture: jendela "tool window" (gaya Electron untuk
+// jendela tanpa fokus / tanpa taskbar) ditolak WGC → gaya itu dilepas (tetap tak tampil di taskbar, tetap di luar layar)
+let u32 = null;
+function user32() {
+  if (u32 !== null) return u32; u32 = false;
+  try { const koffi = require('koffi'), lib = koffi.load('user32.dll'); u32 = { get: lib.func('intptr_t __stdcall GetWindowLongPtrW(uintptr_t h, int i)'), set: lib.func('intptr_t __stdcall SetWindowLongPtrW(uintptr_t h, int i, intptr_t v)') }; } catch (e) { u32 = false; }
+  return u32;
+}
+ipcMain.handle('browser:hwnd', (e, id) => {
+  const w = browsers.get(id); if (!w || w.isDestroyed()) return null;
+  const b = w.getNativeWindowHandle(), h = b.length >= 8 ? b.readBigUInt64LE(0) : BigInt(b.readUInt32LE(0));
+  const u = process.platform === 'win32' && user32();
+  if (u) { try { const ex = BigInt(u.get(h, -20)); if (ex & 0x80n) u.set(h, -20, ex & ~0x80n); } catch (er) {} } // GWL_EXSTYLE, WS_EX_TOOLWINDOW
+  return h.toString();
+});
 ipcMain.handle('browser:close', (e, id) => { const w = browsers.get(id); if (w) w.destroy(); return true; });
 
 // ---------------- start ----------------
