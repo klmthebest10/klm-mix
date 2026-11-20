@@ -673,6 +673,8 @@ function smokeTest() {
       await post('/utc/api/klm/cmd', { cmd: 'show', target: 'lt' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'logo' });
       await post('/utc/api/klm/cmd', { cmd: 'show', target: 'ticker' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'loc' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'soc' });
       await post('/utc/api/klm/cmd', { cmd: 'show', target: 'title' });
+      // pembanding: kecepatan panel sebelum video diputar (runner CI tanpa GPU sudah lambat karena jalur CPU dipaksa di atas)
+      const respBase = await js('(async () => { const f = document.querySelector("#utcFrame"); const c = new AbortController(); const t = performance.now(); setTimeout(() => c.abort(), 4000); try { for (let i = 0; i < 5; i++) await f.contentWindow.fetch("/utc/api/info?i=" + i, { cache: "no-store", signal: c.signal }); return Math.round(performance.now() - t) + " ms"; } catch (e) { return "MACET"; } })()');
       // video lokal diputar di mixer (tiap video memegang sambungan HTTP): dulu memenuhi jatah sambungan alamat KLM → panel macet
       const mvf = path.join(out, 'uji-video-panjang.mp4');
       try { require('child_process').spawnSync(server.hub.ffmpegPath(), ['-hide_banner', '-y', '-f', 'lavfi', '-i', 'testsrc=size=640x360:rate=30', '-t', '90', '-c:v', 'libx264', '-preset', 'ultrafast', '-b:v', '4M', '-pix_fmt', 'yuv420p', mvf], { windowsHide: true, timeout: 60000 }); } catch (e) {}
@@ -680,8 +682,9 @@ function smokeTest() {
       await js(`(() => { window.__mv = []; for (let i = 0; i < 6; i++) { const v = document.createElement('video'); v.crossOrigin = 'anonymous'; v.muted = true; v.preload = 'auto'; v.src = ${JSON.stringify('/localfile?p=')} + encodeURIComponent(${JSON.stringify(mvf)}) + '&v=' + i; v.play().catch(() => {}); window.__mv.push(v); } return 1; })()`);
       await wait(2500);
       const resp = await js('(async () => { const f = document.querySelector("#utcFrame"); const c = new AbortController(); const t = performance.now(); setTimeout(() => c.abort(), 4000); try { for (let i = 0; i < 5; i++) await f.contentWindow.fetch("/utc/api/info?i=" + i, { cache: "no-store", signal: c.signal }); return Math.round(performance.now() - t) + " ms"; } catch (e) { return "MACET"; } })()');
-      log('panel UTC merespons dengan banyak grafis aktif: ' + resp + ' • host lapisan: ' + JSON.stringify(utcOsr && utcOsr.hosts ? utcOsr.hosts() : '?'));
-      if (resp === 'MACET' || parseInt(resp, 10) > 2500) { fail++; log('GAGAL: panel UTC tidak merespons saat banyak grafis tampil'); }
+      log('panel UTC merespons dengan banyak grafis aktif: ' + resp + ' (sebelum video diputar: ' + respBase + ') • host lapisan: ' + JSON.stringify(utcOsr && utcOsr.hosts ? utcOsr.hosts() : '?'));
+      // macet karena jatah sambungan habis = tidak pernah dijawab (MACET); lambat sebanding dengan sebelum video = beban CPU runner
+      if (resp === 'MACET' || parseInt(resp, 10) > Math.max(2500, (parseInt(respBase, 10) || 0) * 2 + 800)) { fail++; log('GAGAL: panel UTC tidak merespons saat banyak grafis tampil'); }
       const lay = JSON.parse(await js('JSON.stringify(KM.utc.layerInfo().filter((l) => ["tt", "loc", "lt"].includes(l.id)).map((l) => ({ id: l.id, started: l.started, frames: l.frames })))'));
       const sse = await js('(() => { try { const d = document.querySelector("#utcFrame").contentDocument; const c = d.querySelector("#conn"); return c ? c.className + " " + c.textContent.trim().slice(0, 40) : "-"; } catch (e) { return "err " + e.message; } })()');
       log('lapisan title/lokasi/lower third: ' + JSON.stringify(lay) + ' • status panel: ' + sse + ' • host video mixer: ' + await js('JSON.stringify((window.__mv || []).map((v) => new URL(v.src).hostname))'));
