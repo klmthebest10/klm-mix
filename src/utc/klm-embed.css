@@ -51,90 +51,29 @@ html.klmui .tabs button.act { background: rgba(240, 138, 36, .14); color: #ffc07
 
 /* ================= menyatu di dalam KLM ================= */
 html.klm-embed header { display: none; }
-html.klm-embed main { grid-template-columns: clamp(300px, 24vw, 400px) 184px minmax(0, 1fr); gap: 10px; padding: 10px; height: 100vh; align-items: stretch; }
+html.klm-embed main { grid-template-columns: 340px 196px minmax(0, 1fr); gap: 12px; padding: 12px; height: 100vh; align-items: stretch; }
 html.klm-embed main > section:last-child { display: contents; }
-/* kolom kiri: pratinjau grafis + tombol tayang — mengisi tinggi panel, digulir di dalamnya bila perlu */
-html.klm-embed .mon { position: static; overflow: auto; gap: 8px; min-height: 0; padding-right: 2px; align-content: start; }
+/* kolom kiri: pratinjau grafis + tombol tayang */
+html.klm-embed .mon { position: static; overflow: auto; gap: 10px; min-height: 0; padding-right: 2px; }
 html.klm-embed .mon #mswitch, html.klm-embed .mon #scrPgm, html.klm-embed .mon .swbar { display: none !important; }
 html.klm-embed .mon #scrPvw { display: block !important; }
-html.klm-embed .mon .mons { display: block !important; }
-html.klm-embed .mon .scr-h { padding: 5px 10px; }
 html.klm-embed .mon .istrip button { min-width: 74px; padding: 6px 8px; font-size: 11.5px; }
 html.klm-embed .air { grid-template-columns: repeat(3, 1fr); gap: 6px; }
-html.klm-embed .air button { padding: 9px 4px; font-size: 10.5px; }
+html.klm-embed .air button { padding: 10px 4px; font-size: 10.5px; }
 html.klm-embed .air button b { font-size: 12.5px; }
 html.klm-embed .ocair { grid-template-columns: 1fr 1fr auto; gap: 6px; }
-html.klm-embed .ocair button { padding: 8px 8px; font-size: 11.5px; }
-html.klm-embed .hint { font-size: 11px; line-height: 1.5; }
+html.klm-embed .ocair button { padding: 9px 8px; font-size: 11.5px; }
 /* kolom tengah: navigasi vertikal berkelompok */
-html.klm-embed .tabs { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 2px; margin: 0; overflow: auto; background: #14171c; border: 1px solid #252a33; border-radius: 10px; padding: 6px; min-height: 0; }
-html.klm-embed .tabs .tgrp { display: block; font-size: 10px; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase; color: #6f7888; padding: 9px 8px 3px; }
+html.klm-embed .tabs { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 2px; margin: 0; overflow: auto; background: #14171c; border: 1px solid #252a33; border-radius: 10px; padding: 8px; min-height: 0; }
+html.klm-embed .tabs .tgrp { display: block; font-size: 10px; font-weight: 800; letter-spacing: 1.1px; text-transform: uppercase; color: #6f7888; padding: 10px 8px 4px; }
 html.klm-embed .tabs .tgrp:first-child { padding-top: 2px; }
-html.klm-embed .tabs button { justify-content: flex-start; padding: 7px 10px; font-size: 12.5px; width: 100%; text-align: left; flex: none; }
+html.klm-embed .tabs button { justify-content: flex-start; padding: 8px 10px; font-size: 12.5px; width: 100%; text-align: left; }
 html.klm-embed .tabs button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* kolom kanan: editor */
-html.klm-embed .panel { overflow: auto; min-height: 0; padding-right: 4px; gap: 10px; }
+html.klm-embed .panel { overflow: auto; min-height: 0; padding-right: 4px; gap: 12px; }
 html.klm-embed .toast { bottom: 18px; }
-
-/* panel pendek (monitor KLM di atasnya): pratinjau & tombol tayang berdampingan agar semua tombol terlihat tanpa menggulir */
-@media (max-height: 600px) {
-  html.klm-embed main { grid-template-columns: clamp(430px, 31vw, 520px) 172px minmax(0, 1fr); }
-  html.klm-embed .mon { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); grid-template-areas: "pv air" "pv oc" "is is" "hn hn"; gap: 6px 8px; }
-  html.klm-embed .mon .mons { grid-area: pv; align-self: start; }
-  html.klm-embed .mon .air { grid-area: air; grid-template-columns: 1fr 1fr; gap: 5px; align-self: start; }
-  html.klm-embed .mon .air button { padding: 6px 4px; font-size: 10px; }
-  html.klm-embed .mon .ocair { grid-area: oc; grid-template-columns: 1fr 1fr; gap: 5px; align-self: start; }
-  html.klm-embed .mon .ocair button { padding: 7px 4px; font-size: 11px; }
-  html.klm-embed .mon .ocair button:last-child { grid-column: 1 / -1; }
-  html.klm-embed .mon .istrip { grid-area: is; }
-  html.klm-embed .mon .hint { grid-area: hn; }
-  html.klm-embed .tabs { padding: 5px; gap: 1px; }
-  html.klm-embed .tabs .tgrp { padding: 6px 8px 2px; font-size: 9.5px; }
-  html.klm-embed .tabs button { padding: 5px 9px; font-size: 12px; }
-}
-@media (max-height: 470px) {
-  html.klm-embed .mon .hint { display: none; }
-  /* judul kelompok menjadi garis pemisah tipis agar semua menu muat tanpa menggulir */
-  html.klm-embed .tabs .tgrp { font-size: 0; height: 1px; padding: 0; margin: 3px 6px; background: #2a303a; }
-  html.klm-embed .tabs .tgrp:first-child { display: none; }
-  html.klm-embed .tabs button { padding: 4px 9px; }
-}
-@media (max-height: 380px) {
-  html.klm-embed main { padding: 8px; gap: 8px; }
-  html.klm-embed .tabs { padding: 4px; }
-  html.klm-embed .tabs button { padding: 3px 8px; font-size: 11.5px; }
-  html.klm-embed .tabs button .ki { width: 13px; height: 13px; }
-}
-@media (max-height: 320px) {
-  html.klm-embed .tabs button { padding: 1px 8px; font-size: 11px; }
-}
 @media (max-width: 1250px) {
-  html.klm-embed main { grid-template-columns: clamp(300px, 30vw, 380px) 52px minmax(0, 1fr); }
+  html.klm-embed main { grid-template-columns: 300px 56px minmax(0, 1fr); }
   html.klm-embed .tabs .tgrp, html.klm-embed .tabs button span { display: none; }
-  html.klm-embed .tabs button { justify-content: center; padding: 8px 0; }
-}
-@media (max-width: 1250px) and (max-height: 600px) {
-  html.klm-embed main { grid-template-columns: clamp(380px, 40vw, 460px) 52px minmax(0, 1fr); }
-}
-@media (max-width: 1250px) and (max-height: 470px) {
-  html.klm-embed .tabs button { padding: 4px 0; }
-}
-@media (max-height: 380px) {
-  /* sangat pendek: tombol tayang lebih ringkas */
-  html.klm-embed .mon .ocair button { padding: 6px 6px; font-size: 10.5px; }
-  html.klm-embed .mon .air button { padding: 4px 3px; font-size: 9.5px; line-height: 1.25; }
-  html.klm-embed .mon .air button b { font-size: 11px; }
-}
-@media (min-width: 1251px) and (max-height: 380px) {
-  /* OPENING · CLOSING · OFF satu baris (cukup lebar) */
-  html.klm-embed .mon .ocair { grid-template-columns: 1fr 1fr auto; }
-  html.klm-embed .mon .ocair button:last-child { grid-column: auto; }
-}
-@media (max-width: 1250px) and (max-height: 380px) {
-  html.klm-embed .tabs button { padding: 3px 0; }
-}
-html.klm-embed .ocair button { white-space: nowrap; }
-@media (max-width: 1250px) and (max-height: 270px) {
-  html.klm-embed .tabs button { padding: 1px 0; }
-  html.klm-embed .tabs .tgrp { margin: 1px 6px; }
+  html.klm-embed .tabs button { justify-content: center; padding: 9px 0; }
 }
