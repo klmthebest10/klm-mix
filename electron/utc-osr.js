@@ -121,7 +121,7 @@ module.exports = function setupUtcOsr(o) {
   function unref(h) { if (h && --h.n <= 0 && h.tex) { const t = h.tex; h.tex = null; try { t.release(); } catch (e) {} } }
   function relTex(x) { if (x && x.h) unref(x.h); }
   const nat = o.native || null;
-  if (nat && nat.onUtcWant) nat.onUtcWant(() => { for (const L of layers.values()) if (L.t && L.gpu && !L.paused && L.wc && !L.wc.isDestroyed()) { try { L.wc.invalidate(); } catch (e) {} } });
+  if (nat && nat.onUtcWant) nat.onUtcWant(() => { retryGpu('mesin native butuh grafis UTC'); for (const L of layers.values()) if (L.t && L.gpu && !L.paused && L.wc && !L.wc.isDestroyed()) { try { L.wc.invalidate(); } catch (e) {} } });
   function paintGpu(L, e, dirty) {
     const tex = e && e.texture;
     // gambar tanpa tekstur GPU bisa muncul SESAAT (saat dilanjutkan dari jeda, ganti ukuran, memuat halaman).
@@ -140,7 +140,7 @@ module.exports = function setupUtcOsr(o) {
     if (!meta.W || !meta.H || !L.t || L.paused) { unref(h); return; }
     // mesin video native menampilkan grafis UTC di monitor Program → tekstur yang sama juga dikirim ke sana (tanpa salinan CPU)
     if (nat && nat.utcWants()) { h.n++; try { nat.utcPush(L.id, h, meta, unref); } catch (er) { unref(h); } }
-    if (!zc.ready || !target || target.isDestroyed()) { unref(h); return; }
+    if (!zc.ready || !target || target.isDestroyed() || (zc.rendHold && Date.now() < zc.rendHold)) { unref(h); return; }
     // kontrol aliran: satu kiriman per lapisan; yang menunggu hanya frame TERBARU (frame lama langsung dikembalikan ke kolam)
     if (L.zFly) { relTex(L.zPend); L.zPend = { h, meta }; return; }
     sendGpu(L, h, meta);
@@ -164,9 +164,27 @@ module.exports = function setupUtcOsr(o) {
       .catch((err) => failGpu('kirim tekstur: ' + (err && err.message)))
       .finally(done);
   }
-  function failGpu(why) { zc.fails++; dlog('gagal (' + zc.fails + '): ' + why); if (zc.fails >= 5) fallback(why); }
+  // Kiriman ke jendela KLM (renderer) bisa habis waktu bila jendela itu sedang sibuk sesaat ("transfer shared texture timed out").
+  // Dulu 5× gagal → SEMUA lapisan pindah ke jalur CPU selamanya — padahal jalur CPU tidak bisa mengirim ke mesin video native,
+  // jadi UTC Acara & UTC Score HILANG dari Program/output sampai KLM dibuka ulang. Sekarang:
+  //  • selama mesin native memakai grafis UTC (tekstur dikirim langsung ke mesin, tidak lewat renderer), gagal kirim ke renderer
+  //    hanya membuat kiriman ke renderer diistirahatkan 3 detik — jalur GPU TIDAK dimatikan;
+  //  • bila tetap pindah ke CPU karena kiriman habis waktu, jalur GPU dicoba lagi otomatis (20 dtk / saat mesin native butuh UTC).
+  const isSendFail = (why) => /^kirim tekstur/.test(String(why || ''));
+  function failGpu(why) {
+    zc.fails++; dlog('gagal (' + zc.fails + '): ' + why);
+    if (isSendFail(why)) { zc.rendHold = Date.now() + 3000; if (nat && nat.utcWants()) { zc.fails = Math.min(zc.fails, 4); return; } }
+    if (zc.fails >= 5) fallback(why);
+  }
   /** jalur GPU tidak bisa dipakai di PC ini → semua lapisan dibuat ulang dengan jalur salinan CPU */
-  function fallback(why) { if (!zc.on) return; zc.on = false; zc.why = why; console.warn('[UTC] zero-copy dimatikan: ' + why); dlog('PINDAH KE JALUR CPU: ' + why); rebuild(); }
+  function fallback(why) {
+    if (!zc.on) return; zc.on = false; zc.why = why; console.warn('[UTC] zero-copy dimatikan: ' + why); dlog('PINDAH KE JALUR CPU: ' + why); rebuild();
+    if (isSendFail(why) && (zc.retries = (zc.retries || 0) + 1) <= 20) { clearTimeout(zc.retryT); zc.retryT = setTimeout(() => retryGpu('20 dtk berlalu'), 20000); }
+  }
+  function retryGpu(why) {
+    if (zc.on || !isSendFail(zc.why) || !sharedTexture || !sharedTexture.importSharedTexture || process.platform !== 'win32') return;
+    clearTimeout(zc.retryT); zc.on = true; zc.why = ''; zc.fails = 0; zc.rendHold = 0; dlog('coba lagi jalur GPU (' + why + ')'); rebuild();
+  }
   function rebuild() {
     if (target && !target.isDestroyed()) target.send('utc:zc', { on: zc.on, why: zc.why });
     for (const L of layers.values()) {
@@ -266,5 +284,5 @@ module.exports = function setupUtcOsr(o) {
   ipcMain.on('osr:msg', (e, msg) => {
     for (const L of layers.values()) if (L.wc && !L.wc.isDestroyed() && L.wc.id === e.sender.id) { if (L.t && msg && typeof msg === 'object') tell(L, msg); return; }
   });
-  return { stop: () => stop(), forceFallback: (why) => fallback(why || 'uji'), zc: () => Object.assign({}, zc, { layers: [...layers.values()].filter((L) => L.t).map((L) => L.id + (L.gpu ? ':gpu' : ':cpu')) }), active: () => [...layers.values()].some((L) => !!L.t), hosts: () => [...layers.values()].filter((L) => L.t).map((L) => L.id + '@' + (String(L.t.url).match(/\/\/([^/:]+)/) || [])[1]) };
+  return { stop: () => stop(), forceFallback: (why) => fallback(why || 'uji'), simSendFail: () => failGpu('kirim tekstur: uji (simulasi habis waktu)'), retryGpu: () => retryGpu('uji'), zc: () => Object.assign({}, zc, { layers: [...layers.values()].filter((L) => L.t).map((L) => L.id + (L.gpu ? ':gpu' : ':cpu')) }), active: () => [...layers.values()].some((L) => !!L.t), hosts: () => [...layers.values()].filter((L) => L.t).map((L) => L.id + '@' + (String(L.t.url).match(/\/\/([^/:]+)/) || [])[1]) };
 };

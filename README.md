@@ -140,6 +140,11 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.24
+Versi uji (beta, PC):
+- **UTC Acara & UTC Score kembali tampil di Program.** Penyebab: grafis UTC dikirim ke mesin video native lewat tekstur GPU. Bila jendela KLM sempat sibuk ±1 detik, kiriman salinan tekstur ke jendela itu habis waktu ("transfer shared texture timed out"); setelah 5× KLM memindahkan semua lapisan grafis ke jalur CPU untuk selamanya — dan jalur CPU tidak sampai ke mesin native, sehingga grafis hilang dari Program/rekam/stream sampai KLM dibuka ulang. Sekarang selama mesin native memakai grafis UTC, gagal kirim ke jendela KLM hanya membuat kiriman itu istirahat 3 detik (jalur GPU tetap); bila tetap pindah ke CPU, jalur GPU dicoba lagi otomatis.
+- **Tombol KLM (ON AIR di Program) dipindah ke bagian atas panel lengkap** UTC Acara & UTC Score: tombol "● UTC … ON AIR / tayangkan" langsung terlihat di bilah atas; klik tulisan "KLM — …" untuk CUT / AUTO / FTB / Rekam / Live.
+
 ### Baru di v1.18.0-beta.23
 Versi uji (beta, PC + APK HP):
 - **Panel lengkap UTC tidak lagi kosong / error.** Penyebab yang ditemukan: bila satu lapisan grafis UTC sempat gagal dimuat (server sibuk sesaat, batas waktu), *semua* lapisan grafis pindah ke alamat 127.0.0.1 — alamat yang sama dengan panel UTC — untuk selamanya. Tiap lapisan memegang 1 sambungan event, sedangkan Chromium hanya membuka 6 sambungan per alamat, sehingga berkas panel (common.js, fonts.css) mengantre selamanya → panel kosong. Sekarang lapisan hanya pindah bila nama host benar-benar tidak dikenal, dan cadangannya alamat loopback tersendiri per lapisan (127.0.0.2…), tidak pernah alamat panel. Berkas aplikasi UTC / Score / HP kini juga dilayani dari memori (tidak bisa tertahan pembacaan berkas), dan panel/grafis UTC memuat ulang dirinya sendiri bila skrip intinya tidak termuat dalam 9 detik.

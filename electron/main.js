@@ -677,11 +677,11 @@ function smokeTest() {
         const out = (sel) => [...d.querySelectorAll(sel)].filter((e) => e.offsetParent).filter((e) => { const r = e.getBoundingClientRect(); return r.bottom > w.innerHeight + 1 || r.right > w.innerWidth + 1 || r.top < 0; }).map((e) => e.textContent.trim().slice(0, 14));
         const tb = d.querySelector('#tabs');
         const pv = d.querySelector('#scrPvw').getBoundingClientRect(), vis = (q) => { const e = d.querySelector(q); return !!(e && e.offsetParent); };
-        return JSON.stringify({ embed: d.documentElement.classList.contains('klm-embed'), size: w.innerWidth + 'x' + w.innerHeight, air: out('#air button, #ocair button'), tabsScroll: tb ? tb.scrollHeight - tb.clientHeight : -1, pratinjauKanan: pv.left > w.innerWidth / 2 && pv.bottom <= w.innerHeight + 1 && pv.width > 100, daftarInput: vis('#istrip'), tombolOff: vis('.ocoff') });
+        return JSON.stringify({ embed: d.documentElement.classList.contains('klm-embed'), size: w.innerWidth + 'x' + w.innerHeight, air: out('#air button, #ocair button'), tabsScroll: tb ? tb.scrollHeight - tb.clientHeight : -1, pratinjauKanan: pv.left > w.innerWidth / 2 && pv.bottom <= w.innerHeight + 1 && pv.width > 100, daftarInput: vis('#istrip'), tombolOff: vis('.ocoff'), klmAtas: (() => { const k = d.querySelector('#klmb'); return !!(k && k.closest('#klmbSlot') && k.getBoundingClientRect().top < 60); })() });
       } catch (e) { return JSON.stringify({ err: e.message }); } })()`));
       log('tata letak panel UTC Acara: ' + JSON.stringify(play));
       fs.writeFileSync(path.join(out, 'panel-acara.png'), (await mainWin.webContents.capturePage()).toPNG());
-      if (!play.embed || (play.air && play.air.length) || play.tabsScroll > 2 || !play.pratinjauKanan || play.daftarInput || play.tombolOff) { fail++; log('GAGAL: tombol panel UTC Acara terpotong / perlu digulir'); }
+      if (!play.embed || (play.air && play.air.length) || play.tabsScroll > 2 || !play.pratinjauKanan || play.daftarInput || play.tombolOff || !play.klmAtas) { fail++; log('GAGAL: tombol panel UTC Acara terpotong / perlu digulir'); }
       // panel harus tetap merespons saat banyak lapisan grafis aktif (batas 6 sambungan per host di Chromium)
       await post('/utc/api/klm/cmd', { cmd: 'show', target: 'lt' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'logo' });
       await post('/utc/api/klm/cmd', { cmd: 'show', target: 'ticker' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'loc' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'soc' });
@@ -711,10 +711,10 @@ function smokeTest() {
         const fr = mainWin.webContents.mainFrame.framesInSubtree.find((x) => /[?&]klm=1/.test(x.url));
         const sl = fr ? JSON.parse(await fr.executeJavaScript(`JSON.stringify((() => { const vis = (sel) => { const e = document.querySelector(sel); if (!e) return 'tidak ada'; const r = e.getBoundingClientRect(); return r.bottom <= innerHeight + 1 && r.top >= 0 && r.right <= innerWidth + 1; };
           const a = document.querySelector('#aside'), m = document.querySelector('#main');
-          return { embed: document.documentElement.classList.contains('klm-embed'), size: innerWidth + 'x' + innerHeight, monitorKiri: !!(a && m && a.getBoundingClientRect().left < m.getBoundingClientRect().left), gol: vis('.tp-btns .plus'), mulai: vis('.cp [data-act="clock"]'), monitor: vis('#mon') }; })())`)) : { err: 'frame tidak ditemukan' };
+          return { embed: document.documentElement.classList.contains('klm-embed'), size: innerWidth + 'x' + innerHeight, monitorKiri: !!(a && m && a.getBoundingClientRect().left < m.getBoundingClientRect().left), gol: vis('.tp-btns .plus'), mulai: vis('.cp [data-act="clock"]'), monitor: vis('#mon'), klmAtas: (() => { const k = document.querySelector('#klmb'); return !!(k && k.closest('#klmbSlot') && k.getBoundingClientRect().top < 70); })() }; })())`)) : { err: 'frame tidak ditemukan' };
         log('tata letak panel UTC Score: ' + JSON.stringify(sl));
         fs.writeFileSync(path.join(out, 'panel-score.png'), (await mainWin.webContents.capturePage()).toPNG());
-        if (!sl.embed || !sl.monitorKiri || sl.gol !== true || sl.mulai !== true || sl.monitor !== true) { fail++; log('GAGAL: tata letak panel UTC Score (monitor kiri, tombol terlihat)'); }
+        if (!sl.embed || !sl.monitorKiri || sl.gol !== true || sl.mulai !== true || sl.monitor !== true || !sl.klmAtas) { fail++; log('GAGAL: tata letak panel UTC Score (monitor kiri, tombol terlihat)'); }
       }
       await js('KM.ui.utcPanel(false)');
       await post('/utc/api/klm/cmd', { cmd: 'hideall' });

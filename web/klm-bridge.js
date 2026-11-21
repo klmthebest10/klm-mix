@@ -47,7 +47,12 @@
   #klmb .tag{font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:5px;background:#20252d;color:#a7afbd;border:1px solid #2f3541}
   #klmb .tag.on{background:#d93a33;color:#fff;border-color:#ff6a62}
   #klmb .muted{color:#8790a0;font-size:11.5px;margin:6px 0 0}
-  @media (max-width:520px){#klmb{right:8px;bottom:8px}}`;
+  @media (max-width:520px){#klmb{right:8px;bottom:8px}}
+  /* panel lengkap di KLM: menempel di BAGIAN ATAS panel (slot #klmbSlot), bukan melayang di pojok kanan bawah */
+  #klmb.inl{position:relative;right:auto;bottom:auto;display:flex;align-items:center;gap:6px;z-index:60}
+  #klmb.inl .pill{height:30px;box-shadow:none;background:#14171c}
+  #klmb.inl .qa{flex:none;height:30px;padding:0 12px;border-radius:999px}
+  #klmb.inl .card{top:38px;bottom:auto;right:0}`;
   const el = (tag, attrs, ...kids) => {
     const n = document.createElement(tag);
     for (const k in attrs || {}) { if (k === 'class') n.className = attrs[k]; else if (k.startsWith('on')) n.addEventListener(k.slice(2), attrs[k]); else n.setAttribute(k, attrs[k]); }
@@ -60,9 +65,20 @@
     const root = el('div', { id: 'klmb', class: open ? 'open' : '' });
     root.append(el('div', { class: 'card' }), el('div', { class: 'pill', title: 'Fitur KLM untuk ' + NAME, onclick: () => { open = !open; root.classList.toggle('open', open); try { localStorage.setItem(KEY, open ? '1' : '0'); } catch (e) {} draw(); poll(); } },
       el('span', { class: 'lg' }, 'K'), el('span', { class: 'dot', id: 'klmbDot' }), el('span', { id: 'klmbTxt' }, 'KLM')));
-    document.body.append(root);
+    root.append(el('button', { class: 'air qa', id: 'klmbAir', title: 'Tampilkan / sembunyikan ' + NAME + ' di atas Program KLM', onclick: () => act(has0() ? (APP === 'score' ? 'ScoreOnAir' : 'UTCOnAir') : (APP === 'score' ? 'ScoreAddInput' : 'UTCAddInput')) }, ''));
+    dock(root);
+    // halaman bisa menggambar ulang bagian atasnya → pastikan tetap menempel di slot
+    setInterval(() => dock(root), 700);
     draw(); poll();
   }
+  /** di dalam KLM (panel lengkap) widget menempel di slot #klmbSlot di bagian atas panel; selain itu melayang di pojok */
+  function dock(root) {
+    const slot = document.getElementById('klmbSlot');
+    if (slot) { if (root.parentNode !== slot) { root.classList.add('inl'); slot.append(root); } }
+    else if (root.parentNode !== document.body) { root.classList.remove('inl'); document.body.append(root); }
+    else if (!root.isConnected) document.body.append(root);
+  }
+  const has0 = () => { const me = st ? (APP === 'score' ? st.score : st.utc) : null; return !!(me && me.has); };
   const api = (fn, v) => fetch(BASE + '/api/?Function=' + encodeURIComponent(fn) + (v != null ? '&Value=' + encodeURIComponent(v) : ''), { mode: 'cors' }).then((r) => r.text()).catch(() => '');
   async function act(fn, v) { if (busy) return; busy = true; try { await api(fn, v); } finally { busy = false; setTimeout(poll, 150); } }
   function poll() {
@@ -79,6 +95,13 @@
     const dot = document.getElementById('klmbDot'), txt = document.getElementById('klmbTxt');
     dot.className = 'dot' + (!ok ? '' : has && onAir ? ' on' : ' ok');
     txt.textContent = !ok ? 'KLM — tidak terhubung' : !has ? 'KLM — ' + NAME + ' belum jadi input' : 'KLM — ' + (onAir ? 'ON AIR' : 'tidak tayang') + (st.rec ? ' • REC' : '') + (st.stream ? ' • LIVE' : '');
+    const qa = document.getElementById('klmbAir');
+    if (qa) {
+      const inl = root.classList.contains('inl');
+      qa.style.display = inl && ok ? '' : 'none';
+      qa.className = 'air qa' + (has && onAir ? ' on' : '');
+      qa.textContent = !has ? '+ Jadikan input KLM' : (onAir ? '● ' + NAME + ' ON AIR' : '○ ' + NAME + ' — tayangkan');
+    }
     const card = root.querySelector('.card');
     if (!open) { card.replaceChildren(); stopFrame(); return; }
     if (!ok) { card.replaceChildren(el('h5', {}, 'KLM'), el('p', { class: 'muted' }, 'Tidak terhubung ke KLM. Pastikan aplikasi KLM terbuka di PC.')); stopFrame(); return; }
