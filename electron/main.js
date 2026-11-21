@@ -666,7 +666,10 @@ function smokeTest() {
       log('running text native setelah hide: ' + nat); if (nat) { fail++; log('GAGAL: mode native tidak berhenti saat running text disembunyikan'); }
       const shot = await mainWin.webContents.capturePage();
       fs.writeFileSync(path.join(out, 'window.png'), shot.toPNG());
+      const lag0 = await js('(async () => { let n = 0, tot = 0, t = performance.now(); await new Promise((r) => { const k = () => { const now = performance.now(); tot += Math.max(0, now - t - 10); t = now; if (++n < 150) setTimeout(k, 10); else r(); }; setTimeout(k, 10); }); return Math.round(tot); })()');
       await js('KM.ui.utcPanel(true, "acara")'); await wait(4000);
+      const lag1 = await js('(async () => { let n = 0, tot = 0, t = performance.now(); await new Promise((r) => { const k = () => { const now = performance.now(); tot += Math.max(0, now - t - 10); t = now; if (++n < 150) setTimeout(k, 10); else r(); }; setTimeout(k, 10); }); return Math.round(tot); })()');
+      log('beban renderer (keterlambatan timer 150×10 ms): sebelum panel ' + lag0 + ' ms, panel Acara terbuka ' + lag1 + ' ms • stage ' + await js('document.querySelector("#stage").offsetHeight') + ' px, panel ' + await js('document.querySelector("#utcWs").offsetWidth + "x" + document.querySelector("#utcWs").offsetHeight'));
       const ok = await js('(() => { try { const f = document.querySelector("#utcFrame"); return !!(f && f.contentDocument && f.contentDocument.querySelector("#panel, .tabs, header")); } catch (e) { return "err " + e.message; } })()');
       log('panel UTC dimuat: ' + ok); if (ok !== true) fail++;
       // tata letak panel lengkap: semua tombol tayang & navigasi terlihat tanpa menggulir di ukuran panel bawaan
