@@ -140,6 +140,9 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.21
+Versi uji (beta, PC): **KLMCAM tidak lagi berhenti-berhenti saat ada paket Wi-Fi yang dikirim ulang.** Di WebRTC, frame yang paketnya hilang menunggu kiriman ulang sementara frame sesudahnya sudah diteruskan lebih dulu (urutan tertukar). KLM dulu menganggapnya frame hilang → gambar berhenti menunggu frame kunci (terukur 22×/menit pada uji pengguna). Kini frame ditahan sebentar (≤ 250 ms, hanya saat urutan tertukar) lalu diteruskan berurutan; hanya frame yang benar-benar hilang yang membuat mesin menunggu frame kunci.
+
 ### Baru di v1.18.0-beta.20
 Versi uji (beta) + APK KLM HP baru — **KLMCAM lebih mulus, tanpa freeze**.
 - **Stabilisasi (EIS) di Web Worker tersendiri:** pengolahan frame tidak lagi berbagi waktu dengan halaman kamera (UI, statistik, pengatur kecerahan). Gambar analisis diperkecil di GPU — dulu frame penuh dibaca balik ke CPU setiap frame (penyebab utama tersendat di HP). Giroskop baru dipakai bila kalibrasinya jelas (HP sibuk → tetap memakai gerak gambar). **Bila HP tetap kewalahan, tingkat EIS diturunkan otomatis** (Kuat → Sedang → Ringan → Mati) dengan pemberitahuan.

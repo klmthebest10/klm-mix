@@ -817,9 +817,44 @@
   // Pekerja (worker) menyalin tiap frame H.264 dan — bila ada — mengirimnya LANGSUNG ke proses utama lewat MessagePort
   // (tidak lewat thread utama KLM yang sibuk menggambar UI → tidak ada jeda/jitter tambahan). Cap waktu = cap waktu RTP
   // dari HP (90 kHz, dibuka lilitannya) → mesin native menayangkan frame menurut irama aslinya, mulus.
-  const KW = `const fwd = new Set(), tf = new Map(), clk = new Map(); let port = null;
-onmessage = (e) => { const m = e.data || {}; if (m.port) port = m.port; if (m.fwd) fwd.add(m.fwd); if (m.unfwd) fwd.delete(m.unfwd);
-  if (m.kf) { const t = tf.get(m.kf); if (t && t.sendKeyFrameRequest) t.sendKeyFrameRequest().catch(() => {}); } };
+  // Urutan frame: di WebRTC, frame yang paketnya hilang menunggu kiriman ulang (NACK) sementara frame SESUDAHNYA sudah lengkap
+  // dan langsung diteruskan ke sini → urutan tertukar. Dulu mesin menganggap itu "frame hilang" → gambar berhenti menunggu frame
+  // kunci (freeze puluhan kali/menit di jaringan yang kadang kehilangan paket). Kini pekerja menahan frame sebentar (≤ 250 ms)
+  // sampai frame yang tertinggal datang, lalu meneruskan semuanya berurutan (frame_num H.264). Frame yang benar-benar hilang
+  // tetap ditangani mesin (tunggu frame kunci, tanpa bercak).
+  const KW = `const fwd = new Set(), tf = new Map(), clk = new Map(), ordq = new Map(); let port = null;
+const HOLD = 250;
+function nalus(u8, cb) { const n = u8.length; let i = 0; while (i + 3 < n) { let sc = 0; if (u8[i] === 0 && u8[i + 1] === 0 && u8[i + 2] === 1) sc = 3; else if (i + 4 < n && u8[i] === 0 && u8[i + 1] === 0 && u8[i + 2] === 0 && u8[i + 3] === 1) sc = 4; if (!sc) { i++; continue; }
+  const s = i + sc; let e = s + 1; while (e + 2 < n && !(u8[e] === 0 && u8[e + 1] === 0 && (u8[e + 2] === 1 || (u8[e + 2] === 0 && e + 3 < n && u8[e + 3] === 1)))) e++; if (e + 2 >= n) e = n; if (cb(s, e) === false) return; i = e; } }
+function bits(u8, s, e) { const b = []; let z = 0; for (let i = s; i < e && b.length < 96; i++) { if (z >= 2 && u8[i] === 3) { z = 0; continue; } z = u8[i] === 0 ? z + 1 : 0; b.push(u8[i]); } let p = 0, bad = false;
+  const u = (k) => { let v = 0; while (k--) { if (p >= b.length * 8) { bad = true; return v; } v = (v << 1) | ((b[p >> 3] >> (7 - (p & 7))) & 1); p++; } return v; };
+  const ue = () => { let z2 = 0; while (!u(1)) { if (++z2 > 31 || bad) { bad = true; return 0; } } return z2 ? ((1 << z2) - 1 + u(z2)) : 0; };
+  const se = () => { const v = ue(); return (v & 1) ? (v + 1) / 2 : -(v / 2); };
+  return { u, ue, se, bad: () => bad }; }
+function parse(st, u8) { // → { fn, ref } (frame_num & apakah frame acuan), null bila tidak terbaca
+  let out = null;
+  nalus(u8, (s, e) => { const h = u8[s], t = h & 31;
+    if (t === 7) { const r = bits(u8, s + 1, e), prof = r.u(8); r.u(16); r.ue();
+      if ([100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135].includes(prof)) { const cf = r.ue(); st.sep = cf === 3 ? !!r.u(1) : false; r.ue(); r.ue(); r.u(1);
+        if (r.u(1)) for (let i = 0; i < (cf !== 3 ? 8 : 12); i++) if (r.u(1)) { let last = 8, next = 8; const sz = i < 6 ? 16 : 64; for (let j = 0; j < sz; j++) { if (next) next = (last + r.se() + 256) % 256; last = next || last; } } }
+      const l = r.ue() + 4; if (!r.bad() && l >= 4 && l <= 16) st.log2 = l; }
+    else if ((t === 1 || t === 5) && st.log2) { const r = bits(u8, s + 1, Math.min(e, s + 49)); r.ue(); r.ue(); r.ue(); if (st.sep) r.u(2); const f = r.u(st.log2); if (!r.bad()) out = { fn: f, ref: ((h >> 5) & 3) !== 0, idr: t === 5 }; return false; } });
+  return out; }
+function send(m) { let sent = false;
+  if (port && (!m.mime || /h264/i.test(m.mime))) { try { port.postMessage(m); sent = true; } catch (e) { port = null; } } // disalin (proses utama tidak menerima transfer ArrayBuffer)
+  if (!sent) postMessage(m, [m.buf]); }
+function release(id, force) { const q = ordq.get(id); if (!q) return; const now = performance.now();
+  q.p.sort((a, b) => a.ts - b.ts);
+  while (q.p.length) { const h = q.p[0], mx = q.log2 ? 1 << q.log2 : 0;
+    const next = h.key || !h.pi || q.prev < 0 || !mx || h.pi.fn === (q.prev + 1) % mx || (!h.pi.ref && h.pi.fn === (q.prev + 1) % mx);
+    if (!next && !force && now - h.at < HOLD && q.p.length < 16) break; // tunggu frame yang tertinggal (kiriman ulang)
+    q.p.shift(); if (!next) q.gaps++;
+    if (h.pi && (h.pi.ref || h.key)) q.prev = h.pi.fn;
+    q.last = h.ts; send(h.m); } }
+setInterval(() => { for (const id of ordq.keys()) release(id, false); }, 15);
+onmessage = (e) => { const m = e.data || {}; if (m.port) port = m.port; if (m.fwd) fwd.add(m.fwd); if (m.unfwd) { fwd.delete(m.unfwd); ordq.delete(m.unfwd); }
+  if (m.kf) { const t = tf.get(m.kf); if (t && t.sendKeyFrameRequest) t.sendKeyFrameRequest().catch(() => {}); }
+  if (m.stats) postMessage({ ostats: [...ordq].map(([k, q]) => [k, q.gaps, q.late, q.held]) }); };
 onrtctransform = (ev) => {
   const t = ev.transformer, id = t.options && t.options.id; if (id) tf.set(id, t);
   const r = t.readable.getReader(), w = t.writable.getWriter(); let n = 0;
@@ -830,9 +865,10 @@ onrtctransform = (ev) => {
       const rtp = (md.rtpTimestamp != null ? md.rtpTimestamp : f.timestamp) >>> 0; let c = clk.get(id);
       if (!c) { c = { last: rtp, ext: 900000 }; clk.set(id, c); } else { let d = (rtp - c.last) | 0; if (d < -180000 || d > 900000) d = 3000; c.ext = Math.max(0, c.ext + d); c.last = rtp; } // lompatan (HP menyambung ulang) → lanjut mulus
       const msg = { id, key: f.type === 'key', n: n++, ts: Math.round(c.ext * 1000 / 9), mime: md.mimeType || '', buf };
-      let sent = false;
-      if (port && (!msg.mime || /h264/i.test(msg.mime))) { try { port.postMessage(msg); sent = true; } catch (e) { port = null; } } // disalin (proses utama tidak menerima transfer ArrayBuffer)
-      if (!sent) postMessage(msg, [buf]);
+      let q = ordq.get(id); if (!q) { q = { p: [], prev: -1, log2: 0, sep: false, last: -1, gaps: 0, late: 0, held: 0 }; ordq.set(id, q); }
+      const pi = (!msg.mime || /h264/i.test(msg.mime)) ? parse(q, new Uint8Array(buf)) : null;
+      if (q.last >= 0 && msg.ts <= q.last && !msg.key) { q.late++; } // datang setelah waktunya habis → mesin sudah menunggu frame kunci
+      else { if (q.p.length) q.held++; q.p.push({ ts: msg.ts, key: msg.key, pi, at: performance.now(), m: msg }); release(id, false); }
     } catch (e) {} }
     try { await w.write(f); } catch (e) {}
   } })();
