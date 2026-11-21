@@ -202,6 +202,13 @@
     const u = urls[0] || {};
     const QS = [['720p30', '720p 30'], ['720p60', '720p 60'], ['1080p30', '1080p 30'], ['1080p60', '1080p 60']];
     const on = cams.filter((i) => i.rt.camId && L.peers.get(i.rt.camId)).length;
+    // fps kamera HP tidak sebanding dengan fps output (mis. 60 → 50p): tiap ±6 frame satu terlewat → gerak tampak sedikit patah.
+    // Itu sifat konversi, bukan gangguan jaringan — beri tahu cara memperbaikinya.
+    const fpsHint = (i) => {
+      const c = Math.round(+(i && (i.want || i.fps)) || 0), o = Math.round(+KM.settings.fps || 0); if (c < 20 || o < 20) return '';
+      const okR = (a, b) => Math.abs(a / b - Math.round(a / b)) < 0.04;
+      return okR(c, o) || okR(o, c) ? '' : '⚠ kamera ' + c + ' fps vs output ' + o + 'p: gerak sedikit patah — samakan (Output ' + (c >= 50 ? '60p/30p' : '30p/60p') + ')';
+    };
     const card = (inp) => {
       const peer = inp.rt.camId ? L.peers.get(inp.rt.camId) : null, tl = KM.engine.tallyOf(inp), o = inp.opts;
       const zv = h('span.muted.zv', (inp.rt.zoom || 1).toFixed(1) + '×');
@@ -216,7 +223,7 @@
       const ss = h('select', { title: po && po.shutterOk === false ? 'HP ini tidak mengizinkan shutter diatur (memakai otomatis HP)' : 'Shutter speed kamera HP (Otomatis tepat: ±1/(2×fps), tanpa kedip lampu)', disabled: !po, onchange: () => L.camControl(inp, 'camopt', { shutter: ss.value }) }, SS.map(([v, l]) => h('option', { value: v, selected: po && v === po.shutter }, l)));
       const pz = KM.nengine && KM.nengine.kPauses ? KM.nengine.kPauses(inp) : 0;
       const ex = peer && peer.info ? [peer.info.shutter ? peer.info.shutter + (peer.info.iso ? ' ISO ' + peer.info.iso : '') : '', peer.info.eis ? 'EIS ' + (peer.info.eis.mode === 'gyro' ? 'giroskop' : 'gambar') : '',
-        peer.info.hitch ? 'HP tersendat ' + peer.info.hitch + '×/mnt' : '', pz ? '⏸ ' + pz + '× tersendat/mnt (jaringan)' : ''].filter(Boolean).join(' • ') : '';
+        peer.info.hitch ? 'HP tersendat ' + peer.info.hitch + '×/mnt' : '', pz ? '⏸ ' + pz + '× tersendat/mnt (jaringan)' : '', fpsHint(peer.info)].filter(Boolean).join(' • ') : '';
       return fold('cam-' + inp.id, KM.inputNum(inp) + '. ' + inp.title, {
         cls: 'camq' + (tl === 'program' ? '.pgm' : tl === 'preview' ? '.pvw' : ''),
         badge: h('span.pill' + (peer ? '.ok' : '.warn'), peer ? 'Terhubung' : 'Slot ' + o.slot + ' menunggu'),

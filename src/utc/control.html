@@ -338,6 +338,14 @@ img,video,iframe{max-width:100%}
 <input type="file" id="fileImport" accept=".json,application/json" hidden>
 <input type="file" id="fileVideo" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v" hidden>
 
+<script>
+/* penjaga muat: bila skrip inti tidak termuat (jaringan/server tersendat) halaman tidak dibiarkan kosong — muat ulang otomatis (maks. 6×) */
+(function(){var K0='utcBoot_'+location.pathname+location.search;setTimeout(function(){if(window.__utcOK)return;var n=0;try{n=+(sessionStorage.getItem(K0)||0);sessionStorage.setItem(K0,n+1);}catch(e){}
+if(n<6){location.reload();return;}
+var d=document.createElement('div');d.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:#0f1115;color:#e6e9f2;font:14px system-ui;z-index:99999';
+d.innerHTML='<b>Panel UTC gagal dimuat dari KLM</b><span style="color:#8b93a8">Server KLM tidak menjawab. Coba muat ulang.</span><button style="padding:8px 16px;border-radius:8px;border:0;background:#f08a24;color:#fff;font-weight:700">Muat ulang</button>';
+d.querySelector('button').onclick=function(){try{sessionStorage.removeItem(K0);}catch(e){}location.reload();};(document.body||document.documentElement).appendChild(d);},9000);})();
+</script>
 <script src="/utc/common.js"></script>
 <script>
 (function(){
@@ -1373,6 +1381,7 @@ async function init(){
   }catch(e){ S = K.defaultState(); }
   ensure(S.eventType);
   renderAll();
+  window.__utcOK = true; try { sessionStorage.removeItem('utcBoot_' + location.pathname + location.search); } catch (e) {}
   const conn = $('#conn');
   const connect = () => {
     const es = new EventSource(ALT('pev') + '/utc/events');

@@ -31,6 +31,9 @@ module.exports = function createScore(opts) {
   const DATA = opts.dataDir, PUB = opts.pubDir;
   const STATE_FILE = path.join(DATA, 'state.json'), LIB_FILE = path.join(DATA, 'library.json'), PRESET_FILE = path.join(DATA, 'presets.json');
   const APP_FILE = path.join(PUB, 'index.html');
+  // berkas aplikasi dari memori (lihat static-cache.js) — halaman/skrip/huruf tidak bisa tertahan pembacaan berkas
+  const SC = require('./static-cache'); try { SC.preload(PUB); if (opts.bridgeFile) SC.preload(path.dirname(opts.bridgeFile)); } catch (e) {}
+  const rf = (file, enc, cb) => { if (typeof enc === 'function') { cb = enc; enc = null; } const m = SC.get(file); if (m) return setImmediate(() => cb(null, enc ? m.toString(enc) : Buffer.from(m))); return fs.readFile(file, enc || undefined, cb); };
   try { fs.mkdirSync(DATA, { recursive: true }); } catch (e) {}
 
   // ---------- pindahkan data dari UTC KLM lama (sekali) ----------
@@ -106,11 +109,11 @@ module.exports = function createScore(opts) {
         icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }] }), 'application/manifest+json; charset=utf-8');
     }
     if (p === '/icon-192.png' || p === '/icon-512.png' || p === '/favicon.ico') {
-      return fs.readFile(path.join(PUB, p === '/icon-512.png' ? 'icon-512.png' : 'icon-192.png'), (e, b) => e ? send(res, 404, '', 'text/plain') : send(res, 200, b, 'image/png', { 'Cache-Control': 'public, max-age=604800' }));
+      return rf(path.join(PUB, p === '/icon-512.png' ? 'icon-512.png' : 'icon-192.png'), (e, b) => e ? send(res, 404, '', 'text/plain') : send(res, 200, b, 'image/png', { 'Cache-Control': 'public, max-age=604800' }));
     }
     if (VIEWS.has(p)) {
       const control = p === '/' || p === '/control' || p === '/index.html';
-      return fs.readFile(APP_FILE, (err, buf) => {
+      return rf(APP_FILE, (err, buf) => {
         if (err) return send(res, 500, 'index.html tidak ditemukan', 'text/plain');
         if (control && opts.mixPort) { // panel kontrol: tampilkan fitur KLM (ON AIR, CUT/AUTO, REC/LIVE, monitor Program)
           const inj = '<script>window.KLM_MIX={app:"score",port:' + (opts.mixPort() || 8620) + '};</script><script src="/klm-bridge.js" defer></script>';
@@ -120,7 +123,7 @@ module.exports = function createScore(opts) {
         send(res, 200, buf, 'text/html; charset=utf-8');
       });
     }
-    if (p === '/klm-bridge.js' && opts.bridgeFile) return fs.readFile(opts.bridgeFile, (e, b) => e ? send(res, 404, '', 'text/plain') : send(res, 200, b, 'text/javascript; charset=utf-8'));
+    if (p === '/klm-bridge.js' && opts.bridgeFile) return rf(opts.bridgeFile, (e, b) => e ? send(res, 404, '', 'text/plain') : send(res, 200, b, 'text/javascript; charset=utf-8'));
     if (p === '/fonts-builtin/builtin.css') return send(res, 200, '/* huruf ada di fonts/fonts.css */', 'text/css; charset=utf-8', { 'Cache-Control': 'public, max-age=86400' });
     if (p === '/api/ping') return json(res, { app: 'UTC KLM', host: 'KLM', now: Date.now(), port: PORT, ips: lan(), nets: lan().map((ip) => ({ ip, name: '', virt: false })), clients: clients.size });
     if (p === '/api/state' && req.method === 'GET') return json(res, { state });
@@ -212,7 +215,7 @@ module.exports = function createScore(opts) {
       let st; try { st = fs.statSync(safe); } catch (e) { continue; }
       if (!st.isFile()) continue;
       const ext = path.extname(safe).toLowerCase();
-      return fs.readFile(safe, (e2, buf) => e2 ? send(res, 500, 'Gagal membaca file', 'text/plain') : send(res, 200, buf, TYPES[ext] || 'application/octet-stream', /\.woff2?$|\.ttf$/.test(ext) ? { 'Cache-Control': 'public, max-age=604800' } : null));
+      return rf(safe, (e2, buf) => e2 ? send(res, 500, 'Gagal membaca file', 'text/plain') : send(res, 200, buf, TYPES[ext] || 'application/octet-stream', /\.woff2?$|\.ttf$/.test(ext) ? { 'Cache-Control': 'public, max-age=604800' } : null));
     }
     send(res, 404, 'Tidak ditemukan', 'text/plain; charset=utf-8');
   }

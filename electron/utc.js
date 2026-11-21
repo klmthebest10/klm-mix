@@ -98,7 +98,11 @@ module.exports = function createUtc(o) {
     b = safeName(b).replace(/ /g, '_') || def;
     return b.slice(0, max);
   }
+  const SC = require('./static-cache'); SC.preload(pubDir);
   function serveFile(req, res, file) {
+    // berkas aplikasi (panel, overlay, skrip, huruf): dari memori — tidak bisa tertahan
+    const mem = SC.get(file);
+    if (mem) return SC.serve(req, res, mem, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' });
     fs.stat(file, (err, st) => {
       if (err || !st.isFile()) return send(res, 404, 'Tidak ditemukan');
       const type = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';

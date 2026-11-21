@@ -297,6 +297,14 @@
 
   /** zoom digital (dari HP tanpa zoom hardware): potong bagian tengah sumber ke kanvas seukuran potongan.
    *  Dipakai semua jalur (Program, Preview, thumbnail, latar AI, chroma) karena dilakukan di tingkat sumber. */
+  // zoom digital dihaluskan (jalur kanvas; jalur native menghaluskan di mesin): nilai meluncur ke target dari HP (~90 ms)
+  function dzEase(rt) {
+    const t = performance.now(), dt = Math.min(100, Math.max(0, t - (rt.dzAt || t))); rt.dzAt = t;
+    const w = Math.max(1, rt.dzoom || 1); let c = Math.max(1, rt.dzCur || 1);
+    c = Math.exp(Math.log(c) + (Math.log(w) - Math.log(c)) * (1 - Math.exp(-dt / 90)));
+    if (Math.abs(Math.log(c / w)) < 0.0015) c = w;
+    rt.dzCur = c; return c;
+  }
   function digitalZoom(inp, s, z) {
     const rt = inp.rt, sw = Math.max(2, Math.round(s.w / z)), sh = Math.max(2, Math.round(s.h / z));
     let c = rt.dzCanvas;
@@ -323,7 +331,7 @@
     },
     source(inp) {
       const v = vSrc(inp);
-      if (v && inp.rt.dzoom > 1.001) return digitalZoom(inp, v, inp.rt.dzoom);
+      if (v) { const z = dzEase(inp.rt); if (z > 1.001) return digitalZoom(inp, v, z); }
       return v || placeholder(inp, '📱 KLMCAM #' + inp.opts.slot, inp.rt.camId ? 'Menyambung…' : 'Menunggu HP dengan slot ' + inp.opts.slot);
     },
     hasAudio: (inp) => !!(inp.rt.stream && inp.rt.stream.getAudioTracks().length)

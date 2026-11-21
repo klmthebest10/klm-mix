@@ -139,7 +139,13 @@
   }
   function previewTransform() {
     const m = cfg.facing === 'user' && cfg.mirror;
-    video.style.transform = (m ? 'scaleX(-1) ' : '') + (dz > 1.001 ? 'scale(' + dz + ')' : '');
+    // zoom digital memakai properti `scale` tersendiri dengan transisi singkat → cubit/slider terlihat meluncur halus;
+    // cermin tetap lewat transform (tanpa animasi). Peramban lama tanpa `scale`: kembali ke transform.
+    if ('scale' in video.style) {
+      video.style.transition = 'scale 90ms linear';
+      video.style.transform = m ? 'scaleX(-1)' : '';
+      video.style.scale = dz > 1.001 ? String(dz) : '';
+    } else video.style.transform = (m ? 'scaleX(-1) ' : '') + (dz > 1.001 ? 'scale(' + dz + ')' : '');
   }
   // nilai zoom (hardware atau digital) dikirim ke PC → slider zoom di KLM selalu sama dengan HP; digital juga dipotong di PC
   function sendZoom(force) {
@@ -155,21 +161,38 @@
     previewTransform();
     clearTimeout(dzT); dzT = setTimeout(() => sendZoom(), 30); // digabung bila slider/cubit digeser cepat
   }
-  // zoom hardware: perintah beruntun (slider / cubit / dari PC) DIGABUNG — hanya satu applyConstraints berjalan, nilai terakhir
-  // yang dipakai. Dulu tiap geseran memanggil applyConstraints bersamaan → HP menolak (error) lalu malah jatuh ke zoom digital.
-  let hwBusy = false, hwWant = null, hwVal = null;
+  // zoom hardware: perintah beruntun (slider / cubit / dari PC) DIGABUNG — hanya satu applyConstraints berjalan.
+  // Dulu tiap geseran memanggil applyConstraints bersamaan → HP menolak (error) lalu malah jatuh ke zoom digital.
+  // Sekarang lensa MELUNCUR ke target: langkah kecil di ruang log ±30 langkah/detik (maks ±9% per langkah), jadi zoom dari
+  // slider PC (dikirim tiap 40 ms) atau cubit terlihat halus seperti tuas zoom kamera, bukan meloncat-loncat.
+  let hwBusy = false, hwTgt = null, hwVal = null;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function hwSet(x) {
+    try { await vTrack.applyConstraints({ advanced: [{ zoom: x }] }); hwVal = x; return true; }
+    catch (e) { try { await vTrack.applyConstraints({ zoom: x }); hwVal = x; return true; } catch (e2) { console.warn('zoom', e2); return false; } }
+  }
   async function applyZoom(v) {
     const zc = zoomCaps();
     if (!zc) return setDigital(v);
     v = Math.max(zc.min, Math.min(zc.max, +v || zc.min));
     $('zoom').value = v; $('zoomV').textContent = (+v).toFixed(1) + '×';
-    hwWant = v; if (hwBusy) return;
+    hwTgt = v; if (hwBusy) return;
     hwBusy = true;
+    const track = vTrack;
     try {
-      while (hwWant != null) {
-        const x = hwWant; hwWant = null;
-        try { await vTrack.applyConstraints({ advanced: [{ zoom: x }] }); hwVal = x; }
-        catch (e) { try { await new Promise((r) => setTimeout(r, 60)); await vTrack.applyConstraints({ zoom: x }); hwVal = x; } catch (e2) { console.warn('zoom', e2); } }
+      let fails = 0;
+      for (;;) {
+        if (track !== vTrack || track.readyState === 'ended') break;
+        const z = zoomCaps(); if (!z) break;
+        const t = Math.max(z.min, Math.min(z.max, hwTgt)), cur = Math.max(1e-3, hwVal != null ? hwVal : t);
+        const d = Math.log(t) - Math.log(cur);
+        if (Math.abs(d) < 0.003) { if (cur !== t && !(await hwSet(t))) hwVal = t; if (Math.abs(Math.log(Math.max(z.min, Math.min(z.max, hwTgt))) - Math.log(t)) < 0.003) break; continue; }
+        const s = Math.abs(d) < 0.02 ? d : Math.sign(d) * Math.min(Math.abs(d) * 0.3 + 0.01, 0.09);
+        const x = Math.max(z.min, Math.min(z.max, Math.exp(Math.log(cur) + s)));
+        const t0 = performance.now();
+        if (!(await hwSet(x))) { if (++fails > 2) { hwVal = t; break; } await sleep(60); continue; }
+        fails = 0;
+        const w = 33 - (performance.now() - t0); if (w > 2) await sleep(w);
       }
     } finally { hwBusy = false; }
     clearTimeout(dzT); dzT = setTimeout(() => sendZoom(), 60);
@@ -179,7 +202,7 @@
   (function pinch() {
     let d0 = 0, z0 = 1;
     const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-    document.addEventListener('touchstart', (e) => { if (e.touches.length === 2 && !$('panel').classList.contains('show')) { d0 = dist(e.touches); z0 = currentZoom(); } }, { passive: true });
+    document.addEventListener('touchstart', (e) => { if (e.touches.length === 2 && !$('panel').classList.contains('show')) { d0 = dist(e.touches); z0 = zoomHW && hwTgt != null ? hwTgt : currentZoom(); } }, { passive: true });
     document.addEventListener('touchmove', (e) => { if (e.touches.length === 2 && d0) { const k = dist(e.touches) / d0; applyZoom(z0 * k); } }, { passive: true });
     document.addEventListener('touchend', (e) => { if (e.touches.length < 2) d0 = 0; }, { passive: true });
   })();

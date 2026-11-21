@@ -665,7 +665,14 @@ body.pv{background:#0b0d12 repeating-conic-gradient(#151922 0 25%,#0f1218 0 50%)
 </head>
 <body>
 <div id="stage"></div>
+<script>
+/* penjaga muat: bila skrip inti tidak termuat (server tersendat) lapisan grafis dimuat ulang sendiri (jeda makin panjang).
+   TIDAK menampilkan kotak pesan — halaman ini ikut tampil di Program/output. */
+(function(){var K0='utcBoot_'+location.pathname+location.search,n=0;try{n=+(sessionStorage.getItem(K0)||0);}catch(e){}
+setTimeout(function(){if(window.__utcOK)return;try{sessionStorage.setItem(K0,n+1);}catch(e){}location.reload();},9000+Math.min(n,6)*5000);})();
+</script>
 <script src="/utc/common.js"></script>
+<script>if (window.KLM) { window.__utcOK = true; try { sessionStorage.removeItem('utcBoot_' + location.pathname + location.search); } catch (e) {} }</script>
 <script>
 (function(){
 const K = window.KLM;

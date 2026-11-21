@@ -160,7 +160,11 @@ function onWsConnection(ws, req) {
 }
 
 // ---------- HTTP ----------
+const SC = require('./static-cache');
 function serveFile(req, res, file, extraHeaders) {
+  // berkas aplikasi (halaman HP, skrip, ikon): dari memori — tidak bisa tertahan; berkas pengguna tetap dialirkan
+  const mem = SC.covered(file) ? SC.get(file) : null;
+  if (mem) return SC.serve(req, res, mem, Object.assign({ 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream' }, extraHeaders || {}));
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('404 Tidak ditemukan'); }
     const type = MIME[path.extname(file).toLowerCase()] || 'application/octet-stream';
@@ -386,6 +390,7 @@ function listen(server, port, tries = 6) {
 }
 
 async function start(opts) {
+  try { SC.preload(path.join(ROOT, 'web')); SC.preload(path.join(ROOT, 'src', 'utc')); SC.preload(path.join(ROOT, 'src', 'score')); } catch (e) {}
   const cfg = Object.assign(loadConfig(), opts || {});
   hub.setConfig(loadConfig);
   const ports = { http: 0, https: 0, tcp: 0, mirror: 0 };

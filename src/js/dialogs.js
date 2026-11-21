@@ -626,6 +626,7 @@
   }
 
   // =================== PENGATURAN APLIKASI ===================
+  const OUT = { dirty: false, askT: 0 }; // output diubah sejak KLM dibuka (saran buka ulang)
   D.settings = function (tab) {
     const st = KM.settings;
     const tabs = [['perf', 'Performa'], ['output', 'Output'], ['trans', 'Transisi & Overlay'], ['rec', 'Rekam'], ['stream', 'Streaming'], ['srt', 'SRT / TV'], ['ndi', 'NDI & VCam'], ['audio', 'Audio'], ['replay', 'Replay'], ['keys', 'Shortcut'], ['net', 'Jaringan & HP'], ['lisensi', 'Lisensi'], ['about', 'Tentang']];
@@ -718,12 +719,25 @@
       },
       output() {
         const res = st.width + 'x' + st.height;
+        // resolusi / fps output berubah: mesin native, monitor, KLMCAM & output menyesuaikan saat berjalan, tetapi paling bersih
+        // bila KLM dibuka ulang → sarankan (tidak memaksa). Ditunda sebentar agar ganti resolusi + fps berturut-turut cukup 1 pertanyaan.
+        const note = h('p.warn', { style: { display: OUT.dirty ? '' : 'none', color: '#fcd27d' } }, '⟳ Pengaturan output diubah — disarankan membuka ulang KLM agar semua bagian memakai pengaturan baru. ',
+          KM.isElectron ? h('button.btn.sm.pri', { onclick: () => window.klm.invoke('app:relaunch') }, 'Buka ulang sekarang') : null);
+        const outChanged = () => {
+          OUT.dirty = true; note.style.display = '';
+          clearTimeout(OUT.askT);
+          if (!KM.isElectron) return;
+          OUT.askT = setTimeout(async () => {
+            if (await UI.confirm('Output diubah ke ' + st.width + '×' + st.height + ' @' + st.fps + 'p. Disarankan membuka ulang KLM agar mesin video, monitor, KLMCAM, rekam & streaming memakai pengaturan baru sepenuhnya (pengaturan sudah tersimpan). Buka ulang sekarang?', 'Buka ulang')) { KM.saveSettings(); window.klm.invoke('app:relaunch'); }
+          }, 1500);
+        };
         return h('div', h('div.sec', h('h4', 'Resolusi & frame rate output'),
-          row('Resolusi', sel([['1280x720', '1280×720 HD'], ['1920x1080', '1920×1080 Full HD'], ['2560x1440', '2560×1440 QHD'], ['3840x2160', '3840×2160 4K (berat)'], ['1080x1920', '1080×1920 Vertikal (TikTok/Reels)'], ['720x1280', '720×1280 Vertikal ringan'], ['1080x1080', '1080×1080 Persegi']], res, (v) => { const [w, hh] = v.split('x'); st.width = +w; st.height = +hh; save(); KM.engine.resize(); KM.toast('Output: ' + v); })),
-          row('Frame rate', sel([[24, '24 fps (film)'], [25, '25 fps (PAL)'], [30, '30 fps'], [50, '50 fps (PAL halus)'], [60, '60 fps (halus)'], [90, '90 fps (monitor 90 Hz+)'], [120, '120 fps (monitor 120 Hz+)']], st.fps, (v) => { st.fps = +v; save(); KM.engine.resize(); if (st.fps > 60) KM.toast('Di atas 60 fps hanya tercapai bila monitor ' + st.fps + ' Hz atau lebih.', 'info', 5000); })),
+          row('Resolusi', sel([['1280x720', '1280×720 HD'], ['1920x1080', '1920×1080 Full HD'], ['2560x1440', '2560×1440 QHD'], ['3840x2160', '3840×2160 4K (berat)'], ['1080x1920', '1080×1920 Vertikal (TikTok/Reels)'], ['720x1280', '720×1280 Vertikal ringan'], ['1080x1080', '1080×1080 Persegi']], res, (v) => { const [w, hh] = v.split('x'); st.width = +w; st.height = +hh; save(); KM.engine.resize(); KM.toast('Output: ' + v); outChanged(); })),
+          row('Frame rate', sel([[24, '24 fps (film)'], [25, '25 fps (PAL)'], [30, '30 fps'], [50, '50 fps (PAL halus)'], [60, '60 fps (halus)'], [90, '90 fps (monitor 90 Hz+)'], [120, '120 fps (monitor 120 Hz+)']], st.fps, (v) => { st.fps = +v; save(); KM.engine.resize(); if (st.fps > 60) KM.toast('Di atas 60 fps hanya tercapai bila monitor ' + st.fps + ' Hz atau lebih.', 'info', 5000); outChanged(); })),
           row('Skala preview', sel([[0.33, '33% (ringan)'], [0.5, '50%'], [0.75, '75%'], [1, '100%']], st.previewScale, (v) => { st.previewScale = +v; save(); KM.engine.resize(); })),
           chk('Tukar Preview ↔ Program setelah transisi', st.swapPreview !== false, (v) => { st.swapPreview = v; save(); })),
-          h('p.muted', '50/60 fps membuat gerakan, running text & grafis jauh lebih halus di rekaman, stream, SRT & output. 1080p60 nyaman untuk PC menengah dengan GPU; 4K60 butuh GPU kuat. Bitrate rekaman otomatis dinaikkan untuk fps tinggi.'));
+          note,
+          h('p.muted', '50/60 fps membuat gerakan, running text & grafis jauh lebih halus di rekaman, stream, SRT & output. 1080p60 nyaman untuk PC menengah dengan GPU; 4K60 butuh GPU kuat. Bitrate rekaman otomatis dinaikkan untuk fps tinggi. Memakai kamera HP (KLMCAM)? Samakan dengan fps kamera: 60p/30p untuk HP 60/30 fps.'));
       },
       trans() {
         const inputs = [['', '— tidak ada —']].concat(S.inputs.filter((i) => KM.inputs.isPlayable(i)).map((i) => [i.id, KM.inputNum(i) + '. ' + i.title]));

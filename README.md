@@ -140,6 +140,13 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.23
+Versi uji (beta, PC + APK HP):
+- **Panel lengkap UTC tidak lagi kosong / error.** Penyebab yang ditemukan: bila satu lapisan grafis UTC sempat gagal dimuat (server sibuk sesaat, batas waktu), *semua* lapisan grafis pindah ke alamat 127.0.0.1 — alamat yang sama dengan panel UTC — untuk selamanya. Tiap lapisan memegang 1 sambungan event, sedangkan Chromium hanya membuka 6 sambungan per alamat, sehingga berkas panel (common.js, fonts.css) mengantre selamanya → panel kosong. Sekarang lapisan hanya pindah bila nama host benar-benar tidak dikenal, dan cadangannya alamat loopback tersendiri per lapisan (127.0.0.2…), tidak pernah alamat panel. Berkas aplikasi UTC / Score / HP kini juga dilayani dari memori (tidak bisa tertahan pembacaan berkas), dan panel/grafis UTC memuat ulang dirinya sendiri bila skrip intinya tidak termuat dalam 9 detik.
+- **Zoom KLMCAM halus** dari PC maupun HP: zoom digital meluncur mulus di mesin native (±100 ms, ruang log), lensa HP (zoom hardware) bergerak bertahap ±30 langkah/detik seperti tuas zoom kamera, pratinjau di HP ikut beranimasi.
+- Panel KLMCAM memberi tahu bila fps kamera HP tidak sebanding dengan fps output (mis. kamera 60 fps → output 50p: tiap ±6 frame satu terlewat, gerak tampak sedikit patah). Samakan Output ke 60p/30p untuk HP 60/30 fps.
+- Setelah mengubah resolusi / frame rate output, KLM menyarankan **membuka ulang aplikasi** (tombol "Buka ulang sekarang"); pengaturan sudah tersimpan.
+
 ### Baru di v1.18.0-beta.22
 Versi uji (beta, PC): **jalur KLMCAM ke mesin native diganti total.**
 - Dulu: frame H.264 terenkode diteruskan ke dekoder buatan sendiri di mesin native (urutan frame, frame_num, minta frame kunci, jadwal sendiri). Setiap paket Wi-Fi yang hilang/terlambat membuat gambar **berhenti** menunggu frame kunci, dan bila dekoder tertahan >3 detik monitor **berpindah ke tampilan cadangan lalu kembali (kedip)**.

@@ -48,8 +48,13 @@ module.exports = function setupUtcOsr(o) {
   // lapisan memakai 127.0.0.1 sehingga saat ±5 grafis tampil, permintaan panel UTC (klik, simpan) mengantre selamanya
   // → panel kosong / tidak merespons.
   const HOST_N = { lt: 'lt', tt: 'tt', loc: 'loc', soc: 'soc', oc: 'oc', tk: 'tk', logo: 'logo', main: 'main', all: 'main' };
+  // Cadangan bila nama *.localhost benar-benar tidak bisa di-resolve: alamat loopback BERBEDA per lapisan (127.0.0.2 …; server
+  // mendengar di 0.0.0.0) — JANGAN 127.0.0.1: itu host panel UTC. Dulu kegagalan muat APA PUN (server sempat sibuk, batas waktu)
+  // memindahkan SEMUA lapisan ke 127.0.0.1 untuk selamanya → 7 sambungan SSE di host panel → batas 6 sambungan Chromium habis →
+  // berkas panel (common.js, fonts.css) mengantre selamanya → "Panel lengkap UTC kosong / error" kambuh.
+  const HOST_IP = { lt: 2, tt: 3, loc: 4, soc: 5, oc: 6, tk: 7, logo: 8, main: 9, all: 9 };
   let altHosts = true;
-  const hostFor = (id) => (altHosts && HOST_N[id] ? 'klm-' + HOST_N[id] + '.localhost' : '127.0.0.1');
+  const hostFor = (id) => (HOST_N[id] ? (altHosts ? 'klm-' + HOST_N[id] + '.localhost' : '127.0.0.' + HOST_IP[id]) : '127.0.0.1');
   function urlFor(id, t) {
     const base = 'http://' + hostFor(id) + ':' + o.port() + '/utc/overlay?klm=1';
     if (id === 'main') return base + '&only=lt,title,loc,soc,oc';   // (lama, gabungan)
@@ -101,8 +106,11 @@ module.exports = function setupUtcOsr(o) {
     wc.on('render-process-gone', () => { setTimeout(() => { if (L.t && L.wc === wc && !wc.isDestroyed()) { L.sentFull = false; tell(L, { k: 'reset' }); wc.loadURL(L.t.url).catch(() => {}); } }, 1000); });
     wc.on('did-fail-load', (e, code, desc, url) => {
       if (url === 'about:blank' || code === -3 || L.wc !== wc) return;
-      // nama klm-*.localhost tidak bisa dibuka di PC ini → semua lapisan kembali ke 127.0.0.1
-      if (altHosts && /^http:\/\/klm-[a-z]+\.localhost:/.test(url)) { altHosts = false; console.warn('[UTC] host klm-*.localhost gagal (' + desc + '), kembali ke 127.0.0.1'); }
+      // hanya bila NAMA host yang gagal (resolusi nama) → pindah ke alamat loopback cadangan per lapisan. Galat lain (batas waktu,
+      // server sibuk, sambungan putus) cukup dimuat ulang di host yang sama.
+      const nameErr = code === -105 || code === -137 || code === -300 || code === -800;
+      if (altHosts && nameErr && /^http:\/\/klm-[a-z]+\.localhost:/.test(url)) { altHosts = false; dlog('host klm-*.localhost gagal (' + code + ' ' + desc + '), pindah ke 127.0.0.x per lapisan'); }
+      else if (!/^http:\/\/klm-[a-z]+\.localhost:/.test(url) || !nameErr) dlog('muat ulang lapisan ' + L.id + ' (' + code + ' ' + desc + ')');
       setTimeout(() => { if (L.t && !wc.isDestroyed()) { const u2 = urlFor(L.id, L.t); if (u2) L.t.url = u2; wc.loadURL(L.t.url).catch(() => {}); } }, altHosts ? 1500 : 300);
     });
     wc.on('did-start-navigation', (e, url, inPage, isMain) => { const mf = e && e.isMainFrame != null ? e.isMainFrame : isMain, same = e && e.isSameDocument != null ? e.isSameDocument : inPage; if (mf && !same && L.wc === wc) tell(L, { k: 'reset' }); });

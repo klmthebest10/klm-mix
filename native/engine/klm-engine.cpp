@@ -1197,6 +1197,22 @@ static std::map<std::string, SegN> g_seg;
 struct PosN { int fit = 1; double zoom = 1, x = 0, y = 0, cl = 0, cr = 0, ct = 0, cb = 0, rot = 0; };
 static std::map<std::string, PosN> g_pos;
 static std::map<std::string, double> g_szoom; // zoom digital KLMCAM dari HP (potong tengah sumber, seperti digitalZoom di inputs.js)
+// zoom digital dihaluskan: perintah szoom hanya mengubah TARGET; tiap frame g_szoom mendekati target secara eksponensial di ruang log
+// (konstanta waktu ~100 ms) → zoom dari slider PC / cubit HP meluncur mulus, tidak meloncat tiap pesan (pesan datang ±25×/detik).
+struct SZoomT { double z = 1, tau = 100; };
+static std::map<std::string, SZoomT> g_szoomT;
+static double g_szoomAt = 0;
+static void szoomTick(double now) {
+  const double dt = g_szoomAt > 0 ? std::min(100.0, std::max(0.0, now - g_szoomAt)) : 0; g_szoomAt = now;
+  for (auto it = g_szoomT.begin(); it != g_szoomT.end();) {
+    const double tz = it->second.z; auto zi = g_szoom.find(it->first); double c = zi == g_szoom.end() ? 1.0 : zi->second;
+    const double a = it->second.tau <= 0 ? 1.0 : 1.0 - std::exp(-dt / it->second.tau);
+    c = std::exp(std::log(c) + (std::log(tz) - std::log(c)) * a);
+    if (std::fabs(std::log(c / tz)) < 0.0015) c = tz;
+    if (c > 1.001) g_szoom[it->first] = c; else g_szoom.erase(it->first);
+    if (c == tz) it = g_szoomT.erase(it); else ++it;
+  }
+}
 static void setFx(const FxN* f, const SegN* sg, bool mask, bool blur, double blurPx, UINT sw, UINT sh) {
   D3D11_MAPPED_SUBRESOURCE m;
   if (FAILED(g_ctx->Map(g_cbFx.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return;
@@ -2465,7 +2481,10 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
     g_tr.on = true; g_tr.manual = true; g_tr.k = std::atoi(v.c_str()) / 1000.0; g_tr.from = a == "-" ? "" : a; g_tr.to = b == "-" ? "" : b; g_tr.type = trType(ty);
   } else if (c == "szoom") { // szoom <id> <zoom ≥1>: zoom digital sumber (potong tengah)
     std::string id; double z = 1; is >> id >> z; if (id.empty() || id.size() > 64) return;
-    if (z > 1.001 && z <= 16) g_szoom[id] = z; else g_szoom.erase(id);
+    double tau = 100; is >> tau; if (!(tau >= 0 && tau <= 2000)) tau = 100; // argumen ke-3 opsional: konstanta waktu ms (0 = langsung)
+    if (!(z > 1.001 && z <= 16)) z = 1;
+    if (tau <= 0) { g_szoomT.erase(id); if (z > 1.001) g_szoom[id] = z; else g_szoom.erase(id); }
+    else { auto zi = g_szoom.find(id); const double c = zi == g_szoom.end() ? 1.0 : zi->second; if (std::fabs(c - z) < 1e-4) g_szoomT.erase(id); else g_szoomT[id] = SZoomT{ z, tau }; }
   } else if (c == "segmodel") { // segmodel <path .tflite>: muat model Latar AI ke GPU
     std::string path; std::getline(is, path); while (!path.empty() && (path[0] == ' ')) path.erase(0, 1);
     std::wstring wp; { int n = MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, nullptr, 0); wp.resize(n > 0 ? n - 1 : 0); if (n > 1) MultiByteToWideChar(CP_UTF8, 0, path.c_str(), -1, &wp[0], n); }
@@ -2546,6 +2565,7 @@ static void frame(double now) {
     for (auto& kv : g_src) if (kv.second->kind == "screen" && used.count(kv.first)) tickScreen(*kv.second, kv.first, now);
     segTick(now, used);
   }
+  szoomTick(now); // zoom digital KLMCAM meluncur ke target
   pipeline();
   kPresentAll(now); // KLMCAM: frame yang jatuh tempo ke tekstur kamera (jitter buffer)
   camTick();
@@ -2934,11 +2954,16 @@ static int selftest(bool warp) {
       command("seg gg -"); command("pgm a"); run(1);
       // ---- Fase 10: zoom digital (potong tengah) — comp kiri merah / kanan hijau? pakai bars: zoom 4× → tengah bars saja
       command("pgm b"); run(1);
-      { SrcView bv; getSrv("b", bv); command("szoom b 8"); run(2);
-        D3D11_TEXTURE2D_DESC d{}; g_pgm.rt->GetDesc(&d); int l[3] = { 0 }, l1[3] = { 0 }; readPixel(g_pgm, 2, d.Height / 2, l);
-        command("szoom b 1"); run(2); readPixel(g_pgm, 2, d.Height / 2, l1);
+      { SrcView bv; getSrv("b", bv); command("szoom b 8 0"); run(2);
+        D3D11_TEXTURE2D_DESC d{}; g_pgm.rt->GetDesc(&d); int l[3] = { 0 }, l1[3] = { 0 }, l2[3] = { 0 }; readPixel(g_pgm, 2, d.Height / 2, l);
+        command("szoom b 1 0"); run(2); readPixel(g_pgm, 2, d.Height / 2, l1);
         const bool pass = (l[0] != l1[0] || l[1] != l1[1] || l[2] != l1[2]);
-        emit("  %s zoom digital KLMCAM (szoom 8×): tepi kiri %d,%d,%d (tanpa zoom %d,%d,%d)", pass ? "OK " : "GAGAL", l[0], l[1], l[2], l1[0], l1[1], l1[2]); if (!pass) ok = 0; (void)bv; }
+        emit("  %s zoom digital KLMCAM (szoom 8×): tepi kiri %d,%d,%d (tanpa zoom %d,%d,%d)", pass ? "OK " : "GAGAL", l[0], l[1], l[2], l1[0], l1[1], l1[2]); if (!pass) ok = 0;
+        // zoom halus: tanpa argumen waktu → meluncur; setelah ±1 detik harus sama dengan zoom langsung
+        command("szoom b 8"); { const double t0 = nowMs(); while (nowMs() - t0 < 1200) run(1); } readPixel(g_pgm, 2, d.Height / 2, l2);
+        const double zm = g_szoom.count("b") ? g_szoom["b"] : 1; const bool pass2 = std::abs(l2[0] - l[0]) <= 3 && std::abs(l2[1] - l[1]) <= 3 && std::abs(l2[2] - l[2]) <= 3 && zm > 7.99;
+        emit("  %s zoom digital halus (meluncur ke 8×): z=%.3f tepi kiri %d,%d,%d", pass2 ? "OK " : "GAGAL", zm, l2[0], l2[1], l2[2]); if (!pass2) ok = 0;
+        command("szoom b 1 0"); run(1); (void)bv; }
       command("pgm a"); run(1);
       // ---- Fase 10: kartu daftar input native — jendela anak per kartu, terpotong bila kartu tergulir sebagian
       command("card t1 b 20 30 256 144 20 60 256 114 - 0.6 0.4 1"); for (int r = 0; r < 4; r++) run(1);
