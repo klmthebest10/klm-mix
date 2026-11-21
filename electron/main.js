@@ -676,11 +676,12 @@ function smokeTest() {
       const play = JSON.parse(await js(`(() => { try { const f = document.querySelector("#utcFrame"), w = f.contentWindow, d = f.contentDocument;
         const out = (sel) => [...d.querySelectorAll(sel)].filter((e) => e.offsetParent).filter((e) => { const r = e.getBoundingClientRect(); return r.bottom > w.innerHeight + 1 || r.right > w.innerWidth + 1 || r.top < 0; }).map((e) => e.textContent.trim().slice(0, 14));
         const tb = d.querySelector('#tabs');
-        return JSON.stringify({ embed: d.documentElement.classList.contains('klm-embed'), size: w.innerWidth + 'x' + w.innerHeight, air: out('#air button, #ocair button'), tabsScroll: tb ? tb.scrollHeight - tb.clientHeight : -1 });
+        const pv = d.querySelector('#scrPvw').getBoundingClientRect(), vis = (q) => { const e = d.querySelector(q); return !!(e && e.offsetParent); };
+        return JSON.stringify({ embed: d.documentElement.classList.contains('klm-embed'), size: w.innerWidth + 'x' + w.innerHeight, air: out('#air button, #ocair button'), tabsScroll: tb ? tb.scrollHeight - tb.clientHeight : -1, pratinjauKanan: pv.left > w.innerWidth / 2 && pv.bottom <= w.innerHeight + 1 && pv.width > 100, daftarInput: vis('#istrip'), tombolOff: vis('.ocoff') });
       } catch (e) { return JSON.stringify({ err: e.message }); } })()`));
       log('tata letak panel UTC Acara: ' + JSON.stringify(play));
       fs.writeFileSync(path.join(out, 'panel-acara.png'), (await mainWin.webContents.capturePage()).toPNG());
-      if (!play.embed || (play.air && play.air.length) || play.tabsScroll > 2) { fail++; log('GAGAL: tombol panel UTC Acara terpotong / perlu digulir'); }
+      if (!play.embed || (play.air && play.air.length) || play.tabsScroll > 2 || !play.pratinjauKanan || play.daftarInput || play.tombolOff) { fail++; log('GAGAL: tombol panel UTC Acara terpotong / perlu digulir'); }
       // panel harus tetap merespons saat banyak lapisan grafis aktif (batas 6 sambungan per host di Chromium)
       await post('/utc/api/klm/cmd', { cmd: 'show', target: 'lt' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'logo' });
       await post('/utc/api/klm/cmd', { cmd: 'show', target: 'ticker' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'loc' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'soc' });
