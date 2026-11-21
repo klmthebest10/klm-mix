@@ -216,7 +216,7 @@
       const ss = h('select', { title: po && po.shutterOk === false ? 'HP ini tidak mengizinkan shutter diatur (memakai otomatis HP)' : 'Shutter speed kamera HP (Otomatis tepat: ±1/(2×fps), tanpa kedip lampu)', disabled: !po, onchange: () => L.camControl(inp, 'camopt', { shutter: ss.value }) }, SS.map(([v, l]) => h('option', { value: v, selected: po && v === po.shutter }, l)));
       const pz = KM.nengine && KM.nengine.kPauses ? KM.nengine.kPauses(inp) : 0;
       const ex = peer && peer.info ? [peer.info.shutter ? peer.info.shutter + (peer.info.iso ? ' ISO ' + peer.info.iso : '') : '', peer.info.eis ? 'EIS ' + (peer.info.eis.mode === 'gyro' ? 'giroskop' : 'gambar') : '',
-        peer.info.hitch ? 'HP tersendat ' + peer.info.hitch + '×/mnt' : '', pz ? '⏸ ' + pz + '× berhenti/mnt (paket Wi-Fi hilang)' : ''].filter(Boolean).join(' • ') : '';
+        peer.info.hitch ? 'HP tersendat ' + peer.info.hitch + '×/mnt' : '', pz ? '⏸ ' + pz + '× tersendat/mnt (jaringan)' : ''].filter(Boolean).join(' • ') : '';
       return fold('cam-' + inp.id, KM.inputNum(inp) + '. ' + inp.title, {
         cls: 'camq' + (tl === 'program' ? '.pgm' : tl === 'preview' ? '.pvw' : ''),
         badge: h('span.pill' + (peer ? '.ok' : '.warn'), peer ? 'Terhubung' : 'Slot ' + o.slot + ' menunggu'),

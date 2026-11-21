@@ -949,8 +949,7 @@ function smokeTest() {
             window.__kstab = window.KLMStab && KLMStab.supported() ? KLMStab.create(raw, { level: 'mid' }) : null;
             const tr = a.addTransceiver(window.__kstab ? window.__kstab.track : raw, { direction: 'sendonly' });
             const caps = (RTCRtpSender.getCapabilities('video') || { codecs: [] }).codecs, h = caps.filter((c) => /h264/i.test(c.mimeType));
-            if (!h.length) return JSON.stringify({ skip: 'Chromium ini tanpa encoder WebRTC H.264' });
-            tr.setCodecPreferences(h.concat(caps.filter((c) => !/h264/i.test(c.mimeType))));
+            if (h.length) tr.setCodecPreferences(h.concat(caps.filter((c) => !/h264/i.test(c.mimeType)))); // codec apa pun bisa (frame didekode Chromium)
             b.ontrack = (e) => KM.nengine.kAttach(KM.getInput(window.__kinp), e.receiver);
             await a.setLocalDescription(await a.createOffer()); await b.setRemoteDescription(a.localDescription);
             await b.setLocalDescription(await b.createAnswer()); await a.setRemoteDescription(b.localDescription);

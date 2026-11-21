@@ -271,7 +271,7 @@ function setup({ win, log = () => {} }) {
     P.stdin.write('aud ' + b.length + '\n'); P.stdin.write(b);
   });
   // Fase 4a/10: frame H.264 KLMCAM (dari WebRTC di mixer) → dekoder GPU mesin native. ts = cap waktu RTP (satuan 100 ns)
-  const kst = { port: 0, ipc: 0, written: 0, skipped: 0, ports: 0 };
+  const kst = { port: 0, ipc: 0, written: 0, skipped: 0, ports: 0, raw: 0 };
   function kencWrite(id, key, ts, data) {
     if (!P || st.state !== 'ready' || !P.stdin.writable || !/^\w{1,40}$/.test(String(id))) return;
     const b = Buffer.isBuffer(data) ? data : data instanceof ArrayBuffer ? Buffer.from(data) : ArrayBuffer.isView(data) ? Buffer.from(data.buffer, data.byteOffset, data.byteLength) : null;
@@ -282,11 +282,22 @@ function setup({ win, log = () => {} }) {
     P.stdin.write('kenc ' + id + ' ' + (key ? 1 : 0) + ' ' + Math.max(0, Math.round(+ts || 0)) + ' ' + b.length + '\n');
     P.stdin.write(b);
   }
+  // KLMCAM jalur baru: frame jadi (sudah didekode Chromium) → mesin. Frame mandiri: bila mesin/pipa tertinggal cukup dilewati
+  function krawWrite(m) {
+    if (!P || st.state !== 'ready' || !P.stdin.writable || !/^\w{1,40}$/.test(String(m.id))) return;
+    const d = m.buf, b = d instanceof ArrayBuffer ? Buffer.from(d) : ArrayBuffer.isView(d) ? Buffer.from(d.buffer, d.byteOffset, d.byteLength) : Buffer.isBuffer(d) ? d : null;
+    const w = m.w | 0, h = m.h | 0, fmt = m.fmt === 2 ? 2 : 0;
+    if (!b || w < 2 || h < 2 || w > 8192 || h > 8192 || b.length < (fmt === 2 ? w * h * 4 : w * h * 3 / 2) || b.length > 64 * 1024 * 1024) return;
+    if (P.stdin.writableLength > Math.max(8 * 1024 * 1024, b.length * 3)) { kst.skipped++; return; }
+    kst.written++; kst.raw++;
+    P.stdin.write('kraw ' + m.id + ' ' + fmt + ' ' + w + ' ' + h + ' ' + (m.hd ? 1 : 0) + ' ' + (m.full ? 1 : 0) + ' ' + Math.max(0, Math.round(+m.ts || 0)) + ' ' + b.length + '\n');
+    P.stdin.write(b);
+  }
   ipcMain.on('nengine:kenc', (e, id, key, ts, data) => { kst.ipc++; kencWrite(id, key, ts, data); });
   // jalur langsung dari pekerja KLMCAM di mixer (MessagePort) — tidak menunggu thread utama halaman
   ipcMain.on('nengine:kport', (e) => {
     const port = e.ports && e.ports[0]; if (!port) return; kst.ports++;
-    port.on('message', (ev) => { const m = ev && ev.data; kst.port++; if (m && m.id && m.buf) kencWrite(m.id, m.key, m.ts != null ? m.ts : (m.n || 0) * 333333, m.buf); });
+    port.on('message', (ev) => { const m = ev && ev.data; kst.port++; if (!m || !m.id || !m.buf) return; if (m.raw) krawWrite(m); else kencWrite(m.id, m.key, m.ts != null ? m.ts : (m.n || 0) * 333333, m.buf); });
     port.start();
   });
   ipcMain.on('nengine:cmd', (e, lines) => {

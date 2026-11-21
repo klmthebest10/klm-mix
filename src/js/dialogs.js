@@ -646,7 +646,7 @@
           KM.isElectron && KM.nengine ? h('div.sec', h('h4', 'Mesin video native (Direct3D 11) — EKSPERIMEN, Fase 2'),
             chk('Tampilkan monitor Preview & Program dengan mesin native GPU (Windows)', st.nativeEngine === true, (v) => { KM.nengine.set(v); setTimeout(() => show('perf'), 1500); }),
             chk('Kamera USB / capture card dibuka langsung oleh mesin native (Media Foundation, GPU)', st.nativeCam !== false, (v) => { st.nativeCam = !!v; KM.saveSettings(); KM.nengine.camReopenAll(); }),
-            chk('KLMCAM didekode mesin native (H.264, GPU) untuk monitor & output native', st.nativeKlmcam !== false, (v) => { st.nativeKlmcam = !!v; KM.saveSettings(); KM.nengine.kSync(); }),
+            chk('KLMCAM tampil di monitor & output native (frame dari dekoder WebRTC)', st.nativeKlmcam !== false, (v) => { st.nativeKlmcam = !!v; KM.saveSettings(); KM.nengine.kSync(); }),
             chk('Audio sumber dari mesin native (file video, daftar putar, stream masuk, capture card)', st.nativeAudio !== false, (v) => { st.nativeAudio = !!v; KM.saveSettings(); KM.nengine.camReopenAll(); }),
             h('div.row', h('label', { title: 'Penyelarasan suara & gambar untuk rekam / streaming. Positif = suara ditunda (suara lebih cepat dari gambar). Negatif = gambar ditunda (suara terlambat) — khusus output native.' }, 'Penyelarasan suara–gambar output: '),
               h('input', { type: 'range', min: -1000, max: 1000, step: 10, value: +st.avOffset || 0, oninput: (e) => { st.avOffset = +e.target.value; e.target.nextSibling.textContent = (st.avOffset > 0 ? '+' : '') + st.avOffset + ' ms'; }, onchange: () => { KM.saveSettings(); if (KM.audio && KM.audio.setOutDelay) KM.audio.setOutDelay(Math.max(0, +st.avOffset || 0)); } }),

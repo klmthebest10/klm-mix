@@ -140,6 +140,13 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.22
+Versi uji (beta, PC): **jalur KLMCAM ke mesin native diganti total.**
+- Dulu: frame H.264 terenkode diteruskan ke dekoder buatan sendiri di mesin native (urutan frame, frame_num, minta frame kunci, jadwal sendiri). Setiap paket Wi-Fi yang hilang/terlambat membuat gambar **berhenti** menunggu frame kunci, dan bila dekoder tertahan >3 detik monitor **berpindah ke tampilan cadangan lalu kembali (kedip)**.
+- Sekarang: **WebRTC Chromium yang mendekode** (penyangga jitter, kirim ulang paket, penyamaran paket hilang, irama tayang — sama seperti video call yang mulus). Pekerja (worker) hanya menyalin frame jadi (NV12) langsung ke proses utama → mesin native. Frame tidak saling bergantung: frame yang terlewat tidak pernah membuat gambar berhenti atau rusak. Codec apa pun (H.264/VP8/VP9/AV1) bisa.
+- Monitor tidak lagi berpindah ke tampilan cadangan saat jaringan tersendat sesaat (mesin menahan frame terakhir) → tidak ada kedip.
+- Panel KLMCAM menampilkan "⏸ n× tersendat/mnt (jaringan)" bila frame dari HP sempat berhenti >0,3 detik.
+
 ### Baru di v1.18.0-beta.21
 Versi uji (beta, PC): **KLMCAM tidak lagi berhenti-berhenti saat ada paket Wi-Fi yang dikirim ulang.** Di WebRTC, frame yang paketnya hilang menunggu kiriman ulang sementara frame sesudahnya sudah diteruskan lebih dulu (urutan tertukar). KLM dulu menganggapnya frame hilang → gambar berhenti menunggu frame kunci (terukur 22×/menit pada uji pengguna). Kini frame ditahan sebentar (≤ 250 ms, hanya saat urutan tertukar) lalu diteruskan berurutan; hanya frame yang benar-benar hilang yang membuat mesin menunggu frame kunci.
 

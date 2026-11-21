@@ -11,8 +11,8 @@
  * Fase 3: kamera USB / capture card dibuka mesin native lewat Media Foundation (dekode & konversi warna di GPU). Frame
  * kamera tampil langsung di monitor native dan dikirim ke mesin JS sebagai tekstur GPU bersama (VideoFrame) untuk
  * Program/rekam/streaming — perangkat hanya dibuka sekali, tanpa salinan CPU.
- * Fase 4a: KLMCAM — frame H.264 terenkode dari WebRTC disalin (RTCRtpScriptTransform, tanpa dekode ulang di JS) ke
- * mesin native → didekode GPU (DXVA) → tampil di monitor native. Jalur JS tetap berjalan seperti biasa (rekam dll).
+ * Fase 4a: KLMCAM — frame yang sudah didekode WebRTC Chromium (penyangga jitter, kirim ulang, irama tayang) disalin
+ * pekerja (NV12) langsung ke mesin native → tampil di monitor native. Jalur JS tetap berjalan seperti biasa (rekam dll).
  * Fase 5: file video (dekode DXVA, posisi mengikuti elemen video KLM — audio tetap dari KLM) & gambar (WIC).
  * Fase 8: posisi & rotasi input/kotak, koreksi warna, chroma/luma key, latar AI (mask dari model segmentasi KLM,
  * komposit di GPU native), semua transisi kecuali stinger, overlay zoom, FTB.
@@ -143,7 +143,9 @@
     if (inp.type === 'browser' && inp.rt.osr) return inp.rt.winId && wready.has('w' + inp.rt.winId) ? 'media' : null; // offscreen: tekstur GPU langsung
     if (inp.type === 'browser' || inp.type === 'title') { const m = media.get(nid(inp)); return m && m.ok ? 'media' : null; }
     if (inp.type === 'screen' && /^window:\d+/.test((inp.opts || {}).sourceId || '')) { const m = media.get(nid(inp)); return m && m.ok ? 'media' : null; }
-    if (inp.type === 'klmcam') { const k = kcams.get(kidOf(inp)); return k && k.ok && !k.err && Date.now() - k.last < 3000 ? 'cam' : null; }
+    // KLMCAM: tetap native selama tersambung (jaringan tersendat → mesin menahan frame terakhir). Dulu batas 3 dtk membuat monitor
+    // berpindah ke tampilan cadangan lalu kembali = kedip
+    if (inp.type === 'klmcam') { const k = kcams.get(kidOf(inp)); return k && k.ok && !k.err && Date.now() - k.last < 30000 ? 'cam' : null; }
     if (inp.type === 'screen') {
       if (!o.sourceId || !/^screen:/.test(o.sourceId) || !inp.rt || !inp.rt.ready) return null;
       if (!scr.has(o.sourceId)) { resolveScreen(o.sourceId); return null; }
@@ -532,7 +534,7 @@
     else if (t === 'click') clickFwd(rest.split(' '));
     else if (t === 'uready') { uready.add(rest); if (rest[0] === 'w') wready.add(rest); }
     else if (t === 'camok' || t === 'camerr') camEv(t, rest);
-    else if (t === 'kok' || t === 'kerr' || t === 'kneedkey') kEv(t, rest);
+    else if (t === 'kok' || t === 'kerr') kEv(t, rest);
     else if (t === 'ostarted' || t === 'oerr' || t === 'ostopped') oEv(t, rest);
     else if (t === 'vok' || t === 'srcok') { const a = rest.split(' '), m = media.get(a[0]); if (m) { m.ok = true; m.w = +a[1]; m.h = +a[2]; m.err = ''; if (m.onok) m.onok(); } }
     else if (t === 'naok' || t === 'naerr') naEv(t, rest);
@@ -812,95 +814,89 @@
   const kcams = new Map(); // id dekoder → { ok, err, w, h, dxva, last, codec, n }
   N.kcams = kcams;
   const kidOf = (inp) => 'k' + String(inp.id).replace(/[^\w]/g, '').slice(0, 30);
-  N.kWant = () => el() && running && ready && KM.settings.nativeEngine === true && KM.settings.nativeKlmcam !== false && !!window.RTCRtpScriptTransform;
+  N.kWant = () => el() && running && ready && KM.settings.nativeEngine === true && KM.settings.nativeKlmcam !== false && !!window.MediaStreamTrackProcessor;
   let kWorker = null;
   // Pekerja (worker) menyalin tiap frame H.264 dan — bila ada — mengirimnya LANGSUNG ke proses utama lewat MessagePort
   // (tidak lewat thread utama KLM yang sibuk menggambar UI → tidak ada jeda/jitter tambahan). Cap waktu = cap waktu RTP
   // dari HP (90 kHz, dibuka lilitannya) → mesin native menayangkan frame menurut irama aslinya, mulus.
-  // Urutan frame: di WebRTC, frame yang paketnya hilang menunggu kiriman ulang (NACK) sementara frame SESUDAHNYA sudah lengkap
-  // dan langsung diteruskan ke sini → urutan tertukar. Dulu mesin menganggap itu "frame hilang" → gambar berhenti menunggu frame
-  // kunci (freeze puluhan kali/menit di jaringan yang kadang kehilangan paket). Kini pekerja menahan frame sebentar (≤ 250 ms)
-  // sampai frame yang tertinggal datang, lalu meneruskan semuanya berurutan (frame_num H.264). Frame yang benar-benar hilang
-  // tetap ditangani mesin (tunggu frame kunci, tanpa bercak).
-  const KW = `const fwd = new Set(), tf = new Map(), clk = new Map(), ordq = new Map(); let port = null;
-const HOLD = 250;
-function nalus(u8, cb) { const n = u8.length; let i = 0; while (i + 3 < n) { let sc = 0; if (u8[i] === 0 && u8[i + 1] === 0 && u8[i + 2] === 1) sc = 3; else if (i + 4 < n && u8[i] === 0 && u8[i + 1] === 0 && u8[i + 2] === 0 && u8[i + 3] === 1) sc = 4; if (!sc) { i++; continue; }
-  const s = i + sc; let e = s + 1; while (e + 2 < n && !(u8[e] === 0 && u8[e + 1] === 0 && (u8[e + 2] === 1 || (u8[e + 2] === 0 && e + 3 < n && u8[e + 3] === 1)))) e++; if (e + 2 >= n) e = n; if (cb(s, e) === false) return; i = e; } }
-function bits(u8, s, e) { const b = []; let z = 0; for (let i = s; i < e && b.length < 96; i++) { if (z >= 2 && u8[i] === 3) { z = 0; continue; } z = u8[i] === 0 ? z + 1 : 0; b.push(u8[i]); } let p = 0, bad = false;
-  const u = (k) => { let v = 0; while (k--) { if (p >= b.length * 8) { bad = true; return v; } v = (v << 1) | ((b[p >> 3] >> (7 - (p & 7))) & 1); p++; } return v; };
-  const ue = () => { let z2 = 0; while (!u(1)) { if (++z2 > 31 || bad) { bad = true; return 0; } } return z2 ? ((1 << z2) - 1 + u(z2)) : 0; };
-  const se = () => { const v = ue(); return (v & 1) ? (v + 1) / 2 : -(v / 2); };
-  return { u, ue, se, bad: () => bad }; }
-function parse(st, u8) { // → { fn, ref } (frame_num & apakah frame acuan), null bila tidak terbaca
-  let out = null;
-  nalus(u8, (s, e) => { const h = u8[s], t = h & 31;
-    if (t === 7) { const r = bits(u8, s + 1, e), prof = r.u(8); r.u(16); r.ue();
-      if ([100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135].includes(prof)) { const cf = r.ue(); st.sep = cf === 3 ? !!r.u(1) : false; r.ue(); r.ue(); r.u(1);
-        if (r.u(1)) for (let i = 0; i < (cf !== 3 ? 8 : 12); i++) if (r.u(1)) { let last = 8, next = 8; const sz = i < 6 ? 16 : 64; for (let j = 0; j < sz; j++) { if (next) next = (last + r.se() + 256) % 256; last = next || last; } } }
-      const l = r.ue() + 4; if (!r.bad() && l >= 4 && l <= 16) st.log2 = l; }
-    else if ((t === 1 || t === 5) && st.log2) { const r = bits(u8, s + 1, Math.min(e, s + 49)); r.ue(); r.ue(); r.ue(); if (st.sep) r.u(2); const f = r.u(st.log2); if (!r.bad()) out = { fn: f, ref: ((h >> 5) & 3) !== 0, idr: t === 5 }; return false; } });
-  return out; }
-function send(m) { let sent = false;
-  if (port && (!m.mime || /h264/i.test(m.mime))) { try { port.postMessage(m); sent = true; } catch (e) { port = null; } } // disalin (proses utama tidak menerima transfer ArrayBuffer)
-  if (!sent) postMessage(m, [m.buf]); }
-function release(id, force) { const q = ordq.get(id); if (!q) return; const now = performance.now();
-  q.p.sort((a, b) => a.ts - b.ts);
-  while (q.p.length) { const h = q.p[0], mx = q.log2 ? 1 << q.log2 : 0;
-    const next = h.key || !h.pi || q.prev < 0 || !mx || h.pi.fn === (q.prev + 1) % mx || (!h.pi.ref && h.pi.fn === (q.prev + 1) % mx);
-    if (!next && !force && now - h.at < HOLD && q.p.length < 16) break; // tunggu frame yang tertinggal (kiriman ulang)
-    q.p.shift(); if (!next) q.gaps++;
-    if (h.pi && (h.pi.ref || h.key)) q.prev = h.pi.fn;
-    q.last = h.ts; send(h.m); } }
-setInterval(() => { for (const id of ordq.keys()) release(id, false); }, 15);
-onmessage = (e) => { const m = e.data || {}; if (m.port) port = m.port; if (m.fwd) fwd.add(m.fwd); if (m.unfwd) { fwd.delete(m.unfwd); ordq.delete(m.unfwd); }
-  if (m.kf) { const t = tf.get(m.kf); if (t && t.sendKeyFrameRequest) t.sendKeyFrameRequest().catch(() => {}); }
-  if (m.stats) postMessage({ ostats: [...ordq].map(([k, q]) => [k, q.gaps, q.late, q.held]) }); };
-onrtctransform = (ev) => {
-  const t = ev.transformer, id = t.options && t.options.id; if (id) tf.set(id, t);
-  const r = t.readable.getReader(), w = t.writable.getWriter(); let n = 0;
-  (async () => { for (;;) {
-    const x = await r.read(); if (x.done) break; const f = x.value;
-    if (id && fwd.has(id) && tf.get(id) === t) { try {
-      const md = f.getMetadata ? f.getMetadata() : {}, buf = f.data.slice(0);
-      const rtp = (md.rtpTimestamp != null ? md.rtpTimestamp : f.timestamp) >>> 0; let c = clk.get(id);
-      if (!c) { c = { last: rtp, ext: 900000 }; clk.set(id, c); } else { let d = (rtp - c.last) | 0; if (d < -180000 || d > 900000) d = 3000; c.ext = Math.max(0, c.ext + d); c.last = rtp; } // lompatan (HP menyambung ulang) → lanjut mulus
-      const msg = { id, key: f.type === 'key', n: n++, ts: Math.round(c.ext * 1000 / 9), mime: md.mimeType || '', buf };
-      let q = ordq.get(id); if (!q) { q = { p: [], prev: -1, log2: 0, sep: false, last: -1, gaps: 0, late: 0, held: 0 }; ordq.set(id, q); }
-      const pi = (!msg.mime || /h264/i.test(msg.mime)) ? parse(q, new Uint8Array(buf)) : null;
-      if (q.last >= 0 && msg.ts <= q.last && !msg.key) { q.late++; } // datang setelah waktunya habis → mesin sudah menunggu frame kunci
-      else { if (q.p.length) q.held++; q.p.push({ ts: msg.ts, key: msg.key, pi, at: performance.now(), m: msg }); release(id, false); }
-    } catch (e) {} }
-    try { await w.write(f); } catch (e) {}
-  } })();
-};`;
+  // ---------- KLMCAM → mesin native: frame yang SUDAH didekode Chromium ----------
+  // Dulu: frame H.264 terenkode diteruskan ke dekoder buatan sendiri di mesin (urutan frame, frame_num, frame kunci, jadwal sendiri).
+  // Setiap paket Wi-Fi yang hilang/terlambat membuat gambar berhenti menunggu frame kunci, dan saat dekoder tertahan >3 dtk
+  // monitor berpindah ke tampilan cadangan lalu kembali (kedip). Sekarang: WebRTC Chromium yang mendekode (penyangga jitter,
+  // kirim ulang paket, penyamaran paket hilang, irama tayang — sama seperti video call), pekerja (worker) hanya menyalin frame
+  // jadi (NV12) dan mengirimnya langsung ke proses utama → mesin native. Frame tidak saling bergantung: frame yang terlewat
+  // tidak pernah membuat gambar berhenti atau rusak, dan codec apa pun (H.264/VP8/VP9/AV1) bisa.
+  const KR = `let port = null; const cams = new Map();
+const hd = (f, h) => { const m = f.colorSpace && f.colorSpace.matrix; return m ? (m === 'bt709' ? 1 : 0) : (h >= 720 ? 1 : 0); };
+async function pump(id, readable) {
+  const c = cams.get(id); if (!c) return; const r = readable.getReader(); c.reader = r;
+  let cv = null, cx = null;
+  for (;;) {
+    let x; try { x = await r.read(); } catch (e) { break; } if (x.done) break;
+    const f = x.value, now = performance.now();
+    if (c.lastAt && now - c.lastAt > 300) c.gaps.push(now); c.lastAt = now; c.n++;
+    if (!c.on || !port || c.busy >= 2) { f.close(); if (c.on) c.drop++; continue; } // salinan sebelumnya belum selesai → lewati (frame mandiri, aman)
+    c.busy++;
+    (async () => { try {
+      const vr = f.visibleRect || { x: 0, y: 0, width: f.displayWidth, height: f.displayHeight }, W = vr.width & ~1, H = vr.height & ~1, rect = { x: vr.x, y: vr.y, width: W, height: H };
+      let buf = null, fmt = 0; const fm = f.format || '';
+      if (fm === 'NV12') { buf = new ArrayBuffer(W * H * 3 / 2); await f.copyTo(buf, { rect, layout: [{ offset: 0, stride: W }, { offset: W * H, stride: W }] }); }
+      else if (fm === 'I420' || fm === 'I420A') {
+        const t = new Uint8Array(W * H * (fm === 'I420A' ? 5 : 3) / 2), q = W * H / 4;
+        const lay = [{ offset: 0, stride: W }, { offset: W * H, stride: W / 2 }, { offset: W * H + q, stride: W / 2 }]; if (fm === 'I420A') lay.push({ offset: W * H * 3 / 2, stride: W });
+        await f.copyTo(t, { rect, layout: lay });
+        const o = new Uint8Array(W * H * 3 / 2); o.set(t.subarray(0, W * H)); const u = W * H, v = u + q;
+        for (let i = 0, j = W * H; i < q; i++, j += 2) { o[j] = t[u + i]; o[j + 1] = t[v + i]; } buf = o.buffer;
+      } else { // format lain / tekstur GPU tanpa akses CPU → lewat kanvas (BGRA)
+        if (!cv || cv.width !== W || cv.height !== H) { cv = new OffscreenCanvas(W, H); cx = cv.getContext('2d', { willReadFrequently: true }); }
+        cx.drawImage(f, vr.x, vr.y, W, H, 0, 0, W, H); const d = cx.getImageData(0, 0, W, H).data;
+        for (let i = 0; i < d.length; i += 4) { const t2 = d[i]; d[i] = d[i + 2]; d[i + 2] = t2; } buf = d.buffer; fmt = 2;
+      }
+      const m = { id: c.eid, raw: 1, fmt, w: W, h: H, hd: hd(f, H), full: f.colorSpace && f.colorSpace.fullRange ? 1 : 0, ts: Math.max(0, Math.round(f.timestamp || 0)), buf };
+      try { port.postMessage(m); c.sent++; c.fmt = fm || 'gpu'; c.w = W; c.h = H; } catch (e) { port = null; }
+    } catch (e) { c.err = String(e && e.message || e); } finally { f.close(); c.busy--; } })();
+  }
+  c.reader = null;
+}
+setInterval(() => { const now = performance.now(); postMessage({ st: [...cams].map(([id, c]) => { c.gaps = c.gaps.filter((t) => now - t < 60000); return [id, { n: c.n, sent: c.sent, drop: c.drop, gaps: c.gaps.length, fmt: c.fmt, w: c.w, h: c.h, err: c.err, live: now - (c.lastAt || 0) < 1500 }]; }) }); }, 1000);
+onmessage = (e) => { const m = e.data || {};
+  if (m.port) port = m.port;
+  if (m.add) { const old = cams.get(m.add); if (old && old.reader) try { old.reader.cancel(); } catch (er) {} if (old && old.track) try { old.track.stop(); } catch (er) {}
+    const c = { eid: m.add, on: !!m.on, busy: 0, n: 0, sent: 0, drop: 0, gaps: [], lastAt: 0, fmt: '', w: 0, h: 0, err: '', track: m.track || null }; cams.set(m.add, c);
+    let rd = m.readable; if (!rd && m.track) { try { rd = new MediaStreamTrackProcessor({ track: m.track, maxBufferSize: 2 }).readable; } catch (er) { c.err = 'MediaStreamTrackProcessor: ' + er.message; } }
+    if (rd) pump(m.add, rd); }
+  if (m.on) { const c = cams.get(m.on); if (c) c.on = true; }
+  if (m.off) { const c = cams.get(m.off); if (c) c.on = false; }
+  if (m.del) { const c = cams.get(m.del); if (c) { c.on = false; if (c.reader) try { c.reader.cancel(); } catch (er) {} if (c.track) try { c.track.stop(); } catch (er) {} } cams.delete(m.del); } };`;
   function kw() {
     if (kWorker) return kWorker;
-    kWorker = new Worker(URL.createObjectURL(new Blob([KW], { type: 'text/javascript' })));
+    kWorker = new Worker(URL.createObjectURL(new Blob([KR], { type: 'text/javascript' })));
     // jalur langsung pekerja → proses utama (MessagePort): frame tidak menunggu thread utama KLM
     try { const ch = new MessageChannel(); window.postMessage('klm-kport', '*', [ch.port2]); kWorker.postMessage({ port: ch.port1 }, [ch.port1]); } catch (e) {}
-    kWorker.onmessage = (e) => {
-      const m = e.data, k = kcams.get(m.id); if (!k) return;
-      if (m.mime && !/h264/i.test(m.mime)) { if (k.codec !== m.mime) { k.codec = m.mime; k.err = 'codec ' + m.mime.replace(/^video\//, '') + ' (butuh H.264)'; kWorker.postMessage({ unfwd: m.id }); } return; }
-      if (!N.kWant()) return;
-      window.klm.send('nengine:kenc', m.id, m.key, m.ts != null ? m.ts : m.n * 333333, m.buf);
-    };
+    kWorker.onmessage = (e) => { const m = e.data || {}; if (m.st) for (const [id, st] of m.st) { const k = kcams.get(id); if (k) k.raw = st; } };
     return kWorker;
   }
   // dipanggil link.js untuk tiap penerima video KLMCAM (juga saat menyambung ulang)
   N.kAttach = function (inp, receiver) {
-    if (!el() || !window.RTCRtpScriptTransform || !receiver || KM.settings.nativeEngine !== true || KM.settings.nativeKlmcam === false) return;
+    if (!el() || !receiver || !receiver.track || !window.MediaStreamTrackProcessor) return;
     const id = kidOf(inp);
-    try { receiver.transform = new RTCRtpScriptTransform(kw(), { id }); receiver.__klmK = id; } catch (e) { console.warn('KLMCAM transform', e); return; }
     let k = kcams.get(id); if (!k) { k = { ok: false, err: '', last: 0, n: 0 }; kcams.set(id, k); }
-    k.err = ''; k.codec = '';
-    if (N.kWant()) { kw().postMessage({ fwd: id }); setTimeout(() => kw().postMessage({ kf: id }), 300); }
+    k.err = ''; k.codec = ''; receiver.__klmK = id;
+    const w = kw(), on = N.kWant();
+    // salinan trek dipindahkan ke pekerja (frame tidak melewati thread utama halaman); bila tidak bisa, aliran frame yang dipindah
+    const t2 = receiver.track.clone();
+    try { w.postMessage({ add: id, on, track: t2 }, [t2]); }
+    catch (e) {
+      try { const rd = new MediaStreamTrackProcessor({ track: t2, maxBufferSize: 2 }).readable; w.postMessage({ add: id, on, readable: rd }, [rd]); }
+      catch (e2) { k.err = 'KLMCAM ke mesin native: ' + e2.message; try { t2.stop(); } catch (e3) {} }
+    }
   };
   function kSync() { // nyalakan / matikan penerusan sesuai keadaan mesin
     if (!kWorker) return;
-    for (const [id, k] of kcams) {
+    for (const [id] of kcams) {
       const inp = KM.state.inputs.find((i) => i.type === 'klmcam' && kidOf(i) === id);
-      if (!inp) { kWorker.postMessage({ unfwd: id }); cmd('kdecoff ' + id); kcams.delete(id); continue; }
-      if (N.kWant() && !k.codec) { kWorker.postMessage({ fwd: id }); kWorker.postMessage({ kf: id }); } else kWorker.postMessage({ unfwd: id });
+      if (!inp) { kWorker.postMessage({ del: id }); cmd('kdecoff ' + id); kcams.delete(id); continue; }
+      kWorker.postMessage(N.kWant() ? { on: id } : { off: id });
     }
   }
   N.kSync = kSync;
@@ -908,14 +904,9 @@ onrtctransform = (ev) => {
     const a = rest.split(' '), k = kcams.get(a[0]); if (!k) return;
     if (t === 'kok') { k.ok = true; k.w = +a[1]; k.h = +a[2]; k.dxva = a[3] === '1'; k.last = Date.now(); }
     else if (t === 'kerr') { k.err = rest.slice(a[0].length + 1); }
-    else if (t === 'kneedkey') {
-      // frame hilang → gambar berhenti sampai frame kunci datang: dihitung agar terlihat di panel KLMCAM (penyebab "freeze")
-      const now = Date.now(); k.keyReq = (k.keyReq || []).filter((x) => now - x < 60000); k.keyReq.push(now);
-      if (kWorker) kWorker.postMessage({ kf: a[0] });
-    }
   }
-  /** berapa kali gambar KLMCAM ini berhenti menunggu frame kunci dalam 60 detik terakhir */
-  N.kPauses = (inp) => { const k = inp && kcams.get(kidOf(inp)); if (!k || !k.keyReq) return 0; const now = Date.now(); return k.keyReq.filter((x) => now - x < 60000).length; };
+  /** berapa kali gambar KLMCAM ini tersendat > 0,3 dtk (tidak ada frame dari WebRTC) dalam 60 detik terakhir */
+  N.kPauses = (inp) => { const k = inp && kcams.get(kidOf(inp)); return k && k.raw ? k.raw.gaps || 0 : 0; };
 
   // ---------- kamera native (Fase 3) ----------
   const cams = new Map(); // id kamera → { users:Set, key, w, h, fps, ok, err, frames, cur:{imp,vf}, wait:[] }

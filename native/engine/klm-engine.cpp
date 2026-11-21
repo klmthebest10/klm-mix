@@ -191,7 +191,7 @@ static void stdinThread() {
       char c = buf[i];
       if (c == '\n') {
         if (!line.empty() && line.back() == '\r') line.pop_back();
-        if (line.compare(0, 6, "ublob ") == 0 || line.compare(0, 5, "kenc ") == 0 || line.compare(0, 4, "aud ") == 0 || line.compare(0, 7, "srcimg ") == 0 || line.compare(0, 5, "segm ") == 0) {
+        if (line.compare(0, 6, "ublob ") == 0 || line.compare(0, 5, "kenc ") == 0 || line.compare(0, 5, "kraw ") == 0 || line.compare(0, 4, "aud ") == 0 || line.compare(0, 7, "srcimg ") == 0 || line.compare(0, 5, "segm ") == 0) {
           size_t sp = line.find_last_of(' ');
           unsigned long long nb = strtoull(line.c_str() + sp + 1, nullptr, 10);
           if (nb > 0 && nb <= 64ull * 1024 * 1024) { blob.line = line; blob.data.clear(); blob.data.reserve((size_t)nb); need = (size_t)nb; }
@@ -1506,6 +1506,7 @@ struct KDec {
   std::map<std::pair<ID3D11Texture2D*, UINT>, ComPtr<ID3D11VideoProcessorInputView>> iv;
   ComPtr<ID3D11Texture2D> nv12; // jalur CPU
   int errs = 0; bool waitKey = false;
+  bool raw = false, full = false; // raw: frame sudah didekode Chromium (kraw), tanpa dekoder H.264 sendiri
   // urutan frame H.264 (frame_num) — frame hilang / terlambat → tunggu frame kunci, tidak pernah mendekode di atas referensi yang hilang (= bercak)
   int log2MaxFn = 0; bool sepColour = false; int prevRefFn = -1; int gaps = 0, drops = 0;
   // jadwal tayang (jitter buffer kecil): frame terdekode masuk cincin, ditayangkan menurut cap waktu RTP → gerakan rata
@@ -1588,7 +1589,7 @@ static bool kBlit(KDec& k, ID3D11Texture2D* src, UINT sub, LONGLONG ts, double d
     cd.InputFrameRate = { 30, 1 }; cd.OutputFrameRate = { 30, 1 };
     if (FAILED(k.vdev->CreateVideoProcessorEnumerator(&cd, &k.ven)) || FAILED(k.vdev->CreateVideoProcessor(k.ven.Get(), 0, &k.vp))) { emit("kerr %s Video Processor tidak tersedia", k.id.c_str()); return false; }
     k.vpInW = sd.Width; k.vpInH = sd.Height;
-    D3D11_VIDEO_PROCESSOR_COLOR_SPACE in{}; in.YCbCr_Matrix = k.hd ? 1 : 0; in.Nominal_Range = D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_16_235;
+    D3D11_VIDEO_PROCESSOR_COLOR_SPACE in{}; in.YCbCr_Matrix = k.hd ? 1 : 0; in.Nominal_Range = k.full ? D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_0_255 : D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_16_235;
     D3D11_VIDEO_PROCESSOR_COLOR_SPACE out{}; out.RGB_Range = 0; out.Nominal_Range = D3D11_VIDEO_PROCESSOR_NOMINAL_RANGE_0_255;
     k.vctx->VideoProcessorSetStreamColorSpace(k.vp.Get(), 0, &in);
     k.vctx->VideoProcessorSetOutputColorSpace(k.vp.Get(), &out);
@@ -1808,6 +1809,56 @@ static void kFeed(const std::string& id, bool key, LONGLONG ts, std::vector<uint
   KDec::QF f; f.d = std::move(data); f.ts = ts; f.at = at;
   k.q.push_back(std::move(f));
   k.cv.notify_one();
+}
+
+// KLMCAM jalur baru: frame SUDAH didekode Chromium (penyangga jitter, kirim ulang paket, penyamaran paket hilang & irama tayang
+// WebRTC yang matang) → NV12 / BGRA mentah → tekstur → Video Processor → cincin tayang. Tidak ada dekoder H.264 sendiri,
+// tidak ada ketergantungan antar-frame: frame yang terlewat tidak pernah membuat gambar berhenti atau rusak.
+//   kraw <id> <fmt 0=NV12 2=BGRA> <w> <h> <hd 0|1> <full 0|1> <ts µs> <n>  + n byte
+static void kRaw(const std::string& id, int fmt, UINT w, UINT h, bool hd, bool full, LONGLONG tsUs, const std::vector<uint8_t>& data) {
+  const double at = g_cmdAt > 0 ? g_cmdAt : nowMs();
+  w &= ~1u; h &= ~1u; if (!w || !h || w > 8192 || h > 8192) return;
+  const size_t need = fmt == 2 ? (size_t)w * h * 4 : (size_t)w * h * 3 / 2; if (data.size() < need) return;
+  auto it = g_kdec.find(id);
+  if (it != g_kdec.end() && !it->second->raw) { kOff(id); it = g_kdec.end(); } // sebelumnya jalur H.264 lama → ganti
+  if (it == g_kdec.end()) {
+    auto k = std::make_shared<KDec>(); k->id = id; k->raw = true;
+    k->cam = std::make_shared<Cam>(); k->cam->id = id;
+    ComPtr<ID3D11VideoDevice> vd; ComPtr<ID3D11VideoContext> vc;
+    if (SUCCEEDED(g_dev.As(&vd)) && SUCCEEDED(g_ctx.As(&vc))) { k->vdev = vd; k->vctx = vc; }
+    g_cams[id] = k->cam; g_kdec[id] = k; it = g_kdec.find(id);
+  }
+  KDec& k = *it->second;
+  if (k.dw != w || k.dh != h || k.hd != hd || k.full != full) {
+    std::lock_guard<std::mutex> l(k.smx);
+    if (k.dw != w || k.dh != h) k.nv12.Reset();
+    k.cw = w; k.ch = h; k.dw = w; k.dh = h; k.hd = hd; k.full = full; k.vp.Reset(); k.ven.Reset(); k.iv.clear(); for (auto& sl : k.slot) sl.ov.Reset();
+  }
+  const LONGLONG ts = tsUs * 10; // → 100 ns
+  const double due = kSchedule(k, ts, at);
+  bool ok = false;
+  if (fmt == 2) ok = kPut(k, data.data(), w * 4, ts, due);
+  else if (k.vdev) {
+    if (!k.nv12) {
+      D3D11_TEXTURE2D_DESC d{}; d.Width = w; d.Height = h; d.MipLevels = 1; d.ArraySize = 1; d.Format = DXGI_FORMAT_NV12; d.SampleDesc.Count = 1;
+      d.Usage = D3D11_USAGE_DEFAULT; d.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+      if (FAILED(g_dev->CreateTexture2D(&d, nullptr, &k.nv12))) { if (!k.errs++) emit("kerr %s tekstur NV12 tidak didukung", id.c_str()); return; }
+    }
+    g_ctx->UpdateSubresource(k.nv12.Get(), 0, nullptr, data.data(), w, 0);
+    ok = kBlit(k, k.nv12.Get(), 0, ts, due);
+  } else { // GPU tanpa Video Processor (mis. WARP): NV12 → BGRA di CPU
+    std::vector<uint32_t> px((size_t)w * h);
+    const uint8_t* yp = data.data(); const uint8_t* uvp = yp + (size_t)w * h;
+    const double kr = hd ? 0.2126 : 0.299, kb = hd ? 0.0722 : 0.114, kg = 1 - kr - kb, ys = full ? 1.0 : 255.0 / 219, cs = full ? 1.0 : 255.0 / 224, yo = full ? 0 : 16;
+    auto c8 = [](double v) { return (uint32_t)(v < 0 ? 0 : v > 255 ? 255 : std::lround(v)); };
+    for (UINT y = 0; y < h; y++) for (UINT x = 0; x < w; x++) {
+      const double Y = (yp[(size_t)y * w + x] - yo) * ys, U = (uvp[(size_t)(y / 2) * w + (x & ~1u)] - 128) * cs, V = (uvp[(size_t)(y / 2) * w + (x & ~1u) + 1] - 128) * cs;
+      const double R = Y + 2 * (1 - kr) * V, B = Y + 2 * (1 - kb) * U, G = (Y - kr * R - kb * B) / kg;
+      px[(size_t)y * w + x] = 0xFF000000u | (c8(R) << 16) | (c8(G) << 8) | c8(B);
+    }
+    ok = kPut(k, px.data(), w * 4, ts, due);
+  }
+  if (ok && !k.okSent) { k.okSent = true; emit("kok %s %u %u 1", id.c_str(), w, h); }
 }
 
 // ---- output native (Fase 4b) ----
@@ -2282,6 +2333,11 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
     if (!id.empty() && id.size() <= 64 && !data.empty()) kFeed(id, key != 0, (LONGLONG)ts, std::vector<uint8_t>(data.begin(), data.end()));
     return;
   }
+  if (c == "kraw") {
+    std::string id; int fmt = 0, hd = 1, full = 0; UINT w = 0, h = 0; long long ts = 0; size_t n = 0; is >> id >> fmt >> w >> h >> hd >> full >> ts >> n;
+    if (!id.empty() && id.size() <= 64 && !data.empty()) kRaw(id, fmt, w, h, hd != 0, full != 0, (LONGLONG)ts, data);
+    return;
+  }
   if (c == "kdecoff") { std::string id; is >> id; kOff(id); return; }
   if (c == "aud") { oAudio(data); return; }
   if (c == "ostart") {
@@ -2463,7 +2519,14 @@ static void command(const std::string& line, const std::vector<uint8_t>& data = 
 static void frame(double now) {
   std::deque<Cmd> q;
   { std::lock_guard<std::mutex> l(g_qMx); q.swap(g_q); }
-  for (auto& l : q) { g_cmdAt = l.at; command(l.line, l.data); g_cmdAt = 0; }
+  { // frame KLMCAM mentah yang menumpuk dalam satu putaran (mesin sempat sibuk): cukup 2 terbaru per kamera
+    std::map<std::string, int> left;
+    for (auto it = q.rbegin(); it != q.rend(); ++it) if (it->line.compare(0, 5, "kraw ") == 0) {
+      const size_t e = it->line.find(' ', 5); const std::string id = it->line.substr(5, e == std::string::npos ? std::string::npos : e - 5);
+      if (++left[id] > 2) { it->line.clear(); it->data.clear(); }
+    }
+  }
+  for (auto& l : q) { if (l.line.empty()) continue; g_cmdAt = l.at; command(l.line, l.data); g_cmdAt = 0; }
   g_frameNo++;
   flushUtex();
   if (g_tr.on && !g_tr.manual) {
@@ -2705,6 +2768,27 @@ static int selftest(bool warp) {
         command("kdecoff kg"); run(1);
       }
     }
+  }
+  // ---- KLMCAM jalur baru: frame mentah (sudah didekode Chromium) → monitor native, tanpa dekoder sendiri
+  {
+    const UINT W = 640, H = 360; std::vector<uint8_t> nv((size_t)W * H * 3 / 2);
+    memset(nv.data(), 150, (size_t)W * H); memset(nv.data() + (size_t)W * H, 128, (size_t)W * H / 2);
+    for (int i = 0; i < 12; i++) { char b[128]; snprintf(b, sizeof b, "kraw kr 0 %u %u 1 0 %lld %zu", W, H, (long long)i * 33333, nv.size()); g_cmdAt = nowMs(); command(b, nv); g_cmdAt = 0; run(1); Sleep(i % 3 == 0 ? 20 : 33); }
+    double t0 = nowMs(); while (nowMs() - t0 < 2000 && !(g_cams.count("kr") && g_cams["kr"]->frames > 5)) { run(1); Sleep(20); }
+    const int fr = g_cams.count("kr") ? g_cams["kr"]->frames.load() : 0;
+    emit("  %s KLMCAM frame mentah NV12: %d frame tayang", fr > 5 ? "OK " : "GAGAL", fr); if (fr <= 5) ok = 0;
+    command("pgm kr"); run(3);
+    chk(g_pgm, 960, 540, 156, 156, 156, 8, "KLMCAM mentah NV12 di Program (abu Y=150)");
+    std::vector<uint8_t> bg((size_t)W * H * 4); for (size_t i = 0; i < bg.size(); i += 4) { bg[i] = 192; bg[i + 1] = 128; bg[i + 2] = 32; bg[i + 3] = 255; }
+    for (int i = 12; i < 20; i++) { char b[128]; snprintf(b, sizeof b, "kraw kr 2 %u %u 1 0 %lld %zu", W, H, (long long)i * 33333, bg.size()); g_cmdAt = nowMs(); command(b, bg); g_cmdAt = 0; run(1); Sleep(33); }
+    for (int r = 0; r < 10; r++) { run(1); Sleep(20); }
+    chk(g_pgm, 960, 540, 32, 128, 192, 8, "KLMCAM mentah BGRA di Program (32,128,192)");
+    // lompatan cap waktu besar (HP menyambung ulang) tidak membekukan gambar
+    for (int i = 0; i < 8; i++) { char b[128]; snprintf(b, sizeof b, "kraw kr 0 %u %u 1 0 %lld %zu", W, H, 900000000000LL + (long long)i * 33333, nv.size()); g_cmdAt = nowMs(); command(b, nv); g_cmdAt = 0; run(1); Sleep(33); }
+    for (int r = 0; r < 10; r++) { run(1); Sleep(20); }
+    chk(g_pgm, 960, 540, 156, 156, 156, 8, "KLMCAM mentah sesudah lompatan cap waktu");
+    command("kdecoff kr"); command("pgm a"); run(2);
+    emit("  %s KLMCAM mentah dihentikan", !g_kdec.count("kr") ? "OK " : "GAGAL"); if (g_kdec.count("kr")) ok = 0;
   }
   // ---- Fase 4b: output native — rekam MP4 terfragmentasi & MPEG-TS dari Program mesin native (H.264 + AAC)
   if (initMF()) {
