@@ -52,7 +52,8 @@
   #klmb.inl{position:relative;right:auto;bottom:auto;display:flex;align-items:center;gap:6px;z-index:60}
   #klmb.inl .pill{height:30px;box-shadow:none;background:#14171c}
   #klmb.inl .qa{flex:none;height:30px;padding:0 12px;border-radius:999px}
-  #klmb.inl .card{top:38px;bottom:auto;right:0}`;
+  #klmb.inl .card{top:38px;bottom:auto;right:0}
+  @media (max-width:1400px){#klmb.inl #klmbTxt{display:none}#klmb.inl .pill{padding:0 8px}}`;
   const el = (tag, attrs, ...kids) => {
     const n = document.createElement(tag);
     for (const k in attrs || {}) { if (k === 'class') n.className = attrs[k]; else if (k.startsWith('on')) n.addEventListener(k.slice(2), attrs[k]); else n.setAttribute(k, attrs[k]); }

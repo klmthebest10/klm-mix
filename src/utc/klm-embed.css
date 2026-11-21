@@ -52,14 +52,12 @@ html.klmui .tabs button.act { background: rgba(240, 138, 36, .14); color: #ffc07
 /* ================= menyatu di dalam KLM ================= */
 /* Panel lengkap di dalam KLM: menu | editor | kolom kanan (saklar grafis di atas, tampilan UTC di bawahnya).
  * Program/switcher & daftar input KLM sudah ada di mixer di atasnya → tidak ditampilkan di sini. */
-/* bilah atas tipis: hanya tombol KLM (ON AIR di Program, CUT/AUTO/REC/LIVE). Nama acara & "Semua OFF" sudah ada di bilah KLM */
-html.klm-embed header { display: flex; align-items: center; gap: 8px; height: 46px; padding: 0 10px; border-bottom: 1px solid #252a33; background: #0d0f13; }
-html.klm-embed header .brand, html.klm-embed header .evsel, html.klm-embed header .hdr { display: none; }
-html.klm-embed header .conn { font-size: 12px; }
-html.klm-embed .klmslot { margin-left: auto; display: flex; align-items: center; min-width: 0; }
-html.klm-embed main { height: calc(100vh - 46px) !important; }
+html.klm-embed header { display: none; }
+/* tombol KLM (ON AIR di Program, CUT/AUTO/REC/LIVE) di BAGIAN ATAS kolom editor. Menu kiri & kolom kanan tetap setinggi penuh
+   (baris atas hanya memakan ruang editor yang memang bisa digulir) → tidak ada tombol yang terpotong */
+html.klm-embed .klmslot { grid-area: bar; display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
 html:not(.klm-embed) .klmslot { display: none; }
-html.klm-embed main { grid-template-columns: 184px minmax(0, 1fr) clamp(300px, 23vw, 400px); grid-template-areas: "tabs panel mon"; gap: 10px; padding: 10px; height: 100vh; align-items: stretch; }
+html.klm-embed main { grid-template-columns: 184px minmax(0, 1fr) clamp(300px, 23vw, 400px); grid-template-rows: auto minmax(0, 1fr); grid-template-areas: "tabs bar mon" "tabs panel mon"; gap: 8px 10px; padding: 10px; height: 100vh; align-items: stretch; }
 html.klm-embed main > section:last-child { display: contents; }
 /* kolom kanan: saklar grafis + OPENING/CLOSING di atas, pratinjau grafis UTC di bawah (mengecil mengikuti sisa tinggi) */
 html.klm-embed .mon { grid-area: mon; position: static; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: hidden auto; padding-right: 2px; }
