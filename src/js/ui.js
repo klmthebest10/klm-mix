@@ -168,7 +168,7 @@
   // tinggi panel lengkap: garis tarik di atas panel mengatur tinggi monitor Preview/Program (disimpan)
   (function utcGrip() {
     const g = $('#utcGrip'), ws = $('#utcWs'), app = $('#app'); if (!g) return;
-    const lim = (v) => Math.round(Math.max(160, Math.min(window.innerHeight - 46 - 54 - 220, v)));
+    const lim = (v) => Math.round(Math.max(160, Math.min(window.innerHeight - 46 - 54 - 300, v))); // panel lengkap minimal ±300 px
     const apply = () => { const v = +(KM.settings || {}).utcMonH || 0; if (v) app.style.setProperty('--utc-mon-h', lim(v) + 'px'); else app.style.removeProperty('--utc-mon-h'); };
     UI.utcGripApply = apply; apply(); window.addEventListener('resize', apply);
     g.addEventListener('pointerdown', (e) => {

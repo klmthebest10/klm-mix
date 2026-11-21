@@ -114,5 +114,27 @@ html.klm-embed .toast { bottom: 18px; }
   html.klm-embed .tabs button { justify-content: center; padding: 8px 0; }
 }
 @media (max-width: 1250px) and (max-height: 600px) {
-  html.klm-embed main { grid-template-columns: clamp(380px, 38vw, 460px) 52px minmax(0, 1fr); }
+  html.klm-embed main { grid-template-columns: clamp(380px, 40vw, 460px) 52px minmax(0, 1fr); }
+}
+@media (max-width: 1250px) and (max-height: 470px) {
+  html.klm-embed .tabs button { padding: 4px 0; }
+}
+@media (max-height: 380px) {
+  /* sangat pendek: tombol tayang lebih ringkas */
+  html.klm-embed .mon .ocair button { padding: 6px 6px; font-size: 10.5px; }
+  html.klm-embed .mon .air button { padding: 4px 3px; font-size: 9.5px; line-height: 1.25; }
+  html.klm-embed .mon .air button b { font-size: 11px; }
+}
+@media (min-width: 1251px) and (max-height: 380px) {
+  /* OPENING · CLOSING · OFF satu baris (cukup lebar) */
+  html.klm-embed .mon .ocair { grid-template-columns: 1fr 1fr auto; }
+  html.klm-embed .mon .ocair button:last-child { grid-column: auto; }
+}
+@media (max-width: 1250px) and (max-height: 380px) {
+  html.klm-embed .tabs button { padding: 3px 0; }
+}
+html.klm-embed .ocair button { white-space: nowrap; }
+@media (max-width: 1250px) and (max-height: 270px) {
+  html.klm-embed .tabs button { padding: 1px 0; }
+  html.klm-embed .tabs .tgrp { margin: 1px 6px; }
 }
