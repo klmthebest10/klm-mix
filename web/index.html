@@ -68,7 +68,8 @@
   };
   document.getElementById('goScore').onclick = async () => {
     let host = location.hostname, base = '';
-    if (!KMP.servedByPc) { save(); const sv = KMP.server(); if (!sv.host) { KMP.toast('Isi IP PC dulu'); srv.focus(); return; } host = sv.host.split(':')[0]; base = 'http://' + sv.host; }
+    // aplikasi KLM HP: scoreboard dibuka di dalam aplikasi (bingkai), bukan pindah ke browser
+    if (!KMP.servedByPc) { save(); const sv = KMP.server(); if (!sv.host) { KMP.toast('Isi IP PC dulu'); srv.focus(); return; } location.href = KMP.page('score'); return; }
     try { const j = await (await fetch(base + '/info')).json(); if (j.ports && j.ports.score) { location.href = 'http://' + host + ':' + j.ports.score + '/hp'; return; } } catch (e) {}
     KMP.toast('Scoreboard belum aktif di PC');
   };

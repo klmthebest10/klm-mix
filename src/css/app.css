@@ -413,11 +413,17 @@ p { line-height: 1.5; }
 .bb.utc.on .dot { background: var(--utc); box-shadow: 0 0 8px var(--utc); }
 /* v1.18.0-beta.3: halaman TIDAK bisa digulir — monitor Preview/Program tetap di tempat. Panel UTC mengisi sisa tinggi
    (isi panel sendiri yang bisa digulir). Di layar pendek monitor sedikit mengecil agar panel tetap ≥ ±340 px. */
-#app.utc-mode { grid-template-rows: 46px max-content minmax(0, 1fr) 54px; overflow: hidden; --mon-h: clamp(240px, calc(100vh - 46px - 54px - 340px), 52vh); }
+/* panel lengkap mendapat ruang lebih (monitor Preview/Program sedikit lebih pendek); tingginya bisa ditarik lewat .utc-grip */
+#app.utc-mode { grid-template-rows: 46px max-content minmax(0, 1fr) 54px; overflow: hidden; --mon-h: var(--utc-mon-h, clamp(220px, calc(100vh - 46px - 54px - 450px), 46vh)); }
 #app.utc-mode #stage { height: calc(var(--mon-h) + 14px); overflow: hidden; } /* kolom transisi digulir di dalamnya, bukan halaman */
 #app.utc-mode #lower { display: none; }
 #utcWs { grid-row: 3; display: flex; flex-direction: column; min-height: 0; margin: 0 10px 8px; background: var(--bg); border: 1px solid rgba(240, 138, 36, .35); border-radius: var(--r); overflow: hidden; box-shadow: 0 0 0 1px rgba(240, 138, 36, .08); }
 #utcWs[hidden] { display: none; }
+#utcWs { position: relative; }
+#utcWs .utc-grip { position: absolute; left: 0; right: 0; top: 0; height: 7px; cursor: ns-resize; z-index: 3; touch-action: none; }
+#utcWs .utc-grip::after { content: ''; position: absolute; left: 50%; top: 2px; width: 46px; height: 3px; margin-left: -23px; border-radius: 2px; background: rgba(240, 138, 36, .45); opacity: .55; transition: opacity .15s; }
+#utcWs .utc-grip:hover::after, #utcWs .utc-grip.drag::after { opacity: 1; }
+#utcWs.resizing iframe { pointer-events: none; }
 #utcWs .utc-head { display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; height: 46px; background: linear-gradient(90deg, rgba(240, 138, 36, .12), var(--bg2) 40%); border-bottom: 1px solid var(--line); flex: none; }
 #utcWs .utc-head > b { display: flex; align-items: center; gap: 8px; font-size: 13.5px; white-space: nowrap; }
 #utcWs .utc-head > b .ki { color: var(--utc); width: 17px; height: 17px; }

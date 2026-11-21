@@ -140,6 +140,13 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.17
+Versi uji (beta) + APK KLM HP baru.
+- **Panel lengkap lebih lega:** monitor Preview/Program KLM sedikit lebih pendek saat panel lengkap terbuka, dan tinggi panel bisa ditarik lewat garis tipis di atas panel (klik 2× = ukuran bawaan; tersimpan).
+- **UTC Acara — panel lengkap rapi & responsif:** tiga kolom mengisi lebar panel; pada panel pendek pratinjau dan tombol tayang (Lower Third, Title, Running, Logo, Lokasi, Sosmed, Opening/Closing/OFF) berdampingan sehingga semua tombol terlihat tanpa menggulir; menu kiri tetap muat seluruhnya (judul kelompok jadi garis pemisah di panel sangat pendek); tiap kolom digulir sendiri.
+- **UTC Score — panel lengkap rapi & responsif:** kepala satu baris (olahraga · menu · status), **monitor program di kiri** (lebih kecil) dengan Grafis Cepat di bawahnya, **konsol skor di kanan** dengan angka & jam lebih ringkas sehingga tombol +GOL, MULAI, kartu, pergantian terlihat; kolom digulir sendiri, tidak lagi menumpuk di layar sempit. Tampilan HP & browser biasa tidak berubah.
+- **UTC Score di aplikasi KLM HP:** kini dibuka di dalam aplikasi (seperti UTC Acara) dengan bilah atas ⬅ Menu dan ⟳ muat ulang — tidak lagi pindah ke browser.
+
 ### Baru di v1.18.0-beta.16
 Versi uji (beta) + APK KLM HP baru.
 - **Stabilisasi gambar KLMCAM (EIS)** — Mati / Ringan / Sedang (bawaan) / Kuat, diatur di HP atau dari panel KLMCAM di PC. Frame sedikit diperbesar (6/10/16 %) lalu digeser & diputar berlawanan arah goyangan. Gerak kamera diukur dari **giroskop HP** (halus, tidak tertipu orang yang bergerak); arah, sumbu, skala dan jeda giroskop terhadap gambar dikalibrasi otomatis dari gerak gambar ±2–5 detik setelah HP bergerak, jadi tidak bergantung pada merek HP, kamera depan/belakang, atau arah layar. Sebelum terkalibrasi (atau tanpa giroskop) dipakai gerak gambar. Diam di tripod: gambar tetap diam (tidak ada getar tambahan). **OIS** (stabilisasi optik) adalah lensa di dalam HP: bekerja otomatis di HP yang memilikinya dan tidak bisa diatur dari aplikasi web/WebView.

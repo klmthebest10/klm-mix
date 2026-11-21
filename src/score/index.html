@@ -909,6 +909,54 @@ body.v-arena{overflow:hidden;height:100vh}
 body.v-arena #arenaRoot{position:fixed;inset:0}
 @media (prefers-reduced-motion:reduce){body.v-control .app *,body.v-hp .hp *{transition:none!important}body.v-control .tp-score .big,body.v-control .toast{animation:none!important}}
 </style>
+<style>
+/* ===================== DI DALAM KLM (panel lengkap) =====================
+ * html.klm-embed hanya saat panel kontrol dimuat KLM (iframe ?klm=1). Panel KLM pendek & lebar (monitor KLM di atasnya), jadi:
+ * kepala satu baris, monitor program di KIRI (lebih kecil), konsol skor di KANAN dengan angka lebih ringkas agar tombol terlihat,
+ * tiap kolom digulir di dalamnya sendiri (halaman tidak bergulir). Aplikasi HP / browser biasa tidak terpengaruh. */
+html.klm-embed,html.klm-embed body{height:100%;overflow:hidden}
+html.klm-embed .app{height:100vh;min-height:0}
+html.klm-embed .top{position:relative;padding-inline:10px;display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;padding-block:6px}
+html.klm-embed .top-in{display:contents}
+html.klm-embed .brand{display:none}
+html.klm-embed .sports{padding:3px;border-radius:10px}
+html.klm-embed .sport-btn{padding:6px 10px;font-size:13.5px}
+html.klm-embed .sport-btn svg{width:16px;height:16px}
+html.klm-embed .tabs{order:2;margin:0;max-width:none;flex:1 1 auto;min-width:0}
+html.klm-embed .tab{padding:7px 10px;font-size:12.5px}
+html.klm-embed .top-right{order:3;gap:6px}
+html.klm-embed .top-right .btn{padding:6px 10px;font-size:12.5px}
+html.klm-embed .top-right .chip{font-size:12px}
+html.klm-embed .body{flex:1;min-height:0;max-width:none;padding:10px;gap:10px;grid-template-columns:clamp(280px,23vw,400px) minmax(0,1fr);align-items:stretch;overflow:hidden}
+html.klm-embed .aside{order:-1;position:static!important;top:auto;overflow:auto;min-height:0;gap:10px;padding-right:2px}
+html.klm-embed #main{overflow:auto;min-height:0;gap:12px;padding-right:4px}
+html.klm-embed .foot{display:none}
+html.klm-embed .monitor.floating{position:relative!important;left:auto!important;top:auto!important;width:auto!important;transform:none!important}
+html.klm-embed .monitor .pop-tools,html.klm-embed .monitor .pop-grip,html.klm-embed .monitor .pop-rs{display:none!important}
+html.klm-embed .mon-h{padding:6px 8px;gap:6px;flex-wrap:nowrap}html.klm-embed .mon-h .label{min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}html.klm-embed .mon-h .seg,html.klm-embed .mon-h #monMin,html.klm-embed .mon-h .tally{flex:none;white-space:nowrap}
+/* konsol skor ("layar arena") lebih ringkas: angka & jam lebih kecil, tombol tetap besar dan terlihat */
+html.klm-embed .console{grid-template-columns:minmax(0,1fr) minmax(220px,290px) minmax(0,1fr);gap:10px}
+html.klm-embed .tp-head{padding:8px 12px}
+html.klm-embed .tp-logo{width:32px;height:32px}
+html.klm-embed .tp-name{font-size:18px}
+html.klm-embed .tp-score{padding:4px 10px 0}
+html.klm-embed .tp-score .big{font-size:clamp(54px,11vh,84px)}
+html.klm-embed .tp-score .sets b{font-size:30px}
+html.klm-embed .tp-btns{padding:6px 10px 10px}
+html.klm-embed .tp-btns .btn{padding:11px 6px;font-size:18px}
+html.klm-embed .tp-extra{padding:8px 12px;gap:6px}
+html.klm-embed .cp{padding:10px;gap:8px}
+html.klm-embed .cp-time{font-size:clamp(44px,9vh,62px);padding:4px 0 0}
+html.klm-embed .tabs{flex:1 1 0;flex-wrap:nowrap}
+@media (max-width:1650px){html.klm-embed .sport-btn span,html.klm-embed .top-right .tl,html.klm-embed #status>span{display:none}html.klm-embed .sport-btn{padding:6px 8px}html.klm-embed #status{padding:6px 8px}}
+@media (max-width:1760px){html.klm-embed .mon-h .label{display:none}}
+@media (max-width:1500px){html.klm-embed .body{grid-template-columns:clamp(260px,24vw,340px) minmax(0,1fr)}html.klm-embed .tab{padding:7px 8px}}
+@media (max-width:1180px){html.klm-embed .body{grid-template-columns:clamp(230px,26vw,300px) minmax(0,1fr)}html.klm-embed .aside{order:-1;display:flex}html.klm-embed .monwrap{order:0;width:auto;justify-self:stretch;align-self:stretch}html.klm-embed #quick{order:0}html.klm-embed .mon-h #monMin{display:none}}
+@media (max-width:760px){html.klm-embed #sports{display:flex}html.klm-embed .sport-sel{display:none}html.klm-embed .top-right{margin-left:auto;width:auto}html.klm-embed .monwrap{width:auto;margin-inline:0}}
+@media (max-width:980px){html.klm-embed .console{grid-template-columns:minmax(0,1fr) minmax(200px,250px) minmax(0,1fr)}}
+@media (max-width:860px){html.klm-embed .console{grid-template-columns:1fr 1fr}html.klm-embed .cp{grid-column:1/-1;order:-1}}
+</style>
+<script>try{if(window.parent!==window&&/[?&]klm=1\b/.test(location.search))document.documentElement.classList.add('klm-embed')}catch(e){}</script>
 </head>
 <body>
 <div id="root"></div>
@@ -1435,7 +1483,7 @@ function shell(){
  '<div class="app"><header class="top"><div class="top-in">'+
   '<div class="brand"><div class="brand-mark"><span>UTC</span></div><div><div class="brand-name">UTC <b>KLM</b></div><div class="brand-sub">Scoreboard Siaran</div></div></div>'+
   '<nav class="sports" id="sports" aria-label="Pilih olahraga"></nav><select class="inp sport-sel" id="sportSel" aria-label="Pilih olahraga"></select>'+
-  '<div class="top-right"><span class="chip" id="status"><i class="dot"></i><span>…</span></span><button class="btn" id="popBtn" data-act="popShow" hidden title="Tampilkan lagi preview">📺 Preview</button><button class="btn" data-act="phoneQR" title="Kendalikan dari HP">📱 Sambungkan HP</button><button class="btn" data-act="undo" title="Batalkan (Ctrl+Z)">↶ Batalkan</button><button class="btn" id="airBtn" data-act="toggleOv"></button></div>'+
+  '<div class="top-right"><span class="chip" id="status"><i class="dot"></i><span>…</span></span><button class="btn" id="popBtn" data-act="popShow" hidden title="Tampilkan lagi preview">📺 Preview</button><button class="btn" data-act="phoneQR" title="Kendalikan dari HP">📱<span class="tl"> Sambungkan HP</span></button><button class="btn" data-act="undo" title="Batalkan (Ctrl+Z)">↶<span class="tl"> Batalkan</span></button><button class="btn" id="airBtn" data-act="toggleOv"></button></div>'+
  '</div><div class="tabs" role="tablist" id="tabs"></div></header>'+
  '<div class="body"><main id="main"></main><aside class="aside" id="aside">'+
   '<div class="monwrap" id="monwrap"><div class="monitor'+(lsGet('utc-klm-monmin')==='1'?' mini':'')+'" id="monitor"><div class="mon-h"><span class="tally" id="tally">ON AIR</span><span class="label">Monitor program</span><div class="seg"><button data-act="prev" data-v="overlay">Overlay</button><button data-act="prev" data-v="arena">Arena</button></div><button class="mon-min" data-act="monMin" id="monMin">Kecilkan</button><span class="pop-grip" aria-hidden="true">⠿ geser</span><span class="pop-tools"><button data-act="popSmaller" title="Perkecil" aria-label="Perkecil preview">−</button><button data-act="popBigger" title="Perbesar" aria-label="Perbesar preview">+</button><button class="x" data-act="popClose" title="Sembunyikan preview" aria-label="Sembunyikan preview">✕</button></span></div><div class="mon-screen" id="mon"><div class="pitch"></div><div class="stage-host" id="stageHost"></div></div><i class="pop-rs" title="Tarik untuk ubah ukuran" aria-hidden="true"></i></div></div>'+
@@ -1462,7 +1510,7 @@ function paintStatus(){const d=$('#hpDot');if(d)d.classList.toggle('ok',MODE!=='
  if(MODE==='server'){el.className='chip '+(ONLINE?'ok':'bad');el.lastChild.textContent=ONLINE?'Server terhubung':'Server terputus'}
  else{el.className='chip local';el.lastChild.textContent='Mode lokal'}}
 function paintHeader(){
- $('#sports').innerHTML=SPORT_KEYS.map(k=>'<button class="sport-btn'+(S.sport===k?' on':'')+'" data-act="sport" data-v="'+k+'" aria-pressed="'+(S.sport===k)+'">'+ICON[k]+'<span>'+SPORTS[k].name+'</span></button>').join('');
+ $('#sports').innerHTML=SPORT_KEYS.map(k=>'<button class="sport-btn'+(S.sport===k?' on':'')+'" title="'+SPORTS[k].name+'" data-act="sport" data-v="'+k+'" aria-pressed="'+(S.sport===k)+'">'+ICON[k]+'<span>'+SPORTS[k].name+'</span></button>').join('');
  const ss=$('#sportSel');if(ss){ss.innerHTML=SPORT_KEYS.map(k=>'<option value="'+k+'"'+(S.sport===k?' selected':'')+'>'+SPORTS[k].name+'</option>').join('');ss.value=S.sport}
  $('#tabs').innerHTML=TABS.map(([k,l])=>'<button class="tab'+(TAB===k?' on':'')+'" role="tab" aria-selected="'+(TAB===k)+'" data-act="tab" data-v="'+k+'">'+l+'</button>').join('');
  paintStatus();

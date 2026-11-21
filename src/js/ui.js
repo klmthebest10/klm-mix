@@ -99,7 +99,7 @@
     ws._frames = ws._frames || {};
     let f = ws._frames[mode];
     if (f) return f;
-    const src = mode === 'score' ? KM.score.url('/') : '/utc';
+    const src = mode === 'score' ? KM.score.url('/?klm=1') : '/utc';
     if (!src) return null;
     f = document.createElement('iframe'); f.id = mode === 'score' ? 'scoreFrame' : 'utcFrame'; f.src = src; f.hidden = true;
     f.allow = 'camera; microphone; display-capture; clipboard-write; fullscreen';
@@ -126,7 +126,7 @@
     f._retry = (f._retry || 0) + 1;
     console.warn('[KLM] panel ' + mode + ' ' + st + ' — memuat ulang (' + f._retry + ')');
     if (KM.license && KM.license.refresh) { try { await KM.license.refresh(); } catch (e) {} }
-    if (f._retry <= 3) { const src = mode === 'score' ? KM.score.url('/') : '/utc'; f.src = src + (src.includes('?') ? '&' : '?') + 'r=' + Date.now(); }
+    if (f._retry <= 3) { const src = mode === 'score' ? KM.score.url('/?klm=1') : '/utc'; f.src = src + (src.includes('?') ? '&' : '?') + 'r=' + Date.now(); }
     else KM.toast('Panel ' + (mode === 'score' ? 'UTC Score' : 'UTC Acara') + ' gagal dimuat (' + st + '). Tekan ⟳ di panel atau buka ulang KLM.', 'warn', 8000);
   }
   // lisensi baru diaktifkan → panel yang sempat dimuat dalam keadaan terkunci dimuat ulang
@@ -157,6 +157,7 @@
     }
     ws.hidden = !show;
     ws.dataset.mode = m;
+    if (show && UI.utcGripApply) UI.utcGripApply();
     $('#app').classList.toggle('utc-mode', show);
     if (show) {
       if (m === 'acara') KM.utc.ensure(); else KM.score.ensure();
@@ -164,6 +165,22 @@
     }
     updateUtc();
   };
+  // tinggi panel lengkap: garis tarik di atas panel mengatur tinggi monitor Preview/Program (disimpan)
+  (function utcGrip() {
+    const g = $('#utcGrip'), ws = $('#utcWs'), app = $('#app'); if (!g) return;
+    const lim = (v) => Math.round(Math.max(160, Math.min(window.innerHeight - 46 - 54 - 220, v)));
+    const apply = () => { const v = +(KM.settings || {}).utcMonH || 0; if (v) app.style.setProperty('--utc-mon-h', lim(v) + 'px'); else app.style.removeProperty('--utc-mon-h'); };
+    UI.utcGripApply = apply; apply(); window.addEventListener('resize', apply);
+    g.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); g.setPointerCapture(e.pointerId); g.classList.add('drag'); ws.classList.add('resizing');
+      const y0 = e.clientY, h0 = parseFloat(getComputedStyle(app).getPropertyValue('--mon-h')) || $('#stage').offsetHeight - 14;
+      const mv = (ev) => app.style.setProperty('--utc-mon-h', lim(h0 + ev.clientY - y0) + 'px');
+      const up = () => { g.removeEventListener('pointermove', mv); g.removeEventListener('pointerup', up); g.removeEventListener('pointercancel', up); g.classList.remove('drag'); ws.classList.remove('resizing');
+        KM.settings.utcMonH = parseFloat(app.style.getPropertyValue('--utc-mon-h')) || 0; KM.saveSettings(); window.dispatchEvent(new Event('resize')); };
+      g.addEventListener('pointermove', mv); g.addEventListener('pointerup', up); g.addEventListener('pointercancel', up);
+    });
+    g.addEventListener('dblclick', () => { KM.settings.utcMonH = 0; KM.saveSettings(); apply(); window.dispatchEvent(new Event('resize')); });
+  })();
   // ---------- panel samping: tab muncul hanya bila inputnya ada ----------
   const SIDE = { utc: 'acara', score: 'score', klmcam: 'phone' };
   UI.sideTab = (type) => SIDE[type];

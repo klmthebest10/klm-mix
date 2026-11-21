@@ -669,6 +669,26 @@ function smokeTest() {
       await js('KM.ui.utcPanel(true, "acara")'); await wait(4000);
       const ok = await js('(() => { try { const f = document.querySelector("#utcFrame"); return !!(f && f.contentDocument && f.contentDocument.querySelector("#panel, .tabs, header")); } catch (e) { return "err " + e.message; } })()');
       log('panel UTC dimuat: ' + ok); if (ok !== true) fail++;
+      // tata letak panel lengkap: semua tombol tayang & navigasi terlihat tanpa menggulir di ukuran panel bawaan
+      const play = JSON.parse(await js(`(() => { try { const f = document.querySelector("#utcFrame"), w = f.contentWindow, d = f.contentDocument;
+        const out = (sel) => [...d.querySelectorAll(sel)].filter((e) => e.offsetParent).filter((e) => { const r = e.getBoundingClientRect(); return r.bottom > w.innerHeight + 1 || r.right > w.innerWidth + 1 || r.top < 0; }).map((e) => e.textContent.trim().slice(0, 14));
+        const tb = d.querySelector('#tabs');
+        return JSON.stringify({ embed: d.documentElement.classList.contains('klm-embed'), size: w.innerWidth + 'x' + w.innerHeight, air: out('#air button, #ocair button'), tabsScroll: tb ? tb.scrollHeight - tb.clientHeight : -1 });
+      } catch (e) { return JSON.stringify({ err: e.message }); } })()`));
+      log('tata letak panel UTC Acara: ' + JSON.stringify(play));
+      fs.writeFileSync(path.join(out, 'panel-acara.png'), (await mainWin.webContents.capturePage()).toPNG());
+      if (!play.embed || (play.air && play.air.length) || play.tabsScroll > 2) { fail++; log('GAGAL: tombol panel UTC Acara terpotong / perlu digulir'); }
+      if (await js('KM.score.has() && !!KM.score.port')) {
+        await js('KM.ui.utcPanel(true, "score")'); await wait(4500);
+        const fr = mainWin.webContents.mainFrame.framesInSubtree.find((x) => /[?&]klm=1/.test(x.url));
+        const sl = fr ? JSON.parse(await fr.executeJavaScript(`JSON.stringify((() => { const vis = (sel) => { const e = document.querySelector(sel); if (!e) return 'tidak ada'; const r = e.getBoundingClientRect(); return r.bottom <= innerHeight + 1 && r.top >= 0 && r.right <= innerWidth + 1; };
+          const a = document.querySelector('#aside'), m = document.querySelector('#main');
+          return { embed: document.documentElement.classList.contains('klm-embed'), size: innerWidth + 'x' + innerHeight, monitorKiri: !!(a && m && a.getBoundingClientRect().left < m.getBoundingClientRect().left), gol: vis('.tp-btns .plus'), mulai: vis('.cp [data-act="clock"]'), monitor: vis('#mon') }; })())`)) : { err: 'frame tidak ditemukan' };
+        log('tata letak panel UTC Score: ' + JSON.stringify(sl));
+        fs.writeFileSync(path.join(out, 'panel-score.png'), (await mainWin.webContents.capturePage()).toPNG());
+        if (!sl.embed || !sl.monitorKiri || sl.gol !== true || sl.mulai !== true || sl.monitor !== true) { fail++; log('GAGAL: tata letak panel UTC Score (monitor kiri, tombol terlihat)'); }
+        await js('KM.ui.utcPanel(true, "acara")'); await wait(1500);
+      }
       // panel harus tetap merespons saat banyak lapisan grafis aktif (batas 6 sambungan per host di Chromium)
       await post('/utc/api/klm/cmd', { cmd: 'show', target: 'lt' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'logo' });
       await post('/utc/api/klm/cmd', { cmd: 'show', target: 'ticker' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'loc' }); await post('/utc/api/klm/cmd', { cmd: 'show', target: 'soc' });
