@@ -872,8 +872,14 @@ onrtctransform = (ev) => {
     const a = rest.split(' '), k = kcams.get(a[0]); if (!k) return;
     if (t === 'kok') { k.ok = true; k.w = +a[1]; k.h = +a[2]; k.dxva = a[3] === '1'; k.last = Date.now(); }
     else if (t === 'kerr') { k.err = rest.slice(a[0].length + 1); }
-    else if (t === 'kneedkey' && kWorker) kWorker.postMessage({ kf: a[0] });
+    else if (t === 'kneedkey') {
+      // frame hilang → gambar berhenti sampai frame kunci datang: dihitung agar terlihat di panel KLMCAM (penyebab "freeze")
+      const now = Date.now(); k.keyReq = (k.keyReq || []).filter((x) => now - x < 60000); k.keyReq.push(now);
+      if (kWorker) kWorker.postMessage({ kf: a[0] });
+    }
   }
+  /** berapa kali gambar KLMCAM ini berhenti menunggu frame kunci dalam 60 detik terakhir */
+  N.kPauses = (inp) => { const k = inp && kcams.get(kidOf(inp)); if (!k || !k.keyReq) return 0; const now = Date.now(); return k.keyReq.filter((x) => now - x < 60000).length; };
 
   // ---------- kamera native (Fase 3) ----------
   const cams = new Map(); // id kamera → { users:Set, key, w, h, fps, ok, err, frames, cur:{imp,vf}, wait:[] }

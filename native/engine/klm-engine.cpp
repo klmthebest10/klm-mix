@@ -1510,7 +1510,8 @@ struct KDec {
   int log2MaxFn = 0; bool sepColour = false; int prevRefFn = -1; int gaps = 0, drops = 0;
   // jadwal tayang (jitter buffer kecil): frame terdekode masuk cincin, ditayangkan menurut cap waktu RTP → gerakan rata
   struct Slot { ComPtr<ID3D11Texture2D> t; ComPtr<ID3D11VideoProcessorOutputView> ov; double due = 0; LONGLONG ts = 0; int st = 0; }; // st: 0 kosong, 1 siap
-  std::mutex smx; Slot slot[6]; UINT slotW = 0, slotH = 0; std::map<LONGLONG, double> arr;
+  static const int NS = 10; // 60 fps × jeda 120 ms = ±8 frame menunggu tayang
+  std::mutex smx; Slot slot[NS]; UINT slotW = 0, slotH = 0; std::map<LONGLONG, double> arr;
   double base = 1e18, jit = 8, lastArr = 0; LONGLONG lastTs = -1; double lastDue = 0, shownDue = 0; int late = 0;
 };
 static std::map<std::string, std::shared_ptr<KDec>> g_kdec;
@@ -1561,7 +1562,7 @@ static bool kSlots(KDec& k) { // dipanggil dengan k.smx terkunci
 // pilih slot untuk frame baru: kosong, atau yang paling tua (frame itu dilewati)
 static int kSlotFree(KDec& k) {
   int best = -1; LONGLONG bt = 0;
-  for (int i = 0; i < 6; i++) { if (k.slot[i].st == 0) return i; if (best < 0 || k.slot[i].ts < bt) { best = i; bt = k.slot[i].ts; } }
+  for (int i = 0; i < KDec::NS; i++) { if (k.slot[i].st == 0) return i; if (best < 0 || k.slot[i].ts < bt) { best = i; bt = k.slot[i].ts; } }
   return best;
 }
 // jadwal tayang frame: waktu tiba vs cap waktu RTP → jeda adaptif sekecil mungkin yang tetap menyerap jitter jaringan
@@ -1678,14 +1679,15 @@ static void kPresentAll(double now) {
     KDec& k = *kv.second; if (k.stop || !k.cam) continue;
     std::lock_guard<std::mutex> l(k.smx);
     int pick = -1, ready = 0; double oldest = 1e18;
-    for (int i = 0; i < 6; i++) if (k.slot[i].st == 1) { ready++; oldest = std::min(oldest, k.slot[i].due); if (k.slot[i].due <= now && (pick < 0 || k.slot[i].ts > k.slot[pick].ts)) pick = i; }
-    // antrean menumpuk (jam HP/PC bergeser, atau tab sempat tertahan) → jangan menunggu lebih dari ±150 ms
-    if (pick < 0 && ready >= 4 && now - oldest > -150) for (int i = 0; i < 6; i++) if (k.slot[i].st == 1 && (pick < 0 || k.slot[i].ts < k.slot[pick].ts)) pick = i;
+    for (int i = 0; i < KDec::NS; i++) if (k.slot[i].st == 1) { ready++; oldest = std::min(oldest, k.slot[i].due); if (k.slot[i].due <= now && (pick < 0 || k.slot[i].ts > k.slot[pick].ts)) pick = i; }
+    // antrean hampir penuh (jam HP/PC bergeser, atau tab sempat tertahan) → tayangkan yang tertua. Dulu "≥4 siap": pada 60 fps itu keadaan
+    // normal (jeda 70 ms = 4 frame) sehingga frame ditayangkan menurut waktu tiba (patah-patah), bukan menurut jadwal
+    if (pick < 0 && ready >= KDec::NS - 2 && now - oldest > -150) for (int i = 0; i < KDec::NS; i++) if (k.slot[i].st == 1 && (pick < 0 || k.slot[i].ts < k.slot[pick].ts)) pick = i;
     if (pick < 0) continue;
     const LONGLONG pts = k.slot[pick].ts;
     { Cam& c = *k.cam; std::lock_guard<std::mutex> lc(c.mx);
       if (camTex(c, k.slotW, k.slotH, DXGI_FORMAT_B8G8R8A8_UNORM, true)) { g_ctx->CopyResource(c.tex.Get(), k.slot[pick].t.Get()); c.got = true; } }
-    for (int i = 0; i < 6; i++) if (k.slot[i].st == 1 && k.slot[i].ts <= pts) k.slot[i].st = 0;
+    for (int i = 0; i < KDec::NS; i++) if (k.slot[i].st == 1 && k.slot[i].ts <= pts) k.slot[i].st = 0;
     k.cam->fresh = true; k.cam->frames++;
   }
 }
@@ -1737,9 +1739,9 @@ static void kOff(const std::string& id) {
   g_kdec.erase(it); g_cams.erase(id);
 }
 static std::map<std::string, double> g_kneed;
-static void kNeedKey(const std::string& id) { // minta HP mengirim frame kunci (lewat KLM → WebRTC), maksimal 1×/detik
+static void kNeedKey(const std::string& id) { // minta HP mengirim frame kunci (lewat KLM → WebRTC), maksimal 1×/0,4 detik (gambar berhenti sesingkat mungkin)
   double t = nowMs(); double& last = g_kneed[id];
-  if (t - last > 1000) { last = t; emit("kneedkey %s", id.c_str()); }
+  if (t - last > 400) { last = t; emit("kneedkey %s", id.c_str()); }
 }
 // ---- pembaca header H.264 (cukup untuk frame_num): urutan frame referensi dicek sebelum didekode
 struct BitR { std::vector<uint8_t> b; size_t p = 0; bool bad = false;

@@ -120,7 +120,7 @@
     video.srcObject = new MediaStream([outTrack]);
     video.play().catch(() => {});
     updateCaps(); labels();
-    exApply();
+    exWatch(); exApply();
   }
   // ---------- zoom: hardware bila kamera/peramban mendukung, selain itu ZOOM DIGITAL ----------
   // Zoom digital: pratinjau di HP diperbesar, nilai dikirim ke PC dan PC memotong (crop) gambar KLMCAM — tanpa beban di HP.
@@ -228,7 +228,7 @@
   // Shutter tidak pernah lebih lambat dari 1/fps → kamera tidak bisa lagi memperlambat diri di ruangan redup (fps terjaga).
   // Kecerahan dijaga di sini dengan ISO (AE perangkat lunak, titik tengah lebih berbobot); di tempat sangat terang pada mode
   // otomatis shutter dipercepat. "Bawaan HP": AE kamera sendiri + kunci FPS bila fps turun karena redup (seperti sebelumnya).
-  const EX = { manual: false, kind: '', u: 0, uT: 0, iso: 0, t: 0, dark: 0, busy: false, unsup: false, told: false, cv: null, img: null, gen: 0 };
+  const EX = { manual: false, kind: '', u: 0, uT: 0, iso: 0, t: 0, dark: 0, busy: false, unsup: false, told: false, cv: null, img: null, gen: 0, lastApply: 0, hiccup: 0, slow: false, noManual: false };
   function camCaps() { try { return (vTrack && vTrack.getCapabilities) ? vTrack.getCapabilities() || {} : {}; } catch (e) { return {}; } }
   function expCaps() { const c = camCaps(); return (c.exposureMode || []).includes('manual') && c.exposureTime && c.iso ? c : null; }
   function evCaps() { const c = camCaps(); return c.exposureCompensation && c.exposureCompensation.min < 0 ? c.exposureCompensation : null; }
@@ -243,15 +243,15 @@
   function exStop() { clearInterval(EX.t); EX.t = 0; EX.img = null; }
   function exReset() { exStop(); EX.gen++; EX.manual = false; EX.kind = ''; EX.u = EX.uT = EX.iso = 0; EX.dark = 0; EX.unsup = false; }
   async function exManual(kind) {
-    const c = expCaps(); if (!c) return false;
+    const c = EX.noManual ? null : expCaps(); if (!c) return false;
     const u = Math.round(Math.max(c.exposureTime.min, Math.min(c.exposureTime.max, shutterSec(kind) * 10000))); // satuan 100 µs
     let iso;
     if (EX.manual && EX.iso && EX.u) iso = EX.iso * EX.u / u; // ganti shutter: kecerahan tetap
     else { let s = {}; try { s = vTrack.getSettings() || {}; } catch (e) {} iso = s.iso && s.exposureTime ? s.iso * s.exposureTime / u : (s.iso || 400); }
     iso = Math.round(Math.max(c.iso.min, Math.min(c.iso.max, iso)));
     try { await vTrack.applyConstraints({ advanced: [{ exposureMode: 'manual', exposureTime: u, iso }] }); } catch (e) { return false; }
-    EX.manual = true; EX.kind = kind; EX.u = EX.uT = u; EX.iso = iso; EX.dark = 0;
-    exStop(); EX.t = setInterval(exMeter, 300);
+    EX.manual = true; EX.kind = kind; EX.u = EX.uT = u; EX.iso = iso; EX.dark = 0; EX.lastApply = performance.now();
+    exStop(); EX.t = setInterval(exMeter, 700); exWatch();
     return true;
   }
   async function exAuto() {
@@ -282,7 +282,10 @@
     else { if (!EX.img && window.ImageCapture) EX.img = new ImageCapture(vTrack); if (EX.img) src = await EX.img.grabFrame(); }
     if (!src) return -1;
     const cv = EX.cv || (EX.cv = document.createElement('canvas')); cv.width = 32; cv.height = 18;
-    const g = cv.getContext('2d', { willReadFrequently: true }); g.drawImage(src, 0, 0, 32, 18); if (src.close) src.close();
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    // perkecil di GPU dulu (createImageBitmap) → yang dibaca CPU hanya 32×18 piksel, bukan frame penuh
+    let small = null; try { small = await createImageBitmap(src, { resizeWidth: 32, resizeHeight: 18, resizeQuality: 'low' }); } catch (e) {}
+    g.drawImage(small || src, 0, 0, 32, 18); if (small) small.close(); if (src.close) src.close();
     const d = g.getImageData(0, 0, 32, 18).data; let s = 0, w = 0;
     for (let i = 0, p = 0; p < d.length; i++, p += 4) { const x = i % 32, y = (i / 32) | 0, k = x > 7 && x < 24 && y > 4 && y < 13 ? 3 : 1; s += (d[p] * 0.2126 + d[p + 1] * 0.7152 + d[p + 2] * 0.0722) * k; w += k; }
     return s / w / 255;
@@ -296,7 +299,9 @@
       const T = 0.42 * Math.pow(2, (+cfg.bright || 0) / 2.2); // sasaran kecerahan rata-rata (sRGB)
       const q = Math.max(0.8, Math.min(1.25, Math.pow(T / Math.max(0.01, luma), 2.2))); // cahaya (linear) yang dibutuhkan, dibatasi per langkah
       if (luma < 0.06 && EX.iso >= c.iso.max * 0.98) { if (++EX.dark === 10) KMP.toast('Ruangan sangat gelap — gambar akan gelap/berbintik. Tambah cahaya agar lebih jelas', 5000); } else EX.dark = 0;
-      if (Math.abs(Math.log(q)) < 0.06) return;
+      // tiap perubahan ISO/shutter = permintaan baru ke kamera; di sebagian HP itu membuat gambar tersendat sesaat →
+      // diubah hanya bila selisih kecerahan berarti, dan tidak lebih sering dari 1,5 dtk (6 dtk bila HP terbukti tersendat)
+      if (Math.abs(Math.log(q)) < (EX.slow ? 0.25 : 0.12) || performance.now() - EX.lastApply < (EX.slow ? 6000 : 1500)) return;
       const E = EX.u * EX.iso * q; let u = EX.u, iso = E / u;
       if (EX.kind === 'auto') {
         if (iso < c.iso.min) { iso = c.iso.min; u = Math.max(c.exposureTime.min, E / iso); } // sangat terang (luar ruangan): shutter dipercepat
@@ -305,8 +310,36 @@
       iso = Math.round(Math.max(c.iso.min, Math.min(c.iso.max, iso))); u = Math.round(u);
       if (Math.abs(iso - EX.iso) / EX.iso < 0.03 && u === EX.u) return;
       EX.iso = iso; EX.u = u;
-      await vTrack.applyConstraints({ advanced: [{ exposureMode: 'manual', exposureTime: u, iso }] }).catch(() => {});
+      await exSet({ exposureMode: 'manual', exposureTime: u, iso });
     } catch (e) {} finally { EX.busy = false; }
+  }
+  // ---- penjaga kelancaran: ukur jeda antar-frame kamera; bila mengubah exposure membuat kamera tersendat → kurangi / hentikan ----
+  const FM = { last: 0, gap: 0, on: false, hitch: [] };
+  function exWatch() {
+    if (FM.on || !video.requestVideoFrameCallback) return; FM.on = true;
+    const cb = (now) => {
+      if (FM.last) { const g = now - FM.last; if (g < 3000) { if (g > FM.gap) FM.gap = g; if (!stab && g > Math.max(200, 4000 / (settings.fps || 30))) FM.hitch.push(now); } } // >3 dtk = pratinjau sempat dimatikan
+      FM.last = now; video.requestVideoFrameCallback(cb);
+    };
+    video.requestVideoFrameCallback(cb);
+  }
+  const frameGap = () => Math.max(FM.gap, stab ? (stab.info().gap || 0) : 0);
+  async function exSet(c) {
+    EX.lastApply = performance.now(); FM.gap = 0;
+    await vTrack.applyConstraints({ advanced: [c] }).catch(() => {});
+    const g0 = EX.gen;
+    setTimeout(() => {
+      if (g0 !== EX.gen || !EX.manual) return;
+      const lim = Math.max(250, 6000 / (settings.fps || 30)); // ±6 frame tanpa gambar
+      if (frameGap() <= lim) return;
+      EX.hiccup++;
+      if (EX.hiccup === 2) EX.slow = true;
+      if (EX.hiccup >= 4 && !EX.noManual) {
+        EX.noManual = true; EX.told = true; FG.noManual = true; EX.unsup = true; exAuto();
+        KMP.toast('Kamera HP ini tersendat setiap shutter/ISO diubah — dikembalikan ke otomatis HP agar video tetap mulus', 6000);
+        sendInfo();
+      }
+    }, 1300);
   }
 
   // Kunci FPS (mode "Bawaan HP" / HP tanpa shutter manual): Chrome/Android memilih rentang AE kamera dengan batas bawah serendah
@@ -514,16 +547,23 @@
         if (Math.abs(netRate - before) > 0.01) tuneSender();
       } catch (e) {}
     }
-    fpsGuardCheck(capFps || fps);
     const si = stab ? stab.info() : null;
-    // EIS terlalu berat untuk HP ini (waktu olah per frame mendekati jatah 1 frame) → beri tahu sekali
-    if (si && si.ms > 700 / (settings.fps || 30)) { if (++stabSlow === 3) KMP.toast('Stabilisasi membebani HP (' + si.ms + ' ms/frame) — pilih tingkat Ringan atau matikan bila fps turun', 6000); } else if (stabSlow < 3) stabSlow = 0;
+    fpsGuardCheck((si && si.fpsIn) || capFps || fps); // dengan EIS: fps kamera asli diukur di EIS (sebelum diolah)
+    // EIS terlalu berat untuk HP ini (waktu olah per frame mendekati jatah 1 frame selama ±6 dtk) → turunkan tingkatnya otomatis
+    if (si && si.frames > 60 && si.ms > 750 / (settings.fps || 30)) {
+      if (++stabSlow >= 3) {
+        stabSlow = 0; const down = { high: 'mid', mid: 'low', low: 'off' }[cfg.eis] || 'off';
+        KMP.toast(down === 'off' ? 'Stabilisasi dimatikan otomatis: HP tidak sanggup (' + si.ms + ' ms/frame) — video diutamakan mulus' : 'Stabilisasi diturunkan ke ' + ({ mid: 'Sedang', low: 'Ringan' })[down] + ' agar video tetap mulus', 5000);
+        setCamOpt({ eis: down });
+      }
+    } else stabSlow = 0;
+    const hitch = si ? (si.hitch || 0) : (FM.hitch = FM.hitch.filter((t) => performance.now() - t < 60000)).length;
     const exTxt = EX.manual ? shutterTxt(EX.u) + ' ISO ' + EX.iso : '';
     $('stats').innerHTML = (s.width || '?') + '×' + (s.height || '?') + ' • ' + fps + '/' + settings.fps + ' fps' + (FG.on ? ' 🔒' : '') + (limit ? ' (' + (limit === 'cpu' ? 'HP berat' : limit === 'bandwidth' ? 'WiFi' : limit) + ')' : '')
-      + (exTxt || si ? '<br>' + [exTxt, si ? 'EIS ' + (si.mode === 'gyro' ? 'giro' : 'gambar') : ''].filter(Boolean).join(' • ') : '')
+      + (exTxt || si || hitch ? '<br>' + [exTxt, si ? 'EIS ' + (si.mode === 'gyro' ? 'giro' : 'gambar') : '', hitch ? '⚠ tersendat ' + hitch + '×/mnt' : ''].filter(Boolean).join(' • ') : '')
       + '<br>' + (pc ? kbps + ' kbps' + (rtt ? ' • ' + rtt + ' ms' : '') + (netRate < 0.99 ? ' • hemat ' + Math.round(netRate * 100) + '%' : '') : '') + (battery != null ? '<br>🔋 ' + battery + '%' : '');
     lastInfo = { w: s.width, h: s.height, fps, capFps: capFps || 0, want: settings.fps, limit, fpsLock: FG.on || EX.manual, kbps, battery, rtt, loss: Math.round(loss * 100), net: !!cfg.room,
-      shutter: EX.manual ? shutterTxt(EX.u) : '', iso: EX.manual ? EX.iso : 0, eis: si ? { level: si.level, mode: si.mode, ms: si.ms } : null,
+      shutter: EX.manual ? shutterTxt(EX.u) : '', iso: EX.manual ? EX.iso : 0, eis: si ? { level: si.level, mode: si.mode, ms: si.ms, worker: !!si.worker } : null, hitch,
       opt: { eis: cfg.eis, shutter: cfg.shutter, hz: cfg.hz, bright: cfg.bright, eisOk: !!(window.KLMStab && KLMStab.supported()), shutterOk: !EX.unsup && !!expCaps() } };
     sendInfo();
   }, 2000);

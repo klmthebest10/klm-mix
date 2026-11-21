@@ -140,6 +140,13 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0-beta.20
+Versi uji (beta) + APK KLM HP baru — **KLMCAM lebih mulus, tanpa freeze**.
+- **Stabilisasi (EIS) di Web Worker tersendiri:** pengolahan frame tidak lagi berbagi waktu dengan halaman kamera (UI, statistik, pengatur kecerahan). Gambar analisis diperkecil di GPU — dulu frame penuh dibaca balik ke CPU setiap frame (penyebab utama tersendat di HP). Giroskop baru dipakai bila kalibrasinya jelas (HP sibuk → tetap memakai gerak gambar). **Bila HP tetap kewalahan, tingkat EIS diturunkan otomatis** (Kuat → Sedang → Ringan → Mati) dengan pemberitahuan.
+- **Shutter/ISO tidak lagi diubah terus-menerus:** setiap perubahan exposure adalah permintaan baru ke kamera dan di sebagian HP membuat gambar berhenti sesaat. Kini hanya diubah bila selisih kecerahan berarti (±12 %) dan paling sering tiap 1,5 dtk. KLMCAM mengukur jeda frame setelah tiap perubahan: bila kamera tersendat, perubahan dijarangkan (6 dtk), dan bila tetap tersendat **shutter dikembalikan ke otomatis HP** dengan pemberitahuan.
+- **Penerimaan di PC:** penyangga tayang 10 frame (dulu 6) dan aturan "tayangkan lebih awal" diperbaiki — pada 60 fps frame dulu sering ditayangkan menurut waktu tiba (patah-patah), bukan menurut jadwal. Frame kunci diminta lebih cepat setelah paket hilang (0,4 dtk, dulu 1 dtk) → gambar berhenti lebih singkat.
+- **Diagnosis terlihat:** HP menampilkan "⚠ tersendat n×/mnt" bila kamera HP sendiri tersendat; panel KLMCAM di PC menampilkan itu dan "⏸ n× berhenti/mnt (paket Wi-Fi hilang)" bila gambar berhenti karena jaringan.
+
 ### Baru di v1.18.0-beta.19
 Versi uji (beta): panel lengkap UTC Acara disusun ulang — **menu | editor | kolom kanan**. Kolom kanan berisi saklar grafis (Lower Third, Title, Running, Logo, Lokasi, Sosmed, Opening, Closing) di atas, lalu tampilan UTC di bawahnya yang mengecil mengikuti sisa tinggi panel (tetap utuh 16:9). Daftar nama input dan tombol OFF opening/closing tidak lagi ditampilkan di panel lengkap (OPENING/CLOSING yang sedang tayang diketuk lagi untuk berhenti). Tetap responsif dari layar kecil sampai lebar.
 
