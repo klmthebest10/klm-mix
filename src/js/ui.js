@@ -99,7 +99,7 @@
     ws._frames = ws._frames || {};
     let f = ws._frames[mode];
     if (f) return f;
-    const src = mode === 'score' ? KM.score.url('/?klm=1') : '/utc';
+    const src = mode === 'score' ? KM.score.url('/') : '/utc';
     if (!src) return null;
     f = document.createElement('iframe'); f.id = mode === 'score' ? 'scoreFrame' : 'utcFrame'; f.src = src; f.hidden = true;
     f.allow = 'camera; microphone; display-capture; clipboard-write; fullscreen';
@@ -126,7 +126,7 @@
     f._retry = (f._retry || 0) + 1;
     console.warn('[KLM] panel ' + mode + ' ' + st + ' — memuat ulang (' + f._retry + ')');
     if (KM.license && KM.license.refresh) { try { await KM.license.refresh(); } catch (e) {} }
-    if (f._retry <= 3) { const src = mode === 'score' ? KM.score.url('/?klm=1') : '/utc'; f.src = src + (src.includes('?') ? '&' : '?') + 'r=' + Date.now(); }
+    if (f._retry <= 3) { const src = mode === 'score' ? KM.score.url('/') : '/utc'; f.src = src + (src.includes('?') ? '&' : '?') + 'r=' + Date.now(); }
     else KM.toast('Panel ' + (mode === 'score' ? 'UTC Score' : 'UTC Acara') + ' gagal dimuat (' + st + '). Tekan ⟳ di panel atau buka ulang KLM.', 'warn', 8000);
   }
   // lisensi baru diaktifkan → panel yang sempat dimuat dalam keadaan terkunci dimuat ulang
