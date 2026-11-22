@@ -140,6 +140,14 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.0
+Rilis untuk semua pengguna — merangkum seluruh versi uji 1.18.0-beta.1 s/d beta.27:
+- **Mesin video native (Direct3D 11)** — pilihan, aktifkan di Pengaturan: Program, Preview, output, kamera USB / capture card, KLMCAM, file video & gambar, daftar putar, GIF, Web Browser, Title Cepat, Virtual Set, overlay, transisi & stinger, efek, Latar AI dan grafis UTC dirender langsung di GPU — lebih ringan & mulus.
+- **KLMCAM mulus tanpa lag / flicker:** gambar dari HP diterima lewat jalur baru, mengikuti 30/60 fps yang dipilih, dengan **stabilisasi gambar (EIS)**, pengaturan **shutter speed** yang tepat (aman dari kedip lampu 50/60 Hz) dan **zoom halus** dari PC maupun HP. Panel KLMCAM memberi tahu bila fps kamera tidak sebanding dengan fps output (samakan Output ke 60p/30p).
+- **UTC Acara & UTC Score:** grafis zero-copy GPU yang selalu tampil di Program (tidak hilang lagi saat jendela KLM sibuk), panel lengkap rapi & responsif (saklar grafis + pratinjau di kanan, monitor Program Score di kiri), tombol **KLM ON AIR di bagian atas panel lengkap**, panel tidak lagi kosong / error, dan UTC Score bisa dioperasikan di dalam aplikasi KLM HP.
+- **📺 Layar TV Masjid:** sambungkan ke layar TV sekali tekan (Pengaturan › SRT / TV).
+- Tangkap Layar / Jendela memakai Windows Graphics Capture, Preview setajam Program, dan saran membuka ulang KLM setelah mengubah resolusi / fps output.
+
 ### Baru di v1.18.0-beta.25
 Versi uji (beta, PC): tombol KLM di panel lengkap UTC Acara kini di baris atas kolom editor (menu kiri & saklar grafis kanan tetap setinggi penuh, tidak ada yang terpotong); di layar sempit hanya ikon status yang tampil.
 
