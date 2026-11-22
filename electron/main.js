@@ -22,6 +22,8 @@ app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 // AllowWgcScreenCapturer / AllowWgcWindowCapturer: input Tangkap Layar/Jendela memakai Windows Graphics Capture (API native
 // Windows 10 1903+, GPU) untuk layar maupun jendela; bila tidak tersedia Chromium otomatis kembali ke DXGI/GDI.
 app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer,PlatformHEVCEncoderSupport,MediaRecorderEnableMp4Muxer,AllowWgcScreenCapturer,AllowWgcWindowCapturer');
+// alamat IP asli (bukan nama .local) di kandidat WebRTC — gateway Layar TV (MediaMTX) & TV box tidak membaca mDNS
+app.commandLine.appendSwitch('disable-features', 'WebRtcHideLocalIpsWithMdns');
 app.commandLine.appendSwitch('force_high_performance_gpu');
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-gpu-rasterization');

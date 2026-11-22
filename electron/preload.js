@@ -11,7 +11,7 @@ const INVOKE = ['app:info', 'desktop:sources', 'dialog:open', 'dialog:save', 'di
   'airplay:start', 'airplay:stop', 'airplay:status', 'airplay:firewall', 'airplay:hotspot', 'sys:open-settings',
   'procaudio:start', 'procaudio:stop', 'procaudio:available',
   'nengine:start', 'nengine:stop', 'nengine:status', 'nengine:screen-rect', 'nengine:download', 'browser:hwnd', 'stinger:prep', 'stinger:drop',
-  'update:info', 'update:check', 'update:download', 'update:install', 'tvgw:find', 'tvgw:start', 'tvgw:install', 'tvgw:ensure'];
+  'update:info', 'update:check', 'update:download', 'update:install', 'tvgw:find', 'tvgw:start', 'tvgw:install', 'tvgw:ensure', 'tvgw:wait'];
 const SEND = ['file:write-chunk', 'utc:start', 'utc:stop', 'utc:ack', 'utc:reload', 'utc:full', 'utc:pause', 'utc:resume', 'utc:zc-ready', 'utc:zc-set', 'nengine:cmd', 'nengine:utc', 'nengine:segm', 'nengine:kenc', 'nengine:aud', 'nengine:raster', 'stinger:play', 'stinger:stop'];
 const ON = ['utc:frame', 'utc:tk', 'utc:zc', 'vst:event', 'airplay:status', 'procaudio:status', 'update:status', 'nengine:ev', 'nengine:pcm', 'tvgw:step'];
 

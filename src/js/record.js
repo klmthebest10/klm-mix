@@ -264,8 +264,9 @@
   };
   R.toggleSrt = () => (S.srt ? R.stopSrt() : R.startSrt());
 
-  // ---------- LAYAR TV MASJID: satu tombol → cari / nyalakan / pasang gateway, isi SRT, mulai kirim ----------
-  // Gateway (MediaMTX) di PC ini atau PC lain satu Wi-Fi menerima SRT publish:klm; TV memilih sumber KLM otomatis.
+  // ---------- LAYAR TV MASJID: Program dikirim lewat WebRTC (lihat tvout.js) — tanpa SRT ----------
+  // TV satu Wi-Fi menarik langsung dari KLM. Tombol ini memastikan gateway Layar TV di PC ini menyala & versi baru
+  // (menarik whep://127.0.0.1:8620/klm/whep) supaya TV di jaringan lain (internet) juga menampilkan Program KLM.
   let tvBusy = false;
   R.tvStep = '';
   R.tvConnect = async function () {
@@ -274,41 +275,31 @@
     tvBusy = true;
     const step = (t) => { R.tvStep = t; KM.changed('srt'); if (t) KM.toast('📺 ' + t, 'info', 6000); };
     try {
-      step('Mencari gateway Layar TV Masjid…');
-      let f = await window.klm.invoke('tvgw:find', { lan: true });
-      let host = '', where = '';
-      const upd = async () => {
-        if (!(await UI().confirm('Gateway Layar TV di PC ini versi lama (belum menerima siaran KLM). Perbarui sekarang? Jendela pemasang akan terbuka sebentar.', 'Perbarui'))) return null;
-        return window.klm.invoke('tvgw:install');
+      if (KM.tvout && !KM.tvout.on()) KM.tvout.set(true);
+      const c = R.srtCfg(); // cara lama (SRT publish:klm) tidak dipakai lagi
+      if (c.streamid === 'publish:klm') { if (S.srt) R.stopSrt(true); c.autoStart = false; KM.saveSettings(); }
+      step('Memeriksa gateway Layar TV di PC ini…');
+      const f = await window.klm.invoke('tvgw:find', { lan: false });
+      const install = async (q, label) => {
+        if (!(await UI().confirm(q, label))) return null;
+        const r = await window.klm.invoke('tvgw:install'); if (!r.ok) throw new Error(r.msg); return r;
       };
-      if (f.local.ok && f.local.klm !== 'lama') { host = '127.0.0.1'; where = 'gateway PC ini'; }
-      else if (f.local.ok) { const r = await upd(); if (r && r.ok) { host = '127.0.0.1'; where = 'gateway PC ini (diperbarui)'; } else if (r) throw new Error(r.msg); }
-      else if (f.installed) {
-        step('Menyalakan gateway di PC ini…');
-        const r = await window.klm.invoke('tvgw:start');
-        if (r.ok && r.klm === 'lama') { const u = await upd(); if (u && u.ok) { host = '127.0.0.1'; where = 'gateway PC ini (diperbarui)'; } else if (u) throw new Error(u.msg); }
-        else if (r.ok) { host = '127.0.0.1'; where = 'gateway PC ini'; }
+      let gw = false;
+      if (f.platform !== 'win32') gw = false;
+      else if (!f.installed && !f.local.ok) gw = !!(await install('Program KLM sudah tampil langsung di TV yang satu Wi-Fi dengan PC ini. Pasang juga gateway Layar TV di PC ini agar TV di jaringan lain (lewat internet) ikut menampilkan? Sekali saja, ± 1 menit.', 'Pasang'));
+      else if (!f.whep || (f.local.ok && f.local.klm === 'lama')) gw = !!(await install('Gateway Layar TV di PC ini perlu diperbarui agar menarik Program KLM langsung (tanpa SRT). Perbarui sekarang? Jendela pemasang terbuka sebentar.', 'Perbarui'));
+      else if (!f.local.ok) { step('Menyalakan gateway Layar TV…'); const r = await window.klm.invoke('tvgw:start'); if (!r.ok) throw new Error(r.msg); gw = true; }
+      else gw = true;
+      if (gw) {
+        step('Gateway menarik Program KLM…');
+        const r = await window.klm.invoke('tvgw:wait', 20);
+        R.tvStep = '';
+        if (r.ok && r.klm === 'tayang') { KM.toast('📺 Program KLM tampil di Layar TV Masjid — TV satu Wi-Fi & jaringan lain (lewat gateway PC ini). Selama KLM terbuka, TV menampilkannya otomatis.', 'ok', 9000); return true; }
+        KM.toast('📺 Gateway belum menarik Program KLM — TV satu Wi-Fi tetap bisa langsung. Coba tekan tombol ini lagi sebentar lagi.', 'warn', 9000); return false;
       }
-      if (!host && !f.local.ok) {
-        const lan = (f.lan || []).find((g) => g.klm !== 'lama');
-        if (lan) { host = lan.host; where = 'gateway di PC ' + lan.host; }
-        else if (f.lan && f.lan.length) throw new Error('Gateway di PC ' + f.lan[0].host + ' versi lama — jalankan ulang PASANG-GATEWAY-VMIX.bat di PC itu (panel admin TV → Siaran vMix / KLM)');
-        else if (f.platform === 'win32' && !f.installed) {
-          if (!(await UI().confirm('Gateway Layar TV Masjid belum ada di PC ini maupun di jaringan. Pasang di PC ini sekarang? (sekali saja, ± 1 menit; setelah itu menyala sendiri setiap KLM dibuka)', 'Pasang'))) { step(''); return false; }
-          const r = await window.klm.invoke('tvgw:install');
-          if (!r.ok) throw new Error(r.msg);
-          host = '127.0.0.1'; where = 'gateway PC ini (baru dipasang)';
-        }
-      }
-      if (!host) throw new Error('Gateway Layar TV tidak ditemukan');
-      const c = R.srtCfg();
-      Object.assign(c, { mode: 'caller', host, port: 8890, latency: host === '127.0.0.1' ? 80 : 120, streamid: 'publish:klm', passphrase: '', autoStart: true });
-      KM.saveSettings();
-      if (S.srt) { R.stopSrt(true); await new Promise((r) => setTimeout(r, 600)); }
       R.tvStep = '';
-      const ok = await R.startSrt();
-      if (ok) KM.toast('📺 Program dikirim ke Layar TV Masjid — ' + where + '. Berikutnya tersambung sendiri saat KLM dibuka.', 'ok', 7000);
-      return ok;
+      KM.toast('📺 Program KLM tampil di TV yang satu Wi-Fi dengan PC ini (langsung dari KLM, otomatis selama KLM terbuka).', 'ok', 8000);
+      return true;
     } catch (e) {
       R.tvStep = ''; KM.toast('📺 ' + (e.message || e), 'err', 9000); return false;
     } finally { tvBusy = false; KM.changed('srt'); }

@@ -805,12 +805,11 @@
           !KM.isElectron ? h('div.sec', h('p', '⚠ Output SRT memerlukan versi PC (.exe) — memakai ffmpeg bawaan.')) : null,
           h('div.sec', h('h4', '📡 Status SRT'), stBox, h('div', { style: { marginTop: '10px' } }, urlBox),
             h('p.muted', 'Program dikirim realtime ke gateway / decoder TV (Haivision, Kiloview, Magewell, Matrox, OBS, Wowza, dll). Berjalan terpisah dari tombol Stream — bisa bersamaan.')),
+          h('div.sec', h('h4', '📺 Layar TV Masjid'),
+            chk('Tampilkan Program di Layar TV Masjid — otomatis selama KLM terbuka, tanpa SRT', KM.tvout ? KM.tvout.on() : true, (v) => { KM.tvout && KM.tvout.set(v); show('srt'); }),
+            row('', h('button.btn.pri', { title: 'Memastikan gateway Layar TV di PC ini menyala & versi baru (memasang / memperbarui bila perlu) supaya TV di jaringan lain juga menampilkan Program KLM. TV satu Wi-Fi menampilkan langsung dari KLM.', onclick: async () => { await R.tvConnect(); show('srt'); } }, '📺 Sambungkan ke Layar TV Masjid'),
+              h('span.muted', (() => { const n = KM.tvout ? KM.tvout.count() : 0; return n ? '🟢 ' + n + ' penarik tersambung (' + KM.tvout.list().join(', ') + ')' : 'Belum ada TV / gateway yang menarik'; })()))),
           h('div.sec', h('h4', 'Koneksi'),
-            (() => {
-              const tv = (lain) => { Object.assign(c, { mode: 'caller', port: 8890, latency: lain ? 120 : 80, streamid: 'publish:klm' }); if (!lain) c.host = '127.0.0.1'; else if (/^(127\.|localhost$)/.test(c.host || '')) c.host = ''; save(); show('srt'); };
-              return row('Preset', h('button.btn.pri', { title: 'Sekali tekan: mencari gateway Layar TV Masjid (PC ini / PC lain satu Wi-Fi), menyalakan atau memasangnya bila perlu, mengisi SRT (publish:klm) lalu mulai mengirim. Berikutnya tersambung sendiri saat KLM dibuka.', onclick: async () => { await R.tvConnect(); show('srt'); } }, '📺 Sambungkan ke Layar TV Masjid'),
-                h('button.btn', { title: 'Gateway di PC lain — isi IP PC gateway setelah menekan tombol ini', onclick: () => tv(true) }, '📺 Layar TV Masjid — gateway di PC lain'));
-            })(),
             row('Mode', sel([['caller', 'Caller — KLM menyambung ke gateway (umum)'], ['listener', 'Listener — gateway menyambung ke PC ini'], ['rendezvous', 'Rendezvous']], c.mode, (v) => { c.mode = v; save(); show('srt'); })),
             c.mode !== 'listener' ? row('IP / host gateway', inp('host', { placeholder: 'contoh: 192.168.1.50 atau gateway.tvku.id', class: 'grow' }), h('label', 'Port'), inp('port', { type: 'number', style: { width: '90px' } }, (v) => +v || 9000))
               : row('Port di PC ini', inp('port', { type: 'number', style: { width: '90px' } }, (v) => +v || 9000), h('span.muted', 'Gateway menyambung ke srt://' + ((KM.link.ips[0] || {}).address || 'IP-PC') + ':' + c.port)),
