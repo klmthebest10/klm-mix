@@ -213,7 +213,12 @@
   R.startSrt = async function () {
     if (S.srt) return true;
     const c = R.srtCfg();
-    if (c.mode !== 'listener' && !String(c.host || '').trim()) { KM.toast('Isi IP / host gateway SRT dulu', 'warn'); KM.dialogs.settings('srt'); return false; }
+    if (c.mode !== 'listener' && !String(c.host || '').trim()) {
+      if (KM.isElectron && !c.streamid) return R.tvConnect(); // belum diatur → langsung sambungkan ke Layar TV Masjid
+      KM.toast('Isi IP / host gateway SRT dulu', 'warn'); KM.dialogs.settings('srt'); return false;
+    }
+    // gateway Layar TV di PC ini: pastikan pengawasnya berjalan (gateway menyala sendiri selama KLM terbuka)
+    if (KM.isElectron && c.streamid === 'publish:klm' && /^(127\.0\.0\.1|localhost)$/.test(String(c.host).trim())) window.klm.invoke('tvgw:ensure').catch(() => {});
     if (c.passphrase && (c.passphrase.length < 10 || c.passphrase.length > 79)) { KM.toast('Passphrase SRT harus 10–79 karakter', 'warn'); KM.dialogs.settings('srt'); return false; }
     const h264 = H264_WEBM.find((m) => MediaRecorder.isTypeSupported(m));
     let encoder = c.encoder || 'auto';
@@ -258,6 +263,58 @@
     return true;
   };
   R.toggleSrt = () => (S.srt ? R.stopSrt() : R.startSrt());
+
+  // ---------- LAYAR TV MASJID: satu tombol → cari / nyalakan / pasang gateway, isi SRT, mulai kirim ----------
+  // Gateway (MediaMTX) di PC ini atau PC lain satu Wi-Fi menerima SRT publish:klm; TV memilih sumber KLM otomatis.
+  let tvBusy = false;
+  R.tvStep = '';
+  R.tvConnect = async function () {
+    if (!KM.isElectron) { KM.toast('Sambungan Layar TV hanya di KLM versi PC (Windows)', 'warn'); return false; }
+    if (tvBusy) return false;
+    tvBusy = true;
+    const step = (t) => { R.tvStep = t; KM.changed('srt'); if (t) KM.toast('📺 ' + t, 'info', 6000); };
+    try {
+      step('Mencari gateway Layar TV Masjid…');
+      let f = await window.klm.invoke('tvgw:find', { lan: true });
+      let host = '', where = '';
+      const upd = async () => {
+        if (!(await UI().confirm('Gateway Layar TV di PC ini versi lama (belum menerima siaran KLM). Perbarui sekarang? Jendela pemasang akan terbuka sebentar.', 'Perbarui'))) return null;
+        return window.klm.invoke('tvgw:install');
+      };
+      if (f.local.ok && f.local.klm !== 'lama') { host = '127.0.0.1'; where = 'gateway PC ini'; }
+      else if (f.local.ok) { const r = await upd(); if (r && r.ok) { host = '127.0.0.1'; where = 'gateway PC ini (diperbarui)'; } else if (r) throw new Error(r.msg); }
+      else if (f.installed) {
+        step('Menyalakan gateway di PC ini…');
+        const r = await window.klm.invoke('tvgw:start');
+        if (r.ok && r.klm === 'lama') { const u = await upd(); if (u && u.ok) { host = '127.0.0.1'; where = 'gateway PC ini (diperbarui)'; } else if (u) throw new Error(u.msg); }
+        else if (r.ok) { host = '127.0.0.1'; where = 'gateway PC ini'; }
+      }
+      if (!host && !f.local.ok) {
+        const lan = (f.lan || []).find((g) => g.klm !== 'lama');
+        if (lan) { host = lan.host; where = 'gateway di PC ' + lan.host; }
+        else if (f.lan && f.lan.length) throw new Error('Gateway di PC ' + f.lan[0].host + ' versi lama — jalankan ulang PASANG-GATEWAY-VMIX.bat di PC itu (panel admin TV → Siaran vMix / KLM)');
+        else if (f.platform === 'win32' && !f.installed) {
+          if (!(await UI().confirm('Gateway Layar TV Masjid belum ada di PC ini maupun di jaringan. Pasang di PC ini sekarang? (sekali saja, ± 1 menit; setelah itu menyala sendiri setiap KLM dibuka)', 'Pasang'))) { step(''); return false; }
+          const r = await window.klm.invoke('tvgw:install');
+          if (!r.ok) throw new Error(r.msg);
+          host = '127.0.0.1'; where = 'gateway PC ini (baru dipasang)';
+        }
+      }
+      if (!host) throw new Error('Gateway Layar TV tidak ditemukan');
+      const c = R.srtCfg();
+      Object.assign(c, { mode: 'caller', host, port: 8890, latency: host === '127.0.0.1' ? 80 : 120, streamid: 'publish:klm', passphrase: '', autoStart: true });
+      KM.saveSettings();
+      if (S.srt) { R.stopSrt(true); await new Promise((r) => setTimeout(r, 600)); }
+      R.tvStep = '';
+      const ok = await R.startSrt();
+      if (ok) KM.toast('📺 Program dikirim ke Layar TV Masjid — ' + where + '. Berikutnya tersambung sendiri saat KLM dibuka.', 'ok', 7000);
+      return ok;
+    } catch (e) {
+      R.tvStep = ''; KM.toast('📺 ' + (e.message || e), 'err', 9000); return false;
+    } finally { tvBusy = false; KM.changed('srt'); }
+  };
+  if (KM.isElectron && window.klm.on) window.klm.on('tvgw:step', (t) => { R.tvStep = t; KM.toast('📺 ' + t, 'info', 6000); KM.changed('srt'); });
+  const UI = () => KM.ui;
   R.srtTime = () => (S.srt ? (Date.now() - R.srtT0) / 1000 : 0);
 
   // ---------- OUTPUT NDI (juga = Virtual Camera lewat "NDI Webcam") ----------
