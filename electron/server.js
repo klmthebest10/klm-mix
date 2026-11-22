@@ -78,6 +78,7 @@ const pending = new Map(); // reqId -> {resolve, timer}
 let reqSeq = 1;
 let tallyStr = '';
 let lastState = null;
+let tvOn = false; // Program KLM boleh ditarik Layar TV Masjid (WHEP /klm/whep) — diatur mixer
 const tcpSubs = new Set();
 let utc = null; // UTC KLM Acara (menyatu)
 let score = null; // UTC KLM Scoreboard olahraga (menyatu, port sendiri)
@@ -126,7 +127,8 @@ function onWsConnection(ws, req) {
     }
     if (id === mixerId) {
       // pesan dari mixer
-      if (msg.t === 'fn-res' || msg.t === 'xml-res' || msg.t === 'utc-res') {
+      if (msg.t === 'tv-state') { tvOn = !!msg.on; return; }
+      if (msg.t === 'fn-res' || msg.t === 'xml-res' || msg.t === 'utc-res' || msg.t === 'tv-res') {
         if (msg.to && msg.to !== 'server') { const c = clients.get(msg.to); if (c) send(c.ws, msg); return; }
         const p = pending.get(msg.reqId);
         if (p) { clearTimeout(p.timer); pending.delete(msg.reqId); p.resolve(msg); }
@@ -152,7 +154,7 @@ function onWsConnection(ws, req) {
   ws.on('close', () => {
     clients.delete(id);
     if (id === mixerId) {
-      mixerId = null; lastState = null;
+      mixerId = null; lastState = null; tvOn = false;
       if (utc) utc.onMixerState();
       for (const c of clients.values()) send(c.ws, { t: 'mixer-gone' });
     } else { const m = mixer(); if (m) send(m, { t: 'peer-leave', id }); }
@@ -257,9 +259,39 @@ async function handleLicense(req, res, p) {
 }
 function notifyLicense() { const m = mixer(); if (m) send(m, { t: 'license', status: license.status() }); }
 
+// ---------- LAYAR TV MASJID: Program KLM sebagai WHEP (WebRTC) ----------
+// Gateway Layar TV (MediaMTX, path klm: source whep://127.0.0.1:8620/klm/whep) dan TV di Wi-Fi yang sama menarik
+// Program langsung dari KLM — tanpa SRT / ffmpeg. Jawaban meniru MediaMTX: 404 = belum ada siaran, 400 = SDP salah
+// (dipakai TV untuk mengecek "sedang tayang"), 201 + Location = tersambung.
+const TV_CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'OPTIONS, POST, DELETE', 'Access-Control-Allow-Headers': 'Content-Type, If-Match', 'Access-Control-Expose-Headers': 'Location', 'Cache-Control': 'no-store' };
+function readBody(req, max) {
+  return new Promise((resolve) => {
+    const parts = []; let n = 0;
+    req.on('data', (d) => { n += d.length; if (n <= max) parts.push(d); });
+    req.on('end', () => resolve(n > max ? null : Buffer.concat(parts).toString('utf8')));
+    req.on('error', () => resolve(null));
+  });
+}
+async function handleTvWhep(req, res, p) {
+  const json = (code, err) => { res.writeHead(code, Object.assign({ 'Content-Type': 'application/json' }, TV_CORS)); res.end(JSON.stringify({ status: 'error', error: err })); };
+  if (req.method === 'OPTIONS') { res.writeHead(204, TV_CORS); return res.end(); }
+  const id = p.split('/')[3] || '';
+  if (req.method === 'DELETE') { const m = mixer(); if (m && id) send(m, { t: 'tv-bye', id }); res.writeHead(200, TV_CORS); return res.end(); }
+  if (req.method !== 'POST' || id) return json(405, 'method not allowed');
+  const sdp = await readBody(req, 256 * 1024);
+  if (sdp == null) return json(413, 'offer too large');
+  if (!mixer() || !tvOn) return json(404, "no stream is available on path 'klm'");
+  if (!/^v=0\r?\n/.test(sdp) || !/\nm=video /.test(sdp)) return json(400, 'invalid SDP');
+  const r = await callMixer({ t: 'tv-offer', sdp, ip: (req.socket.remoteAddress || '').replace('::ffff:', '') }, 10000);
+  if (!r.ok || !r.sdp) return json(r.full ? 503 : 500, r.msg || 'Program KLM belum siap');
+  res.writeHead(201, Object.assign({ 'Content-Type': 'application/sdp', Location: '/klm/whep/' + r.id, ETag: '"' + r.id + '"' }, TV_CORS));
+  res.end(r.sdp);
+}
+
 async function handleHttp(req, res, ports) {
   const u = new URL(req.url, 'http://x');
   let p = decodeURIComponent(u.pathname);
+  if (p === '/klm/whep' || p.startsWith('/klm/whep/')) return handleTvWhep(req, res, p);
   // fitur premium tanpa lisensi: UTC Acara (+ overlay), KLMCAM, Mirroring HP
   if (!license.licensed()) {
     const f = (p === '/utc' || p.startsWith('/utc/')) ? 'UTC Acara' : /^\/(cam|camera)(\.html)?$/.test(p) ? 'KLMCAM' : /^\/mirror(\.html)?$/.test(p) ? 'Mirroring HP' : '';

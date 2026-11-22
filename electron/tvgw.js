@@ -12,6 +12,8 @@ const SITE = 'https://sayyidinabilal.com';
 const PATH = 'klm';
 const gwDir = () => path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'LayarTV', 'gateway');
 const installed = () => process.platform === 'win32' && fs.existsSync(path.join(gwDir(), 'jalan.vbs'));
+// gateway versi baru menarik Program KLM lewat WHEP (path klm: source whep://127.0.0.1:8620/klm/whep)
+const whepReady = () => { try { return /whep:\/\/127\.0\.0\.1:8620\/klm\/whep/.test(fs.readFileSync(path.join(gwDir(), 'mediamtx.yml'), 'utf8')); } catch (e) { return false; } };
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // POST SDP kosong ke WHEP gateway: 404 = siap tapi KLM belum mengirim, 400 = sedang tayang,
@@ -83,7 +85,7 @@ async function waitLocal(sec, okFn) {
 
 async function find(o = {}) {
   const local = await probe('127.0.0.1');
-  const res = { platform: process.platform, installed: installed(), local, lan: [] };
+  const res = { platform: process.platform, installed: installed(), whep: whepReady(), local, lan: [] };
   if (o.lan !== false && !(local.ok && local.klm !== 'lama')) res.lan = await scanLan();
   return res;
 }
@@ -112,7 +114,7 @@ async function install(onStep) {
   for (let i = 0; i < 240; i++) {
     await wait(1000);
     const r = await probe('127.0.0.1', 1200);
-    if (r.ok && r.klm !== 'lama') return r;
+    if (r.ok && r.klm !== 'lama' && whepReady() && i >= 3) return r; // pemasang menghentikan gateway lama dulu
     if (i % 10 === 9) step('Memasang gateway… (' + (i + 1) + ' dtk)');
   }
   return { ok: false, msg: 'Pemasangan belum selesai — lihat jendela pemasang, lalu tekan tombol Layar TV lagi' };
@@ -123,6 +125,8 @@ function register(ipcMain) {
   ipcMain.handle('tvgw:start', () => start());
   ipcMain.handle('tvgw:install', (e) => install((t) => { try { e.sender.send('tvgw:step', t); } catch (x) {} }));
   ipcMain.handle('tvgw:ensure', () => runCmd('pengawas'));
+  // tunggu gateway selesai menarik Program KLM (WHEP) — 400 = sedang tayang
+  ipcMain.handle('tvgw:wait', async (e, sec) => { for (let i = 0; i < (+sec || 20); i++) { const r = await probe('127.0.0.1', 1200); if (r.ok && r.klm === 'tayang') return r; await wait(1000); } return probe('127.0.0.1', 1200); });
 }
 
-module.exports = { register, probe, find, scanLan, lanHosts };
+module.exports = { register, probe, find, scanLan, lanHosts, whepReady };

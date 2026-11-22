@@ -71,6 +71,7 @@ window.KM = window.KM || {};
         { enabled: false, name: 'Custom', url: '', key: '' }
       ]
     },
+    tvOut: true, tvKbps: 4000, // Layar TV Masjid: Program ditarik lewat WebRTC (/klm/whep)
     srt: { mode: 'caller', host: '', port: 9000, latency: 200, passphrase: '', pbkeylen: 16, streamid: '', encoder: 'auto', preset: 'veryfast', videoBitrate: 6000, audioBitrate: 192, audioCodec: 'aac', res: 'same', gop: 1, cbr: true, autoStart: false },
     replay: { source: 'program', seconds: 15, width: 640, height: 360 },
     transitions: [
