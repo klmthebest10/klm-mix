@@ -794,7 +794,7 @@
           stBox.replaceChildren(...[
             h('span.pill' + (live ? '.ok' : S.srt ? '.warn' : ''), lbl),
             S.srt && s ? h('span.muted', s.bitrate + ' • ' + s.fps + ' fps • ' + s.speed + ' • ' + KM.fmtTime(R.srtTime())) : null,
-            R.srtMsg ? h('span.muted', R.srtMsg) : null, h('span.grow'),
+            R.srtMsg ? h('span.muted', R.srtMsg) : null, R.tvStep ? h('span.muted', '📺 ' + R.tvStep) : null, h('span.grow'),
             h('button.btn' + (S.srt ? '.red' : '.pri'), { onclick: async () => { await R.toggleSrt(); setTimeout(upd, 100); } }, S.srt ? '■ Hentikan SRT' : '▶ Mulai SRT')].filter(Boolean));
         };
         const tick = setInterval(() => { if (!document.body.contains(urlBox)) return clearInterval(tick); upd(); }, 1000);
@@ -808,7 +808,7 @@
           h('div.sec', h('h4', 'Koneksi'),
             (() => {
               const tv = (lain) => { Object.assign(c, { mode: 'caller', port: 8890, latency: lain ? 120 : 80, streamid: 'publish:klm' }); if (!lain) c.host = '127.0.0.1'; else if (/^(127\.|localhost$)/.test(c.host || '')) c.host = ''; save(); show('srt'); };
-              return row('Preset', h('button.btn', { title: 'Gateway Layar TV Masjid di PC ini — srt://127.0.0.1:8890, Stream ID publish:klm', onclick: () => tv(false) }, '📺 Layar TV Masjid'),
+              return row('Preset', h('button.btn.pri', { title: 'Sekali tekan: mencari gateway Layar TV Masjid (PC ini / PC lain satu Wi-Fi), menyalakan atau memasangnya bila perlu, mengisi SRT (publish:klm) lalu mulai mengirim. Berikutnya tersambung sendiri saat KLM dibuka.', onclick: async () => { await R.tvConnect(); show('srt'); } }, '📺 Sambungkan ke Layar TV Masjid'),
                 h('button.btn', { title: 'Gateway di PC lain — isi IP PC gateway setelah menekan tombol ini', onclick: () => tv(true) }, '📺 Layar TV Masjid — gateway di PC lain'));
             })(),
             row('Mode', sel([['caller', 'Caller — KLM menyambung ke gateway (umum)'], ['listener', 'Listener — gateway menyambung ke PC ini'], ['rendezvous', 'Rendezvous']], c.mode, (v) => { c.mode = v; save(); show('srt'); })),
