@@ -280,7 +280,7 @@ async function handleTvWhep(req, res, p) {
   if (req.method !== 'POST' || id) return json(405, 'method not allowed');
   const sdp = await readBody(req, 256 * 1024);
   if (sdp == null) return json(413, 'offer too large');
-  if (!mixer() || !tvOn) return json(404, "no stream is available on path 'klm'");
+  if (!mixer() || !tvOn || !license.owner()) return json(404, "no stream is available on path 'klm'"); // khusus pemilik
   if (!/^v=0\r?\n/.test(sdp) || !/\nm=video /.test(sdp)) return json(400, 'invalid SDP');
   const r = await callMixer({ t: 'tv-offer', sdp, ip: (req.socket.remoteAddress || '').replace('::ffff:', '') }, 10000);
   if (!r.ok || !r.sdp) return json(r.full ? 503 : 500, r.msg || 'Program KLM belum siap');

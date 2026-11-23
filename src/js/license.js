@@ -8,6 +8,8 @@
   const L = KM.license = { status: pre, demo: !(pre && pre.licensed), checked: !!pre };
   const fmtDate = (ms) => (ms ? new Date(ms).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
 
+  /** lisensi pemilik KLM (fitur khusus pemilik, mis. Layar TV Masjid) — ditentukan server dari lisensi bertanda tangan */
+  L.owner = () => !!(L.status && L.status.licensed && L.status.owner);
   L.set = function (st) {
     const wasDemo = L.demo;
     L.status = st || null;

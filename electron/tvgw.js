@@ -120,13 +120,16 @@ async function install(onStep) {
   return { ok: false, msg: 'Pemasangan belum selesai — lihat jendela pemasang, lalu tekan tombol Layar TV lagi' };
 }
 
-function register(ipcMain) {
-  ipcMain.handle('tvgw:find', (e, o) => find(o || {}));
-  ipcMain.handle('tvgw:start', () => start());
-  ipcMain.handle('tvgw:install', (e) => install((t) => { try { e.sender.send('tvgw:step', t); } catch (x) {} }));
-  ipcMain.handle('tvgw:ensure', () => runCmd('pengawas'));
+function register(ipcMain, isOwner) {
+  // Layar TV Masjid = fitur khusus pemilik: tanpa lisensi pemilik semua perintah gateway ditolak
+  const ok = () => !isOwner || isOwner();
+  const deny = { ok: false, msg: 'Layar TV Masjid hanya untuk pemilik KLM' };
+  ipcMain.handle('tvgw:find', (e, o) => ok() ? find(o || {}) : Object.assign({ local: deny }, deny));
+  ipcMain.handle('tvgw:start', () => ok() ? start() : deny);
+  ipcMain.handle('tvgw:install', (e) => ok() ? install((t) => { try { e.sender.send('tvgw:step', t); } catch (x) {} }) : deny);
+  ipcMain.handle('tvgw:ensure', () => ok() ? runCmd('pengawas') : deny);
   // tunggu gateway selesai menarik Program KLM (WHEP) — 400 = sedang tayang
-  ipcMain.handle('tvgw:wait', async (e, sec) => { for (let i = 0; i < (+sec || 20); i++) { const r = await probe('127.0.0.1', 1200); if (r.ok && r.klm === 'tayang') return r; await wait(1000); } return probe('127.0.0.1', 1200); });
+  ipcMain.handle('tvgw:wait', async (e, sec) => { if (!ok()) return deny; for (let i = 0; i < (+sec || 20); i++) { const r = await probe('127.0.0.1', 1200); if (r.ok && r.klm === 'tayang') return r; await wait(1000); } return probe('127.0.0.1', 1200); });
 }
 
 module.exports = { register, probe, find, scanLan, lanHosts, whepReady };

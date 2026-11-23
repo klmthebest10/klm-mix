@@ -141,6 +141,10 @@ function create({ configDir }) {
     return { ok: true, payload: p };
   }
 
+  // Fitur KHUSUS PEMILIK (Layar TV Masjid): hanya untuk lisensi pemilik — nomor seri lisensi pemilik, atau lisensi yang
+  // diterbitkan dengan paket "Pemilik". Lisensi ditandatangani kunci privat penjual & terikat Device ID, jadi tidak bisa dipalsukan.
+  const OWNER_SERIALS = ['KMMWM90BJA16E5'];
+  const isOwner = (st) => !!(st && (OWNER_SERIALS.includes(String(st.serial || '').toUpperCase()) || /^(pemilik|owner)$/i.test(String(st.plan || '').trim())));
   let cache = null, cacheAt = 0;
   function status() {
     if (cache && Date.now() - cacheAt < 10000) return cache;
@@ -149,7 +153,7 @@ function create({ configDir }) {
   }
   const licensed = () => !!status().licensed;
   function computeStatus() {
-    const st = { licensed: false, demo: true, deviceId: deviceId(), name: '', plan: '', issued: 0, expires: 0, serial: '', reason: '' };
+    const st = { licensed: false, demo: true, owner: false, deviceId: deviceId(), name: '', plan: '', issued: 0, expires: 0, serial: '', reason: '' };
     const saved = read();
     if (!saved || !saved.key) { st.reason = 'Belum diaktifkan'; return st; }
     const now = Date.now();
@@ -158,6 +162,7 @@ function create({ configDir }) {
     if (!r.ok) { st.reason = r.reason; return st; }
     if (!saved.seen || now > saved.seen) write(Object.assign(saved, { seen: now })); // pengaman jam mundur
     st.licensed = true; st.demo = false; st.reason = '';
+    st.owner = isOwner(st);
     return st;
   }
 
@@ -173,7 +178,8 @@ function create({ configDir }) {
   }
   function remove() { try { fs.unlinkSync(file()); } catch (e) {} cache = null; return { ok: true, status: status() }; }
 
-  return { status, licensed, activate, remove, deviceId, parse };
+  const owner = () => !!status().owner;
+  return { status, licensed, owner, activate, remove, deviceId, parse };
 }
 
 /** halaman pengganti untuk fitur yang terkunci (dibuka dari browser / HP) */

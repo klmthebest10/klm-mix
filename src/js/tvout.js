@@ -5,7 +5,10 @@
 (function (KM) {
   const T = KM.tvout = { peers: new Map(), seq: 0 };
   const MAX = 6; // penarik bersamaan (gateway + TV langsung) — tiap penarik satu encoder WebRTC
-  const on = () => KM.settings.tvOut !== false;
+  // fitur KHUSUS PEMILIK: tanpa lisensi pemilik Program tidak pernah dibagikan ke Layar TV (server juga menolak WHEP)
+  const owner = () => !!(KM.license && KM.license.owner && KM.license.owner());
+  const on = () => owner() && KM.settings.tvOut !== false;
+  T.owner = owner;
   T.on = on;
   T.count = () => [...T.peers.values()].filter((p) => p.pc.connectionState === 'connected').length;
   T.list = () => [...T.peers.values()].filter((p) => p.pc.connectionState === 'connected').map((p) => p.ip);
@@ -103,6 +106,9 @@
     if (c && c.streamid === 'publish:klm' && c.autoStart) { c.autoStart = false; KM.saveSettings(); }
   }
 
-  KM.on('change', (w) => { if (w === 'link' && KM.link && KM.link.connected) pushState(); });
+  KM.on('change', (w) => {
+    if ((w === 'link' || w === 'license') && KM.link && KM.link.connected) pushState();
+    if (w === 'license' && !owner()) for (const id of [...T.peers.keys()]) close(id);
+  });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', migrate); else setTimeout(migrate, 0);
 })(window.KM);

@@ -337,7 +337,7 @@ ipcMain.handle('fx:scan-pc', async (e, extra) => {
   return { plugins: out.slice(0, 1500), folders, hosts, platform: process.platform };
 });
 
-require('./tvgw').register(ipcMain); // Layar TV Masjid: cari / nyalakan / pasang gateway SRT
+require('./tvgw').register(ipcMain, () => server.license.owner()); // Layar TV Masjid: cari / nyalakan / pasang gateway SRT
 ipcMain.handle('server:get', () => server.loadConfig());
 ipcMain.handle('server:set', (e, cfg) => { server.saveConfig(Object.assign(server.loadConfig(), cfg)); return true; });
 ipcMain.handle('app:relaunch', () => { app.relaunch(); app.exit(0); });

@@ -214,11 +214,11 @@
     if (S.srt) return true;
     const c = R.srtCfg();
     if (c.mode !== 'listener' && !String(c.host || '').trim()) {
-      if (KM.isElectron && !c.streamid) return R.tvConnect(); // belum diatur → langsung sambungkan ke Layar TV Masjid
+      if (KM.isElectron && !c.streamid && KM.tvout && KM.tvout.owner()) return R.tvConnect(); // belum diatur → (pemilik) langsung sambungkan ke Layar TV Masjid
       KM.toast('Isi IP / host gateway SRT dulu', 'warn'); KM.dialogs.settings('srt'); return false;
     }
     // gateway Layar TV di PC ini: pastikan pengawasnya berjalan (gateway menyala sendiri selama KLM terbuka)
-    if (KM.isElectron && c.streamid === 'publish:klm' && /^(127\.0\.0\.1|localhost)$/.test(String(c.host).trim())) window.klm.invoke('tvgw:ensure').catch(() => {});
+    if (KM.isElectron && c.streamid === 'publish:klm' && KM.tvout && KM.tvout.owner() && /^(127\.0\.0\.1|localhost)$/.test(String(c.host).trim())) window.klm.invoke('tvgw:ensure').catch(() => {});
     if (c.passphrase && (c.passphrase.length < 10 || c.passphrase.length > 79)) { KM.toast('Passphrase SRT harus 10–79 karakter', 'warn'); KM.dialogs.settings('srt'); return false; }
     const h264 = H264_WEBM.find((m) => MediaRecorder.isTypeSupported(m));
     let encoder = c.encoder || 'auto';
@@ -271,6 +271,7 @@
   R.tvStep = '';
   R.tvConnect = async function () {
     if (!KM.isElectron) { KM.toast('Sambungan Layar TV hanya di KLM versi PC (Windows)', 'warn'); return false; }
+    if (!(KM.tvout && KM.tvout.owner())) { KM.toast('Layar TV Masjid hanya untuk pemilik KLM', 'warn'); return false; }
     if (tvBusy) return false;
     tvBusy = true;
     const step = (t) => { R.tvStep = t; KM.changed('srt'); if (t) KM.toast('📺 ' + t, 'info', 6000); };
