@@ -678,7 +678,7 @@
         const wrap = h('div');
         const all = KM.api.list();
         const COMMON = ['Cut', 'Fade', 'Merge', 'Wipe', 'Zoom', 'Transition1', 'Transition2', 'Transition3', 'Transition4', 'PreviewInput', 'ActiveInput', 'QuickPlay',
-          'OverlayInput1', 'OverlayInput2', 'OverlayInput3', 'OverlayInput4', 'FadeToBlack', 'StartStopRecording', 'StartStopStreaming', 'Snapshot', 'UTCOnAir', 'ScoreOnAir', 'ScoreCmd', 'Play', 'Pause', 'Restart'].filter((f) => all.includes(f));
+          'OverlayInput1', 'OverlayInput2', 'OverlayInput3', 'OverlayInput4', 'FadeToBlack', 'StartStopRecording', 'StartStopStreaming', 'Snapshot', 'UTCOnAir', 'ScoreOnAir', 'ScoreCmd', 'Play', 'Pause', 'Restart', 'Stop', 'PlayFromStart'].filter((f) => all.includes(f));
         // params "Input=..&Duration=..&Value=.." ⇄ kolom terpisah
         const parse = (str) => { const o = {}; String(str || '').split('&').forEach((kv) => { const i = kv.indexOf('='); if (i > 0) o[kv.slice(0, i).trim()] = decodeURIComponent(kv.slice(i + 1).trim()); }); return o; };
         const compose = (o) => Object.entries(o).filter(([, v]) => v !== '' && v != null).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');

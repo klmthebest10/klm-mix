@@ -270,9 +270,15 @@
       btn('settings', 'Pengaturan input', () => KM.dialogs.inputSettings(inp))
     ];
     const els = [];
+    // baris kendali video: putar ulang • play/pause • stop • loop • waktu (garis waktu bisa diseret ada di bawah gambar)
+    let tp = null;
     if (KM.inputs.isPlayable(inp)) {
-      els.push(btn(KM.inputs.isPlaying(inp) ? 'pause' : 'play', 'Play / Pause', () => { KM.inputs.isPlaying(inp) ? KM.inputs.pause(inp) : KM.inputs.play(inp); UI.updateCards(); }, 'play'));
-      els.push(btn('repeat', 'Loop', () => { KM.inputs.setLoop(inp, !inp.loop); UI.updateCards(); }, 'loop' + (inp.loop ? '.on' : '')));
+      const playing = KM.inputs.isPlaying(inp);
+      tp = h('div.cbrow.tp',
+        btn('skip-back', 'Putar ulang dari awal', () => { KM.inputs.replay(inp); UI.updateCards(); }, 'tpb'),
+        btn(playing ? 'pause' : 'play', playing ? 'Pause' : 'Play', () => { playing ? KM.inputs.pause(inp) : KM.inputs.play(inp); UI.updateCards(); }, 'tpb.play' + (playing ? '.on' : '')),
+        btn('stop', 'Stop — berhenti & kembali ke awal', () => { KM.inputs.stop(inp); UI.updateCards(); }, 'tpb'),
+        btn('repeat', inp.loop ? 'Loop aktif (klik untuk mematikan)' : 'Loop (ulang terus)', () => { KM.inputs.setLoop(inp, !inp.loop); UI.updateCards(); }, 'tpb.loop' + (inp.loop ? '.on' : '')));
     }
     for (let k = 0; k < 4; k++) {
       const ch = S.overlays[k];
@@ -280,7 +286,46 @@
       els.push(btn(String(k + 1), 'Overlay ' + (k + 1) + (on ? ' (aktif — klik untuk mematikan)' : ''), () => KM.engine.overlay(k, inp.id, 'toggle'), 'ov.o' + k + (on ? '.on' : '')));
     }
     if (KM.inputs.hasAudio(inp)) els.push(btn(inp.audio.mute ? 'volume-x' : 'volume', inp.audio.mute ? 'Audio mati (klik untuk nyalakan)' : 'Audio aktif (klik untuk mute)', () => KM.audio.set(inp, 'mute', null), 'aud' + (inp.audio.mute ? '' : '.on')));
-    return [h('div.cbrow', top), h('div.cbrow', els)];
+    return [h('div.cbrow', top), tp, h('div.cbrow', els)].filter(Boolean);
+  }
+  const fmtT = (s, long) => { s = Math.max(0, s || 0); const hh = Math.floor(s / 3600), mm = Math.floor(s / 60) % 60, ss = Math.floor(s % 60); return (hh || long ? hh + ':' + String(mm).padStart(2, '0') : mm) + ':' + String(ss).padStart(2, '0'); };
+  UI.fmtTime = fmtT;
+  /** garis waktu di bawah gambar kartu: klik / seret untuk pindah posisi, arahkan untuk melihat waktunya */
+  function timeline(inp, card) {
+    const fill = h('div.pbar'), rng = h('div.trng'), knob = h('i.tknob'), tip = h('span.ttip');
+    const tl = h('div.tline', { title: '', draggable: false }, rng, fill, knob, tip);
+    card._tpt = h('span.tpt', { title: 'Posisi / durasi (merah: sisa waktu)' }); // waktu di pojok kanan bawah gambar
+    const frac = (ev) => { const r = tl.getBoundingClientRect(); return r.width ? KM.clamp((ev.clientX - r.left) / r.width, 0, 1) : 0; };
+    const showTip = (f) => { const p = KM.inputs.pos(inp); if (!p) { tip.style.display = 'none'; return; } tip.style.display = 'block'; tip.textContent = fmtT(f * p.d, p.d >= 3600); tip.style.left = (f * 100) + '%'; };
+    let was = false, last = 0, pend = null;
+    const seekTo = (f) => {
+      const p = KM.inputs.pos(inp); if (!p) return;
+      card._pv = -1; fill.style.transform = 'scaleX(' + f + ')'; knob.style.left = (f * 100) + '%'; // langsung terlihat, tidak menunggu video
+      pend = f * p.d; const now = performance.now();
+      if (now - last > 45) { last = now; KM.inputs.seek(inp, pend); pend = null; } // seek dibatasi ±22×/detik saat diseret
+    };
+    tl.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || !KM.inputs.pos(inp)) return;
+      e.preventDefault(); e.stopPropagation();
+      try { tl.setPointerCapture(e.pointerId); } catch (x) {}
+      card._scrub = true; tl.classList.add('drag');
+      was = KM.inputs.isPlaying(inp); if (was) { const m = KM.inputs.media(inp); if (m && m.pause) m.pause(); }
+      last = 0; seekTo(frac(e)); showTip(frac(e));
+    });
+    tl.addEventListener('pointermove', (e) => { const f = frac(e); showTip(f); if (card._scrub) seekTo(f); });
+    const end = (e) => {
+      if (!card._scrub) return;
+      card._scrub = false; tl.classList.remove('drag');
+      if (pend != null) { KM.inputs.seek(inp, pend); pend = null; }
+      if (was) { const m = KM.inputs.media(inp); if (m && m.play) m.play().catch(() => {}); }
+      try { tl.releasePointerCapture(e.pointerId); } catch (x) {}
+      UI.updateCards();
+    };
+    tl.addEventListener('pointerup', end); tl.addEventListener('pointercancel', end);
+    tl.addEventListener('pointerleave', () => { if (!card._scrub) tip.style.display = 'none'; });
+    for (const ev of ['click', 'dblclick', 'contextmenu', 'dragstart']) tl.addEventListener(ev, (e) => { e.stopPropagation(); if (ev === 'dragstart') e.preventDefault(); });
+    card._tl = tl; card._knob = knob; card._rng = rng;
+    return { tl, fill };
   }
 
   // Kartu input dibuat SEKALI per input lalu dipakai ulang (disimpan di inp.rt.card). Menambah, menghapus, mengganti nama
@@ -295,11 +340,12 @@
       onclick: (e) => { if (e.ctrlKey) KM.engine.cut(inp.id); else KM.engine.setPreview(inp.id); },
       ondblclick: () => (inp.type === 'utc' || inp.type === 'score' ? UI.utcPanel(true, inp.type === 'score' ? 'score' : 'acara') : KM.dialogs.inputSettings(inp)),
       title: 'Klik: ke Preview • Ctrl+Klik: Cut • Dobel klik: pengaturan'
-    }, inp.rt.thumb, num, h('span.tly'), h('span.typ', { title: KM.inputTypes[inp.type].label }, typeIcon(inp)), h('div.pbar'));
+    }, inp.rt.thumb, num, h('span.tly'), h('span.typ', { title: KM.inputTypes[inp.type].label }, typeIcon(inp)));
     const card = h('div.card', { draggable: true, 'data-id': inp.id }, th, h('div.ctitle', title), h('div.cbtns'));
-    card._inp = inp; card._th = th; card._num = num; card._title = title; card._pbar = th.querySelector('.pbar');
+    const tlx = timeline(inp, card); th.append(card._tpt, tlx.tl);
+    card._inp = inp; card._th = th; card._num = num; card._title = title; card._pbar = tlx.fill;
     card.addEventListener('contextmenu', (e) => { e.preventDefault(); UI.inputMenu(inp, e.clientX, e.clientY); });
-    card.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/klm-input', inp.id); });
+    card.addEventListener('dragstart', (e) => { if (card._scrub) { e.preventDefault(); return; } e.dataTransfer.setData('text/klm-input', inp.id); });
     card.addEventListener('dragover', (e) => { if (e.dataTransfer.types.includes('text/klm-input')) { e.preventDefault(); card.classList.add('drag-over'); } });
     card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
     card.addEventListener('drop', (e) => {
@@ -316,6 +362,7 @@
     const n = String(idx + 1);
     if (card._num.textContent !== n) card._num.textContent = n;
     if (card._title.textContent !== inp.title) { card._title.textContent = inp.title; card._title.title = inp.title; }
+    card.classList.toggle('playable', KM.inputs.isPlayable(inp));
     const au = KM.inputs.hasAudio(inp);
     if (au && !card._meter) { const m = h('i'); card._meterBox = h('div.ameter', m); card._th.appendChild(card._meterBox); card._meter = m; card._mv = -1; }
     else if (!au && card._meter) { card._meterBox.remove(); card._meter = card._meterBox = null; }
@@ -482,6 +529,7 @@
     if (KM.inputs.isPlayable(pv)) {
       box.appendChild(h('button.ic', { title: 'Mulai ulang', onclick: () => KM.inputs.restart(pv) }, KI.el('skip-back')));
       box.appendChild(h('button.ic', { title: 'Play / Pause', onclick: () => { KM.inputs.isPlaying(pv) ? KM.inputs.pause(pv) : KM.inputs.play(pv); UI.updateCards(); } }, KI.el(KM.inputs.isPlaying(pv) ? 'pause' : 'play')));
+      box.appendChild(h('button.ic', { title: 'Stop — berhenti & kembali ke awal', onclick: () => { KM.inputs.stop(pv); UI.updateCards(); } }, KI.el('stop')));
       if (pv.type === 'list') box.appendChild(h('button.ic', { title: 'Item berikutnya', onclick: () => KM.inputTypes.list.next(pv) }, KI.el('skip-fwd')));
     }
     if (pv.type === 'title') {
@@ -596,8 +644,23 @@
       const st = KM.audio.strips.get(inp.id);
       // transform saja (tanpa hitung ulang tata letak) → daftar input tetap mulus
       if (st && card._meter) { const m = KM.audio.readMeter(st.meter); const db = KM.audio.toDb(Math.max(m.peakL, m.peakR)); const v = Math.round(KM.clamp((db + 60) / 60, 0, 1) * 100) / 100; if (card._mv !== v) { card._mv = v; card._meter.style.transform = 'scaleY(' + v + ')'; } }
-      const md = KM.inputs.media(inp), pb = card._pbar || (card._pbar = card.querySelector('.pbar'));
-      if (pb && md && md.duration && isFinite(md.duration)) { const v = Math.round(md.currentTime / md.duration * 1000) / 1000; if (card._pv !== v) { card._pv = v; pb.style.transform = 'scaleX(' + v + ')'; } }
+      const pb = card._pbar; if (!pb) return;
+      const p = KM.inputs.isPlayable(inp) ? KM.inputs.pos(inp) : null;
+      if (!p) { if (card._pv !== 0) { card._pv = 0; pb.style.transform = 'scaleX(0)'; } return; }
+      if (!card._scrub) {
+        const v = Math.round(p.t / p.d * 1000) / 1000;
+        if (card._pv !== v) { card._pv = v; pb.style.transform = 'scaleX(' + v + ')'; if (card._knob) card._knob.style.left = (v * 100) + '%'; }
+      }
+      // rentang Mark In/Out (bagian di luar rentang digelapkan)
+      const rs = p.a + '|' + p.b + '|' + p.d;
+      if (card._rngS !== rs && card._rng) { card._rngS = rs; const on = p.a > 0.05 || p.b < p.d - 0.05; card._rng.style.display = on ? '' : 'none'; card._rng.style.left = (p.a / p.d * 100) + '%'; card._rng.style.width = ((p.b - p.a) / p.d * 100) + '%'; }
+      // waktu: posisi / durasi; 10 detik terakhir (tanpa loop) ditandai merah dengan sisa waktu
+      const tt = card._tpt;
+      if (tt) {
+        const long = p.d >= 3600, left = p.b - p.t, warn = KM.inputs.isPlaying(inp) && !inp.loop && left >= 0 && left < Math.min(10, (p.b - p.a) / 3);
+        const s = warn ? '-' + fmtT(left, long) + ' / ' + fmtT(p.b - p.a, long) : fmtT(p.t - p.a, long) + ' / ' + fmtT(p.b - p.a, long);
+        if (tt._s !== s) { tt._s = s; tt.textContent = s; tt.classList.toggle('warn', warn); }
+      }
     });
   }
 
@@ -907,7 +970,7 @@
     // tampilkan status play terbaru
     KM.on('change', (w) => { if (w === 'input') setTimeout(UI.syncLiveThumbs, 50); });
     setInterval(() => { if (document.hidden) return; KM.$$('#inputs .card[data-id]').forEach((c) => { syncLiveThumb(c); const b = c.querySelector('.cb.play'); if (b && c._inp) { const t = KM.inputs.isPlaying(c._inp) ? 'pause' : 'play'; if (b._t !== t) { b._t = t; b.replaceChildren(KI.el(t)); } } }); }, 300);
-    ['play', 'playing', 'pause', 'seeked', 'emptied'].forEach((ev) => document.addEventListener(ev, () => { clearTimeout(UI._lt); UI._lt = setTimeout(UI.syncLiveThumbs, 30); }, true)); // video mulai/berhenti → thumbnail live langsung ikut
+    ['play', 'playing', 'pause', 'seeked', 'emptied'].forEach((ev) => document.addEventListener(ev, () => { clearTimeout(UI._lt); UI._lt = setTimeout(() => { UI.syncLiveThumbs(); UI.updateCards(); }, 30); }, true)); // + tombol play/pause kartu ikut (mis. video selesai / berhenti di Mark Out) // video mulai/berhenti → thumbnail live langsung ikut
     // layar pembuka
     setTimeout(() => { const sp = $('#splash'); if (sp) { sp.classList.add('done'); setTimeout(() => sp.remove(), 600); } }, 450);
   };

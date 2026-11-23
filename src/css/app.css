@@ -195,7 +195,23 @@ code { font: 12px var(--mono); color: #9cc3ff; }
 .card .tly { position: absolute; left: 34px; top: 6px; z-index: 1; height: 20px; display: none; align-items: center; padding: 0 6px; border-radius: 5px; font-size: 9.5px; font-weight: 800; letter-spacing: .8px; color: #fff; }
 .card.program .tly { display: flex; background: var(--pgm); } .card.program .tly::after { content: 'LIVE'; }
 .card.preview .tly { display: flex; background: var(--pvw); } .card.preview .tly::after { content: 'PVW'; }
-.card .pbar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--acc2); width: 100%; transform: scaleX(0); transform-origin: left; z-index: 2; will-change: transform; }
+.card .pbar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--acc2); width: 100%; transform: scaleX(0); transform-origin: left; z-index: 2; will-change: transform; pointer-events: none; }
+/* garis waktu video di kartu: klik / seret untuk pindah posisi */
+.card .tline { position: absolute; left: 0; right: 0; bottom: 0; height: 14px; z-index: 4; cursor: pointer; display: none; touch-action: none; }
+.card.playable .tline { display: block; }
+.card .tline::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(0, 0, 0, .55); transition: height .12s; }
+.card .tline .pbar { height: 4px; transition: height .12s; }
+.card .tline:hover::before, .card .tline.drag::before, .card .tline:hover .pbar, .card .tline.drag .pbar, .card .tline:hover .trng, .card .tline.drag .trng { height: 7px; }
+.card .tline .trng { position: absolute; bottom: 0; height: 4px; background: rgba(255, 255, 255, .16); box-shadow: 0 0 0 9999px rgba(0, 0, 0, .0); pointer-events: none; display: none; transition: height .12s; z-index: 1; }
+.card .tline .tknob { position: absolute; bottom: -2.5px; left: 0; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 2px var(--acc2), 0 1px 4px rgba(0, 0, 0, .6); opacity: 0; transition: opacity .12s; pointer-events: none; z-index: 3; }
+.card .tline:hover .tknob, .card .tline.drag .tknob { opacity: 1; }
+.card .tline .ttip { position: absolute; bottom: 12px; transform: translateX(-50%); background: rgba(10, 12, 16, .92); color: #fff; font: 700 10.5px/1 system-ui, sans-serif; padding: 3px 5px; border-radius: 4px; pointer-events: none; white-space: nowrap; display: none; z-index: 5; }
+.cbrow.tp .cb.tpb { flex: 1; padding: 0; min-width: 0; }
+.cbrow.tp .cb.tpb.play { flex: 1.4; }
+.cbrow.tp .cb.tpb.play.on { background: var(--acc2, var(--acc)); border-color: var(--acc2, var(--acc)); color: #fff; }
+.card .tpt { position: absolute; right: 4px; bottom: 9px; z-index: 3; display: none; padding: 2px 5px; border-radius: 4px; background: rgba(8, 10, 14, .78); color: #e8ebf2; font: 700 10px/1.15 ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
+.card.playable .tpt:not(:empty) { display: block; }
+.card .tpt.warn { background: rgba(170, 28, 22, .9); color: #fff; }
 .card .ameter { position: absolute; right: 6px; bottom: 6px; top: 32px; width: 5px; background: rgba(0, 0, 0, .55); border-radius: 3px; overflow: hidden; display: flex; flex-direction: column-reverse; z-index: 1; }
 .card .ameter i { display: block; background: linear-gradient(to top, #22c55e 0, #22c55e 70%, #facc15 85%, #ef4444 100%); width: 100%; height: 100%; transform: scaleY(0); transform-origin: bottom; will-change: transform; transition: transform 60ms linear; }
 .card .ctitle { display: flex; align-items: center; gap: 4px; padding: 7px 9px 3px; font-size: 12.5px; font-weight: 700; }
@@ -789,3 +805,6 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
 .upd-bar { height: 8px; border-radius: 6px; background: rgba(255,255,255,.08); overflow: hidden; }
 .upd-bar i { display: block; height: 100%; background: linear-gradient(90deg, #d4ff3f, #16e0c6); border-radius: 6px; transition: width .3s; }
 .upd-err { color: #ff9f43; font-weight: 700; }
+/* kartu video: meter audio berhenti di atas garis waktu, label waktu di sebelah kiri meter */
+.card.playable .ameter { bottom: 16px; }
+.card.playable .ameter ~ .tpt, .card.playable .tpt { right: 15px; }

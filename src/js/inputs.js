@@ -652,7 +652,11 @@
       inp = KM.getInput(inp); if (!inp) return;
       if (inp.type === 'list') { inp.rt.playing = true; if (inp.rt.cur && inp.rt.cur.kind !== 'image') inp.rt.v.play().catch(() => {}); inp.rt.t0 = KM.now(); }
       else if (inp.type === 'replay') KM.replay && KM.replay.play();
-      else { const m = KM.inputs.media(inp); if (m && m.play) m.play().catch(() => {}); }
+      else {
+        const m = KM.inputs.media(inp), p = KM.inputs.pos(inp);
+        if (p && (p.t < p.a - 0.1 || p.t >= p.b - 0.05)) m.currentTime = p.a; // di luar rentang Mark In/Out (atau sudah di akhir) → mulai dari awal
+        if (m && m.play) m.play().catch(() => {});
+      }
       KM.changed('play');
     },
     pause(inp) {
@@ -673,6 +677,29 @@
       else if (inp.type === 'replay') KM.replay && KM.replay.restart();
       else { const m = KM.inputs.media(inp); if (m && 'currentTime' in m) m.currentTime = inp.opts.markIn || 0; }
     },
+    /** posisi media yang bisa diputar: t = posisi, d = durasi, a..b = rentang putar (Mark In/Out). null bila belum siap */
+    pos(inp) {
+      if (inp.type === 'list' && (!inp.rt.cur || inp.rt.cur.kind === 'image')) return null; // item gambar: tidak ada garis waktu
+      const m = KM.inputs.media(inp); if (!m || !(m.duration > 0) || !isFinite(m.duration)) return null;
+      const lst = inp.type === 'list', mi = lst ? 0 : Math.max(0, +inp.opts.markIn || 0), mo = lst ? 0 : +inp.opts.markOut || 0;
+      const a = Math.min(mi, m.duration), b = mo > a ? Math.min(mo, m.duration) : m.duration;
+      return { t: m.currentTime || 0, d: m.duration, a, b };
+    },
+    /** lompat ke detik t (dibatasi rentang Mark In/Out). Mesin native mengikuti posisi elemen video sendiri. */
+    seek(inp, t) {
+      inp = KM.getInput(inp); if (!inp) return;
+      const m = KM.inputs.media(inp), p = KM.inputs.pos(inp); if (!m || !p) return;
+      const v = Math.max(p.a, Math.min(Math.max(p.a, p.b - 0.04), +t || 0));
+      if (Math.abs((m.currentTime || 0) - v) > 0.005) m.currentTime = v;
+    },
+    /** Stop: berhenti & kembali ke awal (Mark In / item pertama daftar putar) */
+    stop(inp) {
+      inp = KM.getInput(inp); if (!inp) return;
+      if (inp.type === 'list') { KM.inputTypes.list.go(inp, 0); KM.inputs.pause(inp); return; }
+      KM.inputs.pause(inp); KM.inputs.restart(inp);
+    },
+    /** Putar ulang: kembali ke awal lalu langsung diputar */
+    replay(inp) { inp = KM.getInput(inp); if (!inp) return; KM.inputs.restart(inp); KM.inputs.play(inp); },
     setLoop(inp, on) {
       inp.loop = on; const m = KM.inputs.media(inp);
       if (m && inp.type !== 'list') m.loop = on && !inp.opts.markOut;

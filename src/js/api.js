@@ -58,10 +58,12 @@
     Pause: (p) => { KM.inputs.pause(need(inp(p, true))); return true; },
     PlayPause: (p) => { const i = need(inp(p, true)); KM.inputs.isPlaying(i) ? KM.inputs.pause(i) : KM.inputs.play(i); return true; },
     Restart: (p) => { KM.inputs.restart(need(inp(p, true))); return true; },
+    Stop: (p) => { KM.inputs.stop(need(inp(p, true))); return true; }, // berhenti & kembali ke awal
+    PlayFromStart: (p) => { KM.inputs.replay(need(inp(p, true))); return true; }, // putar ulang dari awal
     Loop: (p) => { const i = need(inp(p, true)); KM.inputs.setLoop(i, !i.loop); return true; },
     LoopOn: (p) => { KM.inputs.setLoop(need(inp(p, true)), true); return true; },
     LoopOff: (p) => { KM.inputs.setLoop(need(inp(p, true)), false); return true; },
-    SetPosition: (p) => { const m = KM.inputs.media(need(inp(p, true))); if (m) m.currentTime = num(p.Value, 0) / 1000; return true; },
+    SetPosition: (p) => { const i = need(inp(p, true)); if (KM.inputs.pos(i)) KM.inputs.seek(i, num(p.Value, 0) / 1000); else { const m = KM.inputs.media(i); if (m) m.currentTime = num(p.Value, 0) / 1000; } return true; },
     SetRate: (p) => { const i = need(inp(p, true)); i.opts.speed = num(p.Value, 1); const m = KM.inputs.media(i); if (m) m.playbackRate = i.opts.speed; return true; },
     NextItem: (p) => { const i = need(inp(p, true)); if (i.type === 'list') KM.inputTypes.list.next(i); return true; },
     PreviousItem: (p) => { const i = need(inp(p, true)); if (i.type === 'list') KM.inputTypes.list.prev(i); return true; },
