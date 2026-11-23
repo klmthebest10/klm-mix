@@ -255,6 +255,21 @@ async function handleLicense(req, res, p) {
   if (req.method !== 'POST') return send(405, { ok: false });
   if (p === '/api/license/activate') { const b = await readJsonBody(req); const r = license.activate(b.key); notifyLicense(); return send(r.ok ? 200 : 400, r); }
   if (p === '/api/license/remove') { const r = license.remove(); notifyLicense(); return send(200, r); }
+  if (p === '/api/license/online') { // aktivasi otomatis: email pembelian lynk.id → server lisensi KLM → kunci untuk Device ID ini
+    const b = await readJsonBody(req);
+    const email = String(b.email || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return send(400, { ok: false, reason: 'Isi email yang dipakai saat membeli' });
+    let j;
+    try {
+      const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), 20000);
+      const r = await fetch(require('./license').ONLINE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, deviceId: license.deviceId() }), signal: ctl.signal });
+      clearTimeout(tm);
+      j = await r.json().catch(() => ({}));
+    } catch (e) { return send(502, { ok: false, reason: 'Tidak bisa menghubungi server lisensi. Periksa koneksi internet lalu coba lagi.' }); }
+    if (!j || !j.ok || !j.key) return send(400, { ok: false, reason: (j && j.error) || 'Aktivasi online gagal' });
+    const r = license.activate(j.key); notifyLicense();
+    return send(r.ok ? 200 : 400, Object.assign(r, { key: j.key }));
+  }
   return send(404, { ok: false });
 }
 function notifyLicense() { const m = mixer(); if (m) send(m, { t: 'license', status: license.status() }); }

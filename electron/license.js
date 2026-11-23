@@ -21,6 +21,9 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwWDhCA9YZuiehW09+R5jx7Y9mXzT
 G3okZuNedwp9Aps7GaHrfnbAxtMe3maHRzph7qjjaEB8s/ltEq630JVXjg==
 -----END PUBLIC KEY-----`;
 const PREFIX = 'KLM1';
+// aktivasi otomatis (email pembelian lynk.id → kunci lisensi untuk Device ID ini) & halaman pembelian
+const ONLINE_URL = 'https://fftmmdyvrxzrbrhdvucq.supabase.co/functions/v1/klm-activate';
+const BUY_URL = 'https://lynk.id/kholillini';
 const DAY = 86400000;
 const B32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'; // Crockford: tanpa I L O U agar tidak tertukar saat diketik
 
@@ -194,4 +197,4 @@ function lockedHtml(feature) {
 /** sumber Device ID (hw = perangkat keras, hws = serial board, win = instalasi Windows, fb = cadangan) — untuk diagnosa */
 const deviceSource = () => String(machineRaw()).split(':')[0];
 
-module.exports = { smbiosIds, deviceSource, lockedHtml, create, deviceId, parse, PUBLIC_KEY, normId, parseSmbios };
+module.exports = { ONLINE_URL, BUY_URL, smbiosIds, deviceSource, lockedHtml, create, deviceId, parse, PUBLIC_KEY, normId, parseSmbios };

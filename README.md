@@ -140,6 +140,10 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.4
+- **Aktivasi lisensi otomatis:** pembeli lisensi di lynk.id cukup membuka **🔑 Lisensi**, mengetik **email pembelian**, lalu menekan **Aktifkan otomatis**. Server lisensi memeriksa pesanan dan menerbitkan kunci untuk Device ID komputer itu (perlu internet sekali saja). Aktivasi dengan kunci manual tetap bisa.
+- Tombol **🛒 Beli lisensi** di dialog lisensi membuka halaman lynk.id.
+
 ### Baru di v1.18.3
 - **Kendali video langsung di kartu input:** garis waktu di bawah gambar bisa **diklik / diseret** untuk pindah posisi (arahkan kursor untuk melihat waktunya), plus tombol **Putar ulang dari awal ⏮**, **Play / Pause**, **Stop ⏹** (berhenti & kembali ke awal) dan **Loop** di baris tersendiri. Waktu posisi / durasi tampil di pojok gambar; 10 detik terakhir berubah merah dengan sisa waktu.
 - Mengikuti **Mark In / Out**: garis waktu, waktu, Stop & Putar ulang memakai rentang itu; Play saat video sudah di akhir otomatis mulai dari awal. Tombol Play/Pause kartu ikut berubah sendiri saat video selesai.

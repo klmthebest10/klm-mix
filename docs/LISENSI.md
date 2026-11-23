@@ -9,7 +9,16 @@ KLM memakai **lisensi offline per komputer**. Pembeli tidak perlu internet untuk
 3. KLM memeriksa tanda tangan kunci memakai **kunci publik** yang tertanam di aplikasi (`electron/license.js`). Kunci lisensi hanya sah di komputer dengan Device ID yang sama.
 4. **Tanpa lisensi**, KLM berjalan normal tanpa watermark. Yang terkunci hanya fitur premium: **UTC Acara, UTC Score, Mirroring HP, dan KLMCAM**. Bila salah satunya diklik, dialog lisensi muncul.
 
-## Alur penjualan
+## Aktivasi otomatis (lynk.id)
+
+1. Pembeli membeli produk **"Lisensi KLM — Kinetic Live Mixer"** di lynk.id.
+2. lynk.id mengirim webhook ke `https://fftmmdyvrxzrbrhdvucq.supabase.co/functions/v1/lynk-webhook`; pesanan disimpan di tabel `klm_orders` (Supabase proyek *bukukas*).
+3. Di KLM, pembeli membuka **🔑 Lisensi**, mengetik email pembelian, lalu menekan **Aktifkan otomatis**. Fungsi `klm-activate` menandatangani kunci untuk Device ID itu dengan rahasia `KLM_PRIVATE_KEY`. Satu pembelian = satu komputer; komputer yang sama boleh mengaktifkan ulang (install ulang Windows).
+4. Rahasia yang wajib diisi di Supabase → Edge Functions → Secrets: `KLM_PRIVATE_KEY` (isi file `klm-mix-private-key.pem`) dan `LYNK_MERCHANT_KEY` (merchant key dari lynk.id → Settings → Integrations → Webhook).
+
+Ganti komputer: hapus baris di `klm_licenses` untuk pesanan itu, atau terbitkan lisensi manual seperti di bawah.
+
+## Alur penjualan (manual)
 
 1. Pembeli memasang KLM, lalu membuka **Bantuan → 🔑 Lisensi** (atau **Pengaturan → Lisensi**, tombol **🔒 Aktifkan** di bar atas, atau langsung mengklik fitur yang terkunci).
 2. Pembeli menekan **Salin** dan mengirim Device ID ke Anda.

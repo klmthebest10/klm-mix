@@ -37,6 +37,12 @@
     if (r.status) L.set(r.status);
     return r;
   };
+  L.online = async function (email) {
+    const r = await post('/api/license/online', { email: String(email || '').trim() });
+    if (r.status) L.set(r.status);
+    return r;
+  };
+  L.BUY_URL = 'https://lynk.id/kholillini';
   L.remove = async function () { const r = await post('/api/license/remove'); if (r.status) L.set(r.status); return r; };
 
   // ---------- fitur premium yang terkunci tanpa lisensi ----------
@@ -89,6 +95,15 @@
       if (r.ok) { msg.style.color = '#2ecc71'; msg.textContent = '✓ Lisensi aktif. Terima kasih!'; KM.toast('Lisensi KLM aktif — semua fitur terbuka', 'ok', 5000); setTimeout(() => render(), 600); }
       else { msg.style.color = '#ff6b6b'; msg.textContent = r.reason || 'Aktivasi gagal'; }
     };
+    const mailIn = h('input', { type: 'email', placeholder: 'Email yang dipakai saat membeli di lynk.id', style: { flex: '1', minWidth: '220px' } });
+    const msg2 = h('div', { style: { minHeight: '20px', fontWeight: '700', marginTop: '6px' } });
+    const doOnline = async () => {
+      msg2.style.color = 'var(--tx2)'; msg2.textContent = 'Menghubungi server lisensi…';
+      const r = await L.online(mailIn.value);
+      if (r.ok) { msg2.style.color = '#2ecc71'; msg2.textContent = '✓ Lisensi aktif. Terima kasih!'; KM.toast('Lisensi KLM aktif — semua fitur terbuka', 'ok', 5000); setTimeout(() => render(), 600); }
+      else { msg2.style.color = '#ff6b6b'; msg2.textContent = r.reason || 'Aktivasi gagal'; }
+    };
+    const openBuy = () => window.open(L.BUY_URL, '_blank'); // Electron membukanya di browser bawaan
     function render() {
       const s = L.status || {};
       const head = s.licensed
@@ -103,13 +118,18 @@
             s.reason && s.reason !== 'Belum diaktifkan' ? h('p', { style: { color: '#ff9f43', fontWeight: '700' } }, s.reason) : null);
       box.replaceChildren(head,
         h('div.sec', h('h4', 'Device ID komputer ini'), idBox,
-          h('p.muted', 'Kirim Device ID ini ke penjual untuk mendapatkan kunci lisensi. Satu lisensi hanya berlaku untuk satu komputer.')),
+          h('p.muted', 'Satu lisensi berlaku untuk satu komputer. Aktivasi otomatis memakai Device ID ini; bila perlu bantuan, kirim Device ID ke penjual.')),
         s.licensed
           ? h('div.sec', h('button.btn', { onclick: async () => { if (confirm('Hapus lisensi dari komputer ini? UTC Acara, UTC Score, Mirroring HP & KLMCAM akan terkunci lagi.')) { await L.remove(); render(); } } }, 'Hapus lisensi dari komputer ini'))
-          : h('div.sec', h('h4', 'Masukkan kunci lisensi'), keyIn, fileIn,
+          : h('div', h('div.sec', h('h4', '⚡ Aktivasi otomatis (sudah membeli)'),
+              h('p.muted', 'Masukkan email yang Anda pakai saat membeli lisensi di lynk.id. Perlu internet sekali ini saja; setelah aktif KLM berjalan offline.'),
+              h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } },
+                mailIn, h('button.btn.pri', { onclick: doOnline }, 'Aktifkan otomatis'),
+                h('button.btn', { onclick: openBuy }, '🛒 Beli lisensi (Rp100.000)')), msg2),
+            h('div.sec', h('h4', 'Atau masukkan kunci lisensi'), keyIn, fileIn,
               h('div', { style: { display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' } },
                 h('button.btn.pri', { onclick: doActivate }, 'Aktifkan'),
-                h('button.btn', { onclick: () => fileIn.click() }, 'Buka file .klmlic…'), msg)));
+                h('button.btn', { onclick: () => fileIn.click() }, 'Buka file .klmlic…'), msg))));
     }
     render();
     L._render = render;
