@@ -140,6 +140,9 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.5
+- Perbaikan: setelah lisensi diaktifkan (otomatis maupun manual), grafis UTC Acara / UTC Score di Program langsung terbuka tanpa perlu menutup KLM — sebelumnya masih menampilkan layar "memerlukan lisensi".
+
 ### Baru di v1.18.4
 - **Aktivasi lisensi otomatis:** pembeli lisensi di lynk.id cukup membuka **🔑 Lisensi**, mengetik **email pembelian**, lalu menekan **Aktifkan otomatis**. Server lisensi memeriksa pesanan dan menerbitkan kunci untuk Device ID komputer itu (perlu internet sekali saja). Aktivasi dengan kunci manual tetap bisa.
 - Tombol **🛒 Beli lisensi** di dialog lisensi membuka halaman lynk.id.

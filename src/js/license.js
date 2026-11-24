@@ -19,7 +19,12 @@
     document.body && document.body.classList.toggle('lic-locked', L.demo);
     try { if (KM.state && !KM.state.inputs.length && KM.changed) KM.changed('inputs'); } catch (e) {}
     KM.changed && KM.changed('license');
-    if (wasDemo && !L.demo && KM.ui && KM.ui.reloadUtcFrames) setTimeout(() => { try { KM.ui.reloadUtcFrames(); } catch (e) {} }, 300);
+    // status berubah → muat ulang panel UTC DAN renderer grafis UTC di Program (sebelumnya masih menampilkan halaman "terkunci")
+    if (wasDemo !== L.demo) setTimeout(() => {
+      try { KM.ui && KM.ui.reloadUtcFrames && KM.ui.reloadUtcFrames(); } catch (e) {}
+      try { KM.utc && KM.utc.reload && KM.utc.reload(); } catch (e) {}
+      try { KM.score && KM.score.reload && KM.score.reload(); } catch (e) {}
+    }, 300);
   };
   L.refresh = async function () {
     try { const r = await fetch('/api/license', { cache: 'no-store' }); if (!r.ok) throw new Error('HTTP ' + r.status); L.set(await r.json()); }
