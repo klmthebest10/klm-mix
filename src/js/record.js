@@ -271,7 +271,7 @@
   R.tvStep = '';
   R.tvConnect = async function () {
     if (!KM.isElectron) { KM.toast('Sambungan Layar TV hanya di KLM versi PC (Windows)', 'warn'); return false; }
-    if (!(KM.tvout && KM.tvout.owner())) { KM.toast('Layar TV Masjid hanya untuk pemilik KLM', 'warn'); return false; }
+    if (!(KM.tvout && KM.tvout.owner())) { KM.toast('Layar TV Masjid adalah fitur khusus — perlu lisensi dengan fitur Layar TV Masjid', 'warn'); return false; }
     if (tvBusy) return false;
     tvBusy = true;
     const step = (t) => { R.tvStep = t; KM.changed('srt'); if (t) KM.toast('📺 ' + t, 'info', 6000); };

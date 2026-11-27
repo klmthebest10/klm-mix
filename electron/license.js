@@ -147,6 +147,9 @@ function create({ configDir }) {
   // Fitur KHUSUS PEMILIK (Layar TV Masjid): hanya untuk lisensi pemilik — nomor seri lisensi pemilik, atau lisensi yang
   // diterbitkan dengan paket "Pemilik". Lisensi ditandatangani kunci privat penjual & terikat Device ID, jadi tidak bisa dipalsukan.
   const OWNER_SERIALS = ['KMMWM90BJA16E5'];
+  // FITUR KHUSUS per lisensi: penjual bisa memberi fitur tertentu untuk perangkat / lisensi tertentu (payload "f": ["tv", …]).
+  // Pemilik otomatis mendapat semua fitur khusus. Lisensi biasa (termasuk aktivasi otomatis lynk.id) tidak punya fitur khusus.
+  const FEATURES = { tv: 'Layar TV Masjid' };
   const isOwner = (st) => !!(st && (OWNER_SERIALS.includes(String(st.serial || '').toUpperCase()) || /^(pemilik|owner)$/i.test(String(st.plan || '').trim())));
   let cache = null, cacheAt = 0;
   function status() {
@@ -156,7 +159,7 @@ function create({ configDir }) {
   }
   const licensed = () => !!status().licensed;
   function computeStatus() {
-    const st = { licensed: false, demo: true, owner: false, deviceId: deviceId(), name: '', plan: '', issued: 0, expires: 0, serial: '', reason: '' };
+    const st = { licensed: false, demo: true, owner: false, features: [], deviceId: deviceId(), name: '', plan: '', issued: 0, expires: 0, serial: '', reason: '' };
     const saved = read();
     if (!saved || !saved.key) { st.reason = 'Belum diaktifkan'; return st; }
     const now = Date.now();
@@ -166,6 +169,8 @@ function create({ configDir }) {
     if (!saved.seen || now > saved.seen) write(Object.assign(saved, { seen: now })); // pengaman jam mundur
     st.licensed = true; st.demo = false; st.reason = '';
     st.owner = isOwner(st);
+    const f = Array.isArray(r.payload.f) ? r.payload.f.map((x) => String(x).toLowerCase()) : [];
+    st.features = Object.keys(FEATURES).filter((k) => st.owner || f.includes(k) || f.includes('*'));
     return st;
   }
 
@@ -182,7 +187,9 @@ function create({ configDir }) {
   function remove() { try { fs.unlinkSync(file()); } catch (e) {} cache = null; return { ok: true, status: status() }; }
 
   const owner = () => !!status().owner;
-  return { status, licensed, owner, activate, remove, deviceId, parse };
+  /** lisensi ini boleh memakai fitur khusus `f` (mis. 'tv') — pemilik, atau lisensi yang diterbitkan dengan fitur itu */
+  const can = (f) => { const st = status(); return !!(st.licensed && st.features.includes(f)); };
+  return { status, licensed, owner, can, activate, remove, deviceId, parse, FEATURES };
 }
 
 /** halaman pengganti untuk fitur yang terkunci (dibuka dari browser / HP) */

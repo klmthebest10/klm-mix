@@ -59,6 +59,20 @@ node tools/license/klm-license.js verify lisensi-KLM-8VCZ-GHXH-EV49-F6ZC.klmlic
 
 Setiap lisensi yang dibuat lewat CLI juga dicatat ke `lisensi-terbit.csv`.
 
+## Lisensi khusus (fitur tertentu untuk perangkat tertentu)
+
+Fitur khusus — saat ini **📺 Layar TV Masjid** — tidak ikut di lisensi biasa (termasuk aktivasi otomatis lynk.id).
+Untuk memberikannya ke perangkat / pengguna tertentu, buat lisensi khusus untuk Device ID-nya:
+
+- **Halaman pembuat lisensi:** centang **"📺 Fitur khusus: Layar TV Masjid"** sebelum menekan *Buat lisensi*. Pesan untuk pembeli
+  otomatis menyebut fiturnya, dan riwayat menandai lisensi itu dengan label **📺 TV** (ikut di ekspor/impor CSV, kolom `fitur`).
+- **Baris perintah:** `node tools/license/klm-license.js issue KLM-XXXX-XXXX-XXXX-XXXX --name "Masjid Al-Ikhlas" --fitur tv`
+
+Pengguna yang sudah punya lisensi biasa cukup memasukkan kunci khusus yang baru (menggantikan yang lama) di 🔑 Lisensi.
+Dialog lisensi di KLM lalu menampilkan "Fitur khusus: 📺 Layar TV Masjid" dan bagian itu muncul di Pengaturan › SRT / TV.
+Fitur tersimpan di dalam kunci yang ditandatangani & terikat Device ID, jadi tidak bisa ditambahkan sendiri oleh pengguna.
+Lisensi berpaket **Pemilik** otomatis mendapat semua fitur khusus. Perlu KLM v1.18.6 atau lebih baru.
+
 ## Menjaga kunci privat
 
 - **Siapa pun yang memegang kunci privat bisa membuat lisensi KLM.** Simpan di tempat aman dan buat cadangan (flashdisk, penyimpanan terenkripsi).

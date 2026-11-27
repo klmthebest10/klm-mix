@@ -2,7 +2,8 @@
 /* KLM (Kinetic Live Mixer) - alat penjual: buat kunci lisensi per perangkat (TIDAK ikut dalam aplikasi yang dijual)
  *
  *   node klm-license.js keygen  [folder]                      → buat pasangan kunci baru (privat + publik)
- *   node klm-license.js issue   <DEVICE-ID> --name "Pembeli" [--plan Pro] [--key kunci-privat.pem] [--out file.klmlic]
+ *   node klm-license.js issue   <DEVICE-ID> --name "Pembeli" [--plan Pro] [--fitur tv] [--key kunci-privat.pem] [--out file.klmlic]
+ *                               --fitur tv  = fitur khusus Layar TV Masjid untuk perangkat ini saja (pisahkan koma bila lebih dari satu)
  *   node klm-license.js verify  <KUNCI | file.klmlic> [--pub kunci-publik.pem]
  *
  * Kunci privat default dicari di:  KLM_LICENSE_KEY (env)  →  ./klm-mix-private-key.pem  →  ~/klm-license-keys/klm-mix-private-key.pem
@@ -50,13 +51,17 @@ if (cmd === 'keygen') {
   const days = +opt('days', 0);
   const now = Date.now();
   const payload = { v: 1, d: dev, n: name, p: opt('plan', 'Pro'), i: now, e: days > 0 ? now + days * 86400000 : 0, s: 'KM' + now.toString(36).toUpperCase() + crypto.randomBytes(2).toString('hex').toUpperCase() };
+  const FITUR = { tv: 'Layar TV Masjid' };
+  const fit = String(opt('fitur', '')).toLowerCase().split(/[,\s]+/).filter(Boolean);
+  for (const f of fit) if (!FITUR[f]) die('Fitur tidak dikenal: ' + f + ' (pilihan: ' + Object.keys(FITUR).join(', ') + ')');
+  if (fit.length) payload.f = [...new Set(fit)];
   const head = 'KLM1.' + b64u(JSON.stringify(payload));
   const sig = crypto.sign('sha256', Buffer.from(head), { key: fs.readFileSync(findPrivate()), dsaEncoding: 'ieee-p1363' });
   const key = head + '.' + b64u(sig);
   const out = opt('out', 'lisensi-' + dev + '.klmlic');
   fs.writeFileSync(out, key + '\n');
-  try { fs.appendFileSync('lisensi-terbit.csv', [new Date(now).toISOString(), payload.s, dev, JSON.stringify(name), payload.p, payload.e ? new Date(payload.e).toISOString().slice(0, 10) : 'seumur-hidup'].join(',') + '\n'); } catch (e) {}
-  console.log('✓ Lisensi untuk ' + name + ' (' + dev + ')' + (payload.e ? ' berlaku sampai ' + new Date(payload.e).toLocaleDateString('id-ID') : ' — seumur hidup') + '\n  File: ' + out + '\n\n' + key);
+  try { fs.appendFileSync('lisensi-terbit.csv', [new Date(now).toISOString(), payload.s, dev, JSON.stringify(name), payload.p, payload.e ? new Date(payload.e).toISOString().slice(0, 10) : 'seumur-hidup', (payload.f || []).join('+')].join(',') + '\n'); } catch (e) {}
+  console.log('✓ Lisensi untuk ' + name + ' (' + dev + ')' + (payload.e ? ' berlaku sampai ' + new Date(payload.e).toLocaleDateString('id-ID') : ' — seumur hidup') + (payload.f ? '\n  Fitur khusus: ' + payload.f.map((f) => FITUR[f]).join(', ') : '') + '\n  File: ' + out + '\n\n' + key);
 } else if (cmd === 'verify') {
   let key = args[1] || '';
   if (fs.existsSync(key)) key = fs.readFileSync(key, 'utf8');

@@ -140,6 +140,9 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.18.6
+- **Lisensi khusus:** penjual bisa memberi fitur tertentu untuk perangkat / lisensi tertentu (dialog Lisensi menampilkan "Fitur khusus"). Lisensi biasa tidak berubah.
+
 ### Baru di v1.18.5
 - Perbaikan: setelah lisensi diaktifkan (otomatis maupun manual), grafis UTC Acara / UTC Score di Program langsung terbuka tanpa perlu menutup KLM — sebelumnya masih menampilkan layar "memerlukan lisensi".
 

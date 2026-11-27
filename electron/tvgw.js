@@ -121,9 +121,9 @@ async function install(onStep) {
 }
 
 function register(ipcMain, isOwner) {
-  // Layar TV Masjid = fitur khusus pemilik: tanpa lisensi pemilik semua perintah gateway ditolak
+  // Layar TV Masjid = fitur khusus: tanpa lisensi pemilik / lisensi berfitur Layar TV semua perintah gateway ditolak
   const ok = () => !isOwner || isOwner();
-  const deny = { ok: false, msg: 'Layar TV Masjid hanya untuk pemilik KLM' };
+  const deny = { ok: false, msg: 'Layar TV Masjid adalah fitur khusus — perlu lisensi dengan fitur Layar TV Masjid' };
   ipcMain.handle('tvgw:find', (e, o) => ok() ? find(o || {}) : Object.assign({ local: deny }, deny));
   ipcMain.handle('tvgw:start', () => ok() ? start() : deny);
   ipcMain.handle('tvgw:install', (e) => ok() ? install((t) => { try { e.sender.send('tvgw:step', t); } catch (x) {} }) : deny);

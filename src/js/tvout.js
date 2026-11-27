@@ -6,7 +6,8 @@
   const T = KM.tvout = { peers: new Map(), seq: 0 };
   const MAX = 6; // penarik bersamaan (gateway + TV langsung) — tiap penarik satu encoder WebRTC
   // fitur KHUSUS PEMILIK: tanpa lisensi pemilik Program tidak pernah dibagikan ke Layar TV (server juga menolak WHEP)
-  const owner = () => !!(KM.license && KM.license.owner && KM.license.owner());
+  // fitur khusus: lisensi pemilik atau lisensi yang diterbitkan dengan fitur Layar TV Masjid
+  const owner = () => !!(KM.license && KM.license.can && KM.license.can('tv'));
   const on = () => owner() && KM.settings.tvOut !== false;
   T.owner = owner;
   T.on = on;

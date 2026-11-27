@@ -10,6 +10,9 @@
 
   /** lisensi pemilik KLM (fitur khusus pemilik, mis. Layar TV Masjid) — ditentukan server dari lisensi bertanda tangan */
   L.owner = () => !!(L.status && L.status.licensed && L.status.owner);
+  /** fitur khusus yang diberikan lisensi ini (mis. 'tv' = Layar TV Masjid) */
+  L.can = (f) => !!(L.status && L.status.licensed && (L.status.owner || (L.status.features || []).includes(f)));
+  const SPECIAL = { tv: '📺 Layar TV Masjid' };
   L.set = function (st) {
     const wasDemo = L.demo;
     L.status = st || null;
@@ -115,6 +118,7 @@
         ? h('div.sec', h('h4', '✓ Lisensi aktif'),
             h('div', 'Pemilik: ', h('b', s.name || '—')), s.plan ? h('div', 'Paket: ', h('b', s.plan)) : null,
             h('div', 'Terbit: ', fmtDate(s.issued)), h('div', 'Berlaku: ', h('b', s.expires ? 'sampai ' + fmtDate(s.expires) : 'seumur hidup')),
+            (s.features || []).length ? h('div', 'Fitur khusus: ', h('b', s.features.map((f) => SPECIAL[f] || f).join(', '))) : null,
             s.serial ? h('div.muted', 'Nomor lisensi: ' + s.serial) : null)
         : h('div.sec', h('h4', (L._want ? '🔒 ' + L._want + ' memerlukan lisensi' : 'KLM belum diaktifkan')),
             h('p', 'KLM tetap bisa dipakai seperti biasa tanpa watermark. Fitur premium berikut terbuka setelah lisensi diaktifkan:'),

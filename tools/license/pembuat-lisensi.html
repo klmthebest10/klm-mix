@@ -44,6 +44,10 @@
   .hhead h2 { flex: 1; margin: 0; font-size: 14px; color: var(--mut); font-weight: 700; }
   .hhead input { max-width: 240px; padding: 7px 10px; }
   .muted { color: var(--mut); font-size: 12.5px; }
+  .fit { margin-top: 12px; padding: 10px 12px; border: 1px dashed #3a4252; border-radius: 10px; }
+  .ck { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; font-size: 14px; line-height: 1.45; margin: 0; }
+  .ck input { width: 18px; height: 18px; margin-top: 2px; flex: none; }
+  .tagf { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: #3b2d0a; color: #fcd27d; font-size: 11.5px; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -66,6 +70,9 @@
     <div class="row">
       <div><label for="name">Nama pembeli (boleh dikosongkan)</label><input id="name" placeholder="mis. Masjid Agung Al-Ikhlas" autocomplete="off"></div>
       <button class="pri" id="issue" disabled>Buat lisensi</button>
+    </div>
+    <div class="fit">
+      <label class="ck"><input type="checkbox" id="fTv"> <span><b>📺 Fitur khusus: Layar TV Masjid</b> — hanya untuk perangkat ini (lisensi biasa tidak mendapat fitur ini)</span></label>
     </div>
     <details>
       <summary>Lanjutan</summary>
@@ -232,30 +239,34 @@ async function issue() {
   const now = Date.now();
   const rnd = Array.from(crypto.getRandomValues(new Uint8Array(2)), (b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
   const payload = { v: 1, d: dev, n: name, p: plan, i: now, e: 0, s: 'KM' + now.toString(36).toUpperCase() + rnd };
+  const fit = $('#fTv').checked ? ['tv'] : [];
+  if (fit.length) payload.f = fit; // fitur khusus hanya untuk Device ID ini
   const head = 'KLM1.' + b64uStr(JSON.stringify(payload));
   try {
     const sig = await crypto.subtle.sign(SIG, privKey, new TextEncoder().encode(head));
     if (!(await crypto.subtle.verify(SIG, pubKey, sig, new TextEncoder().encode(head)))) throw new Error('tanda tangan tidak lolos pemeriksaan');
     const key = head + '.' + b64u(sig);
-    const h = hist(); h.unshift({ t: now, n: name, d: dev, p: plan, e: 0, s: payload.s, k: key }); saveHist(h);
-    renderHist(); showResult(dev, name, key, plan);
+    const h = hist(); h.unshift({ t: now, n: name, d: dev, p: plan, e: 0, s: payload.s, k: key, f: fit }); saveHist(h);
+    renderHist(); showResult(dev, name, key, plan, fit);
   } catch (err) { alertOut('Gagal membuat lisensi: ' + err.message); }
 }
 function alertOut(t) { $('#outCard').hidden = false; setMsg($('#outMsg'), t, false); }
-function buyerMsg(dev, name, key) {
+const FITUR = { tv: 'Layar TV Masjid' };
+function buyerMsg(dev, name, key, fit) {
   return 'Lisensi KLM (Kinetic Live Mixer)\n'
     + 'Atas nama: ' + name + '\n'
     + 'Device ID: ' + dev + '\n'
-    + 'Berlaku: seumur hidup\n\n'
+    + 'Berlaku: seumur hidup\n'
+    + ((fit || []).length ? 'Fitur khusus: ' + fit.map((f) => FITUR[f] || f).join(', ') + ' (Pengaturan › SRT / TV)\n' : '') + '\n'
     + 'Kunci lisensi:\n' + key + '\n\n'
     + 'Cara aktivasi:\n'
     + '1. Buka KLM, lalu klik tombol 🔒 Aktifkan di bar atas (atau menu Bantuan → 🔑 Lisensi).\n'
     + '2. Salin seluruh kunci di atas (diawali KLM1.), tempel, lalu tekan Aktifkan.\n\n'
     + 'Simpan pesan ini. Bila Windows di-install ulang, cukup masukkan kunci yang sama lagi.';
 }
-function showResult(dev, name, key, plan) {
+function showResult(dev, name, key, plan, fit) {
   cur = { dev, name, key, plan };
-  $('#out').value = buyerMsg(dev, name, key);
+  $('#out').value = buyerMsg(dev, name, key, fit);
   $('#outCard').hidden = false; $('#outMsg').textContent = '';
   setMsg($('#outMsg'), '✓ Lisensi siap untuk ' + name, true);
   $('#outCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -280,16 +291,16 @@ function renderHist() {
   if (!rows.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 5; td.className = 'muted'; td.textContent = q ? 'Tidak ada yang cocok.' : 'Belum ada lisensi yang dibuat di browser ini.'; tr.appendChild(td); tb.appendChild(tr); return; }
   for (const r of rows.slice(0, 300)) {
     const tr = document.createElement('tr');
-    [new Date(r.t).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }), r.n, r.d, r.p].forEach((v, i) => { const td = document.createElement('td'); if (i === 2) { const c = document.createElement('code'); c.textContent = v; td.appendChild(c); } else td.textContent = v; tr.appendChild(td); });
+    [new Date(r.t).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }), r.n, r.d, r.p].forEach((v, i) => { const td = document.createElement('td'); if (i === 2) { const c = document.createElement('code'); c.textContent = v; td.appendChild(c); } else td.textContent = v; if (i === 3 && (r.f || []).length) { const t = document.createElement('span'); t.className = 'tagf'; t.textContent = '📺 TV'; t.title = 'Fitur khusus: ' + r.f.map((f) => FITUR[f] || f).join(', '); td.appendChild(t); } tr.appendChild(td); });
     const td = document.createElement('td'); const b = document.createElement('button'); b.className = 'sm'; b.textContent = 'Kirim ulang';
-    b.onclick = () => showResult(r.d, r.n, r.k, r.p); td.appendChild(b); tr.appendChild(td);
+    b.onclick = () => showResult(r.d, r.n, r.k, r.p, r.f); td.appendChild(b); tr.appendChild(td);
     tb.appendChild(tr);
   }
 }
 $('#q').addEventListener('input', renderHist);
 const csvQ = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
 $('#csv').onclick = () => {
-  const rows = [['tanggal', 'pembeli', 'device_id', 'paket', 'berlaku_sampai', 'serial', 'kunci']].concat(hist().map((r) => [new Date(r.t).toISOString(), r.n, r.d, r.p, r.e ? new Date(r.e).toISOString().slice(0, 10) : 'selamanya', r.s, r.k]));
+  const rows = [['tanggal', 'pembeli', 'device_id', 'paket', 'berlaku_sampai', 'serial', 'kunci', 'fitur']].concat(hist().map((r) => [new Date(r.t).toISOString(), r.n, r.d, r.p, r.e ? new Date(r.e).toISOString().slice(0, 10) : 'selamanya', r.s, r.k, (r.f || []).join('+')]));
   download('lisensi-klm-' + new Date().toISOString().slice(0, 10) + '.csv', '\ufeff' + rows.map((r) => r.map(csvQ).join(',')).join('\n'), 'text/csv');
 };
 // impor CSV hasil ekspor (mis. pindah komputer / browser)
@@ -303,7 +314,7 @@ $('#impFile').onchange = async (e) => {
   for (const r of rows) {
     const k = r[ix('kunci')]; if (!k || !/^KLM1\./.test(k)) continue;
     const s = r[ix('serial')]; if (have.has(s)) continue;
-    h.push({ t: Date.parse(r[ix('tanggal')]) || Date.now(), n: r[ix('pembeli')], d: r[ix('device_id')], p: r[ix('paket')] || 'Pro', e: 0, s, k }); have.add(s); n++;
+    h.push({ t: Date.parse(r[ix('tanggal')]) || Date.now(), n: r[ix('pembeli')], d: r[ix('device_id')], p: r[ix('paket')] || 'Pro', e: 0, s, k, f: ix('fitur') >= 0 && r[ix('fitur')] ? r[ix('fitur')].split('+').filter(Boolean) : [] }); have.add(s); n++;
   }
   h.sort((a, b) => b.t - a.t); saveHist(h); renderHist();
   alert(n + ' lisensi diimpor ke riwayat.');

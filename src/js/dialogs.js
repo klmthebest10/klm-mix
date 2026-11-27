@@ -805,7 +805,7 @@
           !KM.isElectron ? h('div.sec', h('p', '⚠ Output SRT memerlukan versi PC (.exe) — memakai ffmpeg bawaan.')) : null,
           h('div.sec', h('h4', '📡 Status SRT'), stBox, h('div', { style: { marginTop: '10px' } }, urlBox),
             h('p.muted', 'Program dikirim realtime ke gateway / decoder TV (Haivision, Kiloview, Magewell, Matrox, OBS, Wowza, dll). Berjalan terpisah dari tombol Stream — bisa bersamaan.')),
-          !(KM.tvout && KM.tvout.owner()) ? null : h('div.sec', h('h4', '📺 Layar TV Masjid — khusus pemilik'),
+          !(KM.tvout && KM.tvout.owner()) ? null : h('div.sec', h('h4', '📺 Layar TV Masjid — fitur khusus lisensi Anda'),
             chk('Tampilkan Program di Layar TV Masjid — otomatis selama KLM terbuka, tanpa SRT', KM.tvout ? KM.tvout.on() : true, (v) => { KM.tvout && KM.tvout.set(v); show('srt'); }),
             row('', h('button.btn.pri', { title: 'Memastikan gateway Layar TV di PC ini menyala & versi baru (memasang / memperbarui bila perlu) supaya TV di jaringan lain juga menampilkan Program KLM. TV satu Wi-Fi menampilkan langsung dari KLM.', onclick: async () => { await R.tvConnect(); show('srt'); } }, '📺 Sambungkan ke Layar TV Masjid'),
               h('span.muted', (() => { const n = KM.tvout ? KM.tvout.count() : 0; return n ? '🟢 ' + n + ' penarik tersambung (' + KM.tvout.list().join(', ') + ')' : 'Belum ada TV / gateway yang menarik'; })()))),
