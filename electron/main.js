@@ -1271,7 +1271,8 @@ function smokeTest() {
         await new Promise((r) => setTimeout(r, 400));
         const prog = KM.state.programId === ids[2];
         L.on = false; KM.ui.applyLayout(); ids.forEach((id) => KM.inputs.remove(KM.getInput(id)));
-        return JSON.stringify({ inList, inGrid, pgmW: Math.round(pg.width), sideRight: sc.left > pg.right, prog });
+        const wide = innerWidth >= 1100 && innerWidth > innerHeight; // jendela sempit/tegak: grid tersusun di bawah Program
+        return JSON.stringify({ inList, inGrid, pgmW: Math.round(pg.width), win: innerWidth + 'x' + innerHeight, sideRight: wide ? sc.left >= pg.right : sc.top >= pg.bottom, prog });
       })()`));
       log('tata letak program besar: ' + JSON.stringify(bl));
       if (bl.inList !== 0 || bl.inGrid !== 4 || !bl.sideRight || !bl.prog) { fail++; log('GAGAL: tata letak Program besar + grid preview'); }
