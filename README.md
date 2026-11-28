@@ -140,6 +140,9 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.20.0-beta.5
+Versi uji (beta, PC): di mode Program besar, kotak grid preview kini hanya berisi gambar, nama input dan gerigi ⚙ — tombol Quick / CUT / overlay 1–4 / transport tidak ditampilkan (tetap ada lewat klik kanan, gerigi, daftar input & panel). Garis waktu video di gambar tetap bisa diseret.
+
 ### Baru di v1.20.0-beta.4
 Versi uji (beta, PC):
 - **Tampilan kartu lebih bersih (semua mode):** bayangan gelap di bagian atas gambar dihapus, dan nomor input & ikon jenis input tidak lagi ditampilkan di atas gambar (daftar input, kotak grid, dan grid di monitor Preview). Lencana LIVE tetap. Nomor input tetap berlaku untuk shortcut / API.

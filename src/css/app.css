@@ -898,3 +898,7 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
 #app.lay-big .card.tile .ctitle .cset .ki { width: 14px; height: 14px; margin: 0; }
 /* mode Program besar: tidak ada tombol grid di monitor Preview */
 #app.lay-big #pvwGrid { display: none !important; }
+
+/* mode Program besar: kotak grid cukup gambar + nama + gerigi — tanpa tombol Quick/CUT/overlay/transport (semua layar) */
+#app.lay-big .card.tile .cbtns, #app.lay-big .card.tile:hover .cbtns, #app.lay-big .card.tile:focus-within .cbtns { display: none !important; }
+#app.lay-big .card.tile:hover .tline { display: block; }
