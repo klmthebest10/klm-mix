@@ -552,7 +552,10 @@
   // input (grid preview). Kotak yang tidak muat di kolom samping lanjut di baris bawah Program. Input yang dipindah ke grid
   // TIDAK tampil lagi di daftar input (kartunya sendiri yang pindah — thumbnail live, tombol & garis waktu ikut).
   // Klik 1× = Preview, klik 2× cepat = langsung Program (atau mode "klik 1× = Program").
-  function LAY() { return (KM.settings.bigLayout = Object.assign({ on: false, side: 'right', pvw: false, click: 'pvw', cols: 1 }, KM.settings.bigLayout || {})); }
+  // SATU objek tetap (KM.settings.bigLayout) — dulu tiap panggilan membuat objek baru, sehingga pilihan di menu Tata letak
+  // mengubah salinan lama dan tidak pernah tersimpan / berlaku
+  const LAY_DEF = { on: false, side: 'right', pvw: false, click: 'pvw', cols: 1 };
+  function LAY() { const L = KM.settings.bigLayout && typeof KM.settings.bigLayout === 'object' ? KM.settings.bigLayout : (KM.settings.bigLayout = {}); for (const k in LAY_DEF) if (!(k in L)) L[k] = LAY_DEF[k]; return L; }
   UI.layout = LAY;
   function setThumbRes(inp, w) { const cv = inp.rt.thumb; if (!cv || cv.width === w) return; cv.width = w; cv.height = Math.round(w * 9 / 16); inp.rt.thumbAt = 0; }
   const portraitLay = () => window.innerWidth < 1100 || window.innerHeight > window.innerWidth;

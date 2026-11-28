@@ -1262,7 +1262,10 @@ function smokeTest() {
       const bl = JSON.parse(await js(`(async () => {
         const ids = []; for (let i = 0; i < 4; i++) ids.push(KM.inputs.create('colour', { title: 'Grid ' + i, opts: { color: '#3366cc' } }).id); KM.changed('inputs');
         await new Promise((r) => setTimeout(r, 300));
-        ids.forEach((id) => { KM.getInput(id).tile = 1; }); const L = KM.ui.layout(); L.on = true; L.side = 'right'; KM.ui.applyLayout(); KM.changed('inputs');
+        ids.forEach((id) => { KM.getInput(id).tile = 1; }); KM.changed('inputs');
+        // dipilih lewat MENU Tata letak (seperti pengguna), bukan diset langsung
+        const mb = [...document.querySelectorAll('#layMenu button')].find((b) => /di kanan/.test(b.textContent)); if (mb) mb.click();
+        const L = KM.ui.layout(); const menuOk = !!mb && L.on === true && L.side === 'right';
         await new Promise((r) => setTimeout(r, 900));
         const inList = ids.filter((id) => document.querySelector('#inputs .card[data-id="' + id + '"]')).length;
         const inGrid = ids.filter((id) => document.querySelector('#sideCol .card.tile[data-id="' + id + '"], #tilesRow .card.tile[data-id="' + id + '"]')).length;
@@ -1272,10 +1275,10 @@ function smokeTest() {
         const prog = KM.state.programId === ids[2];
         L.on = false; KM.ui.applyLayout(); ids.forEach((id) => KM.inputs.remove(KM.getInput(id)));
         const wide = innerWidth >= 1100 && innerWidth > innerHeight; // jendela sempit/tegak: grid tersusun di bawah Program
-        return JSON.stringify({ inList, inGrid, pgmW: Math.round(pg.width), win: innerWidth + 'x' + innerHeight, sideRight: wide ? sc.left >= pg.right : sc.top >= pg.bottom, prog });
+        return JSON.stringify({ menuOk, inList, inGrid, pgmW: Math.round(pg.width), win: innerWidth + 'x' + innerHeight, sideRight: wide ? sc.left >= pg.right : sc.top >= pg.bottom, prog });
       })()`));
       log('tata letak program besar: ' + JSON.stringify(bl));
-      if (bl.inList !== 0 || bl.inGrid !== 4 || !bl.sideRight || !bl.prog) { fail++; log('GAGAL: tata letak Program besar + grid preview'); }
+      if (!bl.menuOk || bl.inList !== 0 || bl.inGrid !== 4 || !bl.sideRight || !bl.prog) { fail++; log('GAGAL: tata letak Program besar + grid preview'); }
     } catch (e) { fail++; log('GAGAL tata letak program besar: ' + e.message); }
     // --- urutan penutupan: rekaman yang sedang jalan harus selesai tertulis sebelum keluar ---
     try {
