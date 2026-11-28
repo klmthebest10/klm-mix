@@ -140,6 +140,9 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.19.1
+- Perbaikan: KLMCAM kembali tampil di mesin video native (pekerja frame gagal dimuat di v1.19.0).
+
 ### Baru di v1.19.0
 **KLMCAM lebih real-time, lebih tajam, tetap ringan** (pasang juga APK KLM HP v1.19.0):
 - **Penguat koneksi Wi-Fi** (aktif bawaan): di aplikasi HP, Wi-Fi dikunci mode **latensi rendah** selama kamera mengirim (hemat daya Wi-Fi mati, paket tidak ditahan radio). Bitrate otomatis dijaga di bawah kemampuan jaringan yang terukur → tidak ada antrean paket, gambar tetap real-time. HP & panel KLMCAM menampilkan sinyal Wi-Fi (dBm, 2,4/5 GHz, kecepatan) dan memberi saran bila sinyal lemah / memakai 2,4 GHz untuk kualitas tinggi.

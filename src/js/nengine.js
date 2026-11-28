@@ -836,10 +836,10 @@ function glInit() {
   const cv = new OffscreenCanvas(4, 4), gl = cv.getContext('webgl2', { antialias: false, depth: false, stencil: false, alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
   if (!gl) throw new Error('webgl2');
   const sh = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
-  const vs = '#version 300 es\nvoid main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));gl_Position=vec4(p*2.0-1.0,0.0,1.0);}';
+  const vs = '#version 300 es\\nvoid main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));gl_Position=vec4(p*2.0-1.0,0.0,1.0);}';
   // satu gambar RGBA8 lebar W/4, tinggi H*1.5: baris 0..H-1 = bidang Y (4 piksel per texel), sisanya = bidang UV (2 pasang per texel)
   // → hasil readPixels persis tata letak NV12. BT.709 rentang terbatas. u_o = jarak 4 sadapan (rata-rata) saat diperkecil jauh.
-  const fs = '#version 300 es\nprecision highp float;uniform sampler2D s;uniform vec2 wh;uniform vec2 o;out vec4 c;'
+  const fs = '#version 300 es\\nprecision highp float;uniform sampler2D s;uniform vec2 wh;uniform vec2 o;out vec4 c;'
     + 'vec3 px(vec2 u){return 0.25*(texture(s,u+vec2(-o.x,-o.y)).rgb+texture(s,u+vec2(o.x,-o.y)).rgb+texture(s,u+vec2(-o.x,o.y)).rgb+texture(s,u+vec2(o.x,o.y)).rgb);}'
     + 'float Y(vec3 p){return dot(p,vec3(0.2126,0.7152,0.0722));}'
     + 'void main(){float X=floor(gl_FragCoord.x),R=floor(gl_FragCoord.y);'
