@@ -355,7 +355,7 @@
       e.preventDefault(); e.stopPropagation();
       const src = KM.getInput(id); if (!src || src === inp) return;
       const arr = S.inputs; arr.splice(arr.indexOf(src), 1); arr.splice(arr.indexOf(inp), 0, src);
-      if (LAY().on) { if (card._tile) src.tile = 1; else delete src.tile; } // dijatuhkan di grid ↔ daftar input = pindah tempat
+      if (LAY().on) { if (card._tile) { if (!src.tile && tileCount() >= UI.tileMax()) UI.tileFull(); else src.tile = 1; } else delete src.tile; } // dijatuhkan di grid ↔ daftar input = pindah tempat
       KM.changed('inputs');
     });
     return card;
@@ -376,11 +376,12 @@
   }
   UI.renderCards = function () {
     const box = $('#inputs');
-    const want = [], tiles = [], big = LAY().on;
+    const want = [], tiles = [], big = LAY().on, maxT = UI.tileMax();
     S.inputs.forEach((inp, idx) => {
       let card = inp.rt.card;
       if (!card || card._inp !== inp) card = inp.rt.card = buildCard(inp);
       patchCard(card, inp, idx);
+      if (big && inp.tile && tiles.length >= maxT) { delete inp.tile; UI.tileFull(); } // grid penuh (maks 6) → tetap di daftar input
       const tile = !!(big && inp.tile);
       if (card._tile !== tile) { card._tile = tile; card._sbox = null; card.classList.toggle('tile', tile); setThumbRes(inp, tile ? 512 : 256); }
       (tile ? tiles : want).push(card);
@@ -554,8 +555,14 @@
   UI.layout = LAY;
   function setThumbRes(inp, w) { const cv = inp.rt.thumb; if (!cv || cv.width === w) return; cv.width = w; cv.height = Math.round(w * 9 / 16); inp.rt.thumbAt = 0; }
   const portraitLay = () => window.innerWidth < 1100 || window.innerHeight > window.innerWidth;
+  /** grid preview maksimal 6 sel (3 baris × 2 kolom); monitor Preview kecil memakai 1 sel */
+  UI.tileMax = () => 6 - (LAY().pvw ? 1 : 0);
+  const tileCount = () => S.inputs.filter((i) => i.tile).length;
+  let fullAt = 0;
+  UI.tileFull = () => { if (Date.now() - fullAt > 3000) { fullAt = Date.now(); KM.toast('Grid preview penuh — maksimal ' + UI.tileMax() + ' input. Kembalikan salah satu ke daftar input dulu.', 'warn'); } };
   UI.setTile = (inp, on) => {
     inp = KM.getInput(inp); if (!inp) return;
+    if (on && !inp.tile && LAY().on && tileCount() >= UI.tileMax()) return UI.tileFull();
     if (on) inp.tile = 1; else delete inp.tile;
     if (on && !LAY().on) { LAY().on = true; KM.saveSettings(); UI.applyLayout(); KM.toast('Tata letak "Program besar + grid preview" diaktifkan'); }
     KM.changed('inputs');
@@ -567,20 +574,34 @@
     for (const bx of [sb, rb]) [...bx.children].forEach((el) => { if (el._inp && !keep.has(el)) el.remove(); if (!el._inp && el.classList.contains('tile-hint') && tiles.length) el.remove(); });
     if (!L.on) return;
     if (!tiles.length) { if (!sb.querySelector('.tile-hint')) sb.appendChild(h('div.tile-hint', KI.el('grid'), h('b', 'Grid preview kosong'), h('span', 'Seret kartu input ke sini, atau klik kanan input → "Pindah ke grid preview". Input yang dipindah tidak tampil lagi di daftar input.'))); rb.hidden = true; return; }
-    const k = tiles.length; // semua kotak di kolom samping (digulir bila banyak) — tidak ada kotak di bawah Program
-    const root = document.documentElement;
+    const root = document.documentElement, pv = $('#pvwBox'), pvOn = !!L.pvw;
+    // monitor Preview kecil (pilihan) = sel pertama grid; kotak-kotak input mengikutinya
+    if (pvOn) { if (pv.parentElement !== sb || sb.firstChild !== pv) sb.insertBefore(pv, sb.firstChild); }
+    else if (pv.parentElement !== $('#sideCol')) $('#sideCol').insertBefore(pv, sb);
+    const off = pvOn ? 1 : 0, items = tiles.length + off, cols = items > 3 ? 2 : 1;
+    root.style.setProperty('--scols', cols);
     if (!portraitLay()) {
-      // Program sebesar mungkin; daftar input & panel tetap ≥ ±210 px di bawah
-      const cols = Math.max(1, L.cols | 0), gap = 8, ar = (KM.settings.width || 16) / (KM.settings.height || 9);
-      const sideW = $('#sideCol').clientWidth || 300, tw = (sideW - gap * (cols - 1)) / cols;
+      // Grid 3 baris setinggi Program: ≤3 kotak = 1 kolom, 4–6 = 2 kolom (kotak sedikit lebih kecil). Ukuran Program, kolom
+      // transisi (mengisi celah, tanpa ruang kosong) & kolom grid dihitung bersamaan agar semuanya pas dalam 1 layar.
+      const gap = 8, cg = 10, ar = (KM.settings.width || 16) / (KM.settings.height || 9), k169 = 16 / 9;
+      // ukuran kartu: tepi gambar (mx kiri/kanan, mt atas) + tinggi nama — diukur dari unsur kartu (tidak ikut tinggi sel)
+      const sample = tiles.find((c) => c.isConnected && c._th && c._th.offsetWidth > 10);
+      const mx = 0, tt = sample && sample.querySelector('.ctitle'), T = (tt ? tt.offsetHeight : 26) + 2; // gambar selebar kotak, nama di bawah
       const avail = $('#app').clientHeight - $('#topbar').offsetHeight - $('#bottombar').offsetHeight;
-      const lowerMin = avail > 820 ? 210 : 160, pad = 18;
-      const colW = $('#stage').clientWidth - 20 - sideW - ($('#trans').offsetWidth || 176) - 20, maxMon = colW / ar + 40;
-      const mon = Math.max(240, Math.min(maxMon, avail - pad - lowerMin));
-      root.style.setProperty('--big-auto-h', Math.round(mon) + 'px');
-      root.style.setProperty('--tilew', Math.max(120, Math.floor(tw)) + 'px');
-    }
-    tiles.forEach((card, i) => { const bx = i < k ? sb : rb; if (card.parentElement !== bx || bx.children[i < k ? i : i - k] !== card) { card._sbox = null; bx.insertBefore(card, bx.children[i < k ? i : i - k] || null); } });
+      const lowerMin = avail > 820 ? 200 : 150, W = $('#stage').clientWidth - 20, transMin = W > 1500 ? 168 : 146;
+      const Hmax = avail - 18 - lowerMin;
+      const A = ar + cols * k169 / 3, B = W - 2 * cg - transMin - (cols - 1) * gap - cols * 2 * mx + 42 * ar - 2 + cols * k169 * (2 * gap / 3 + T);
+      const H = Math.max(260, Math.min(KM.settings.bigMonH || Hmax, B / A));
+      const P = (H - 42) * ar + 2, cellH = (H - 2 * gap) / 3, tw0 = Math.max(90, (cellH - T) * k169 + 2 * mx);
+      // kolom transisi selalu selebar minimum; sisa lebar (bila Program dibatasi tinggi layar) diberikan ke grid preview
+      const sideW = Math.max(cols * tw0 + (cols - 1) * gap, W - 2 * cg - Math.floor(P) - transMin), tw = (sideW - (cols - 1) * gap) / cols;
+      root.style.setProperty('--transw', transMin + 'px');
+      root.style.setProperty('--big-auto-h', Math.round(H) + 'px');
+      root.style.setProperty('--pgmw', Math.floor(P) + 'px');
+      root.style.setProperty('--sidew', Math.ceil(sideW) + 'px');
+      root.style.setProperty('--tilew', Math.floor(tw) + 'px');
+    } else ['--pgmw', '--sidew', '--transw'].forEach((v) => root.style.removeProperty(v));
+    tiles.forEach((card, i) => { const at = i + off; if (card.parentElement !== sb || sb.children[at] !== card) { card._sbox = null; sb.insertBefore(card, sb.children[at] || null); } });
     rb.hidden = true;
   }
   let tileRaf = 0;
@@ -588,9 +609,8 @@
   UI.applyLayout = function () {
     const L = LAY(), app = $('#app'), stage = $('#stage'), side = $('#sideCol'), pv = $('#pvwBox'); if (!side || !pv) return;
     app.classList.toggle('lay-big', !!L.on); app.classList.toggle('lay-left', !!L.on && L.side === 'left'); app.classList.toggle('lay-nopvw', !!L.on && !L.pvw);
-    app.classList.toggle('lay-c2', !!L.on && L.cols === 2);
     side.hidden = !L.on; $('#bigGrip').hidden = !L.on;
-    if (L.on) { if (pv.parentElement !== side) side.insertBefore(pv, side.firstChild); }
+    if (L.on) { if (!side.contains(pv)) side.insertBefore(pv, side.firstChild); }
     else { if (pv.parentElement !== stage) stage.insertBefore(pv, $('#trans')); $('#tilesRow').hidden = true; }
     gripApply();
     renderLayMenu();
@@ -609,11 +629,10 @@
       h('hr'), h('div.ddh', 'Grid preview'),
       it(L.click === 'pvw', 'Klik 1× = Preview, klik 2× = Program', () => set({ click: 'pvw' })),
       it(L.click === 'pgm', 'Klik 1× = langsung Program (Cut)', () => set({ click: 'pgm' })),
-      it(L.cols !== 2, 'Kolom samping: 1 kotak', () => set({ cols: 1 })),
-      it(L.cols === 2, 'Kolom samping: 2 kotak (lebih banyak)', () => set({ cols: 2 })),
-      it(L.pvw, 'Monitor Preview kecil di atas grid', () => set({ pvw: !L.pvw })),
+      it(L.pvw, 'Monitor Preview kecil di grid (memakai 1 kotak)', () => set({ pvw: !L.pvw })),
+      h('div.ddh', 'Maks. 6 kotak: ≤3 = 1 kolom, 4–6 = 2 kolom'),
       h('hr'),
-      h('button', { onclick: () => { S.inputs.forEach((i) => { i.tile = 1; }); if (!L.on) set({ on: true }); KM.changed('inputs'); } }, h('span.ck', '⊞'), h('span', 'Pindahkan semua input ke grid')),
+      h('button', { onclick: () => { let n = tileCount(); S.inputs.forEach((i) => { if (!i.tile && n < UI.tileMax()) { i.tile = 1; n++; } }); if (!L.on) set({ on: true }); KM.changed('inputs'); } }, h('span.ck', '⊞'), h('span', 'Isi grid dengan input pertama (maks. ' + UI.tileMax() + ')')),
       h('button', { onclick: () => { S.inputs.forEach((i) => { delete i.tile; }); KM.changed('inputs'); } }, h('span.ck', '↩'), h('span', 'Kembalikan semua ke daftar input')));
   }
   // tinggi Program di mode besar bisa ditarik (garis di bawah Program); klik 2× = bawaan
@@ -639,6 +658,7 @@
       el.addEventListener('drop', (e) => {
         el.classList.remove('drop-on'); const id = e.dataTransfer.getData('text/klm-input'); if (!id || !LAY().on) return;
         e.preventDefault(); const inp = KM.getInput(id); if (!inp) return;
+        if (tile && !inp.tile && tileCount() >= UI.tileMax()) return UI.tileFull();
         if (tile) inp.tile = 1; else delete inp.tile; KM.changed('inputs');
       });
     };

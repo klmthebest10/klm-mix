@@ -817,28 +817,33 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
 .ddm button .ck { width: 16px; text-align: center; color: var(--tx3); flex: none; }
 .ddm button.on .ck { color: var(--acc); }
 .ddm button small { display: block; color: var(--tx3); font-size: 11px; }
-#app.lay-big { --sidew: clamp(220px, 16vw, 340px); --mon-h: var(--big-mon-h, var(--big-auto-h, clamp(300px, calc(100vh - 46px - 54px - 300px), 70vh))); }
-#app.lay-big.lay-c2 { --sidew: clamp(380px, 29vw, 600px); }
+#app.lay-big { --mon-h: var(--big-mon-h, var(--big-auto-h, clamp(300px, calc(100vh - 46px - 54px - 300px), 70vh))); }
 /* Program | transisi (tetap di tengah, seperti tata letak awal) | grid preview — atau grid | transisi | Program */
-#app.lay-big #stage { grid-template-columns: minmax(0, 1fr) 176px var(--sidew); grid-template-rows: max-content; grid-template-areas: "pgm tr side"; align-items: start; position: relative; }
-#app.lay-big.lay-left #stage { grid-template-columns: var(--sidew) 176px minmax(0, 1fr); grid-template-areas: "side tr pgm"; }
+#app.lay-big #stage { grid-template-columns: var(--pgmw, minmax(0, 1fr)) var(--transw, minmax(140px, 1fr)) var(--sidew, clamp(220px, 16vw, 340px)); grid-template-rows: max-content; grid-template-areas: "pgm tr side"; align-items: start; position: relative; }
+#app.lay-big.lay-left #stage { grid-template-columns: var(--sidew, clamp(220px, 16vw, 340px)) var(--transw, minmax(140px, 1fr)) var(--pgmw, minmax(0, 1fr)); grid-template-areas: "side tr pgm"; }
+#app.lay-big #pgmBox { justify-self: stretch; width: auto; }
 #app.lay-big #trans { grid-area: tr; align-self: stretch; contain: size; }
-@media (max-width: 1300px) { #app.lay-big #stage { grid-template-columns: minmax(0, 1fr) 150px var(--sidew); } #app.lay-big.lay-left #stage { grid-template-columns: var(--sidew) 150px minmax(0, 1fr); } }
 #app.lay-big #pgmBox { grid-area: pgm; }
 #app.lay-big #sideCol { grid-area: side; align-self: stretch; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: hidden; contain: size; } /* tinggi = Program + transisi; isinya digulir, tidak memperbesar baris */
 #app.lay-big #sideCol[hidden] { display: none; }
-#app.lay-big #sideCol > .screen { width: 100%; justify-self: stretch; align-self: stretch; flex: none; grid-area: auto; }
-#app.lay-big.lay-nopvw #sideCol > .screen { display: none; }
+#app.lay-big #sideCol .screen.pvw { width: auto; height: 100%; justify-self: stretch; align-self: stretch; grid-area: auto; min-height: 0; }
+#app.lay-big #tilesSide > .screen .screen-head { height: 30px; gap: 6px; } #app.lay-big #tilesSide > .screen .sname { font-size: 12px; }
+#app.lay-big.lay-nopvw #pvwBox { display: none; }
 .tiles { display: grid; gap: 8px; align-content: start; min-height: 0; grid-auto-rows: max-content; }
-#tilesSide { grid-template-columns: repeat(var(--scols, 1), minmax(0, 1fr)); flex: 1; overflow-x: hidden; overflow-y: auto; border-radius: var(--r); scrollbar-width: thin; }
-#app.lay-c2 #tilesSide { --scols: 2; }
+#tilesSide { grid-template-columns: repeat(var(--scols, 1), minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); grid-auto-rows: 0; flex: 1; overflow: hidden; border-radius: var(--r); } /* 3 baris setinggi Program, maks 2 kolom */
 #app.lay-big #tilesRow { display: none !important; grid-area: auto; grid-auto-flow: column; grid-auto-columns: var(--rtilew, 220px); grid-template-columns: none; justify-content: start; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; } /* satu baris, geser ke samping bila banyak */
 #tilesRow[hidden] { display: none !important; }
 #sideCol.drop-on, #tilesRow.drop-on, #inputs.drop-on { outline: 2px dashed var(--acc); outline-offset: 2px; border-radius: var(--r); }
 .tile-hint { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 18px 14px; min-height: 140px; border: 1.5px dashed var(--line3); border-radius: var(--r); color: var(--tx3); font-size: 12px; line-height: 1.45; }
 .tile-hint .ki { width: 26px; height: 26px; color: var(--tx2); } .tile-hint b { color: var(--tx2); font-size: 13px; }
 /* kartu sebagai kotak grid: gambar + nama; tombol muncul saat kursor di atas kotak (tidak memakan ruang) */
-.card.tile { width: auto; }
+.card.tile { width: auto; min-height: 0; height: 100%; padding: 0 !important; }
+#app.lay-big #tilesSide .card.tile .ctitle { width: 100%; box-sizing: border-box; justify-content: center; }
+/* kotak grid mengisi selnya: gambar memenuhi sisa tinggi (gambar dibuat muat, tidak terdistorsi), nama di bawah */
+#app.lay-big #tilesSide .card.tile .thumb { flex: 1 1 auto; min-height: 0; width: 100%; aspect-ratio: auto; margin: 0; }
+#app.lay-big #tilesSide .card.tile .thumb canvas { object-fit: contain; background: #000; }
+#app.lay-big #tilesSide .card.tile .ctitle { flex: none; }
+#app.lay-big #inputs { --cardw: 150px; gap: 8px; } #app.lay-big #inputs .card .ctitle { font-size: 12px; padding: 5px 8px 2px; } /* daftar input sedikit lebih kecil */
 .card.tile .ctitle { padding: 5px 8px 6px; font-size: 12px; }
 .card.tile .cbtns { position: absolute; left: 0; right: 0; bottom: 0; z-index: 7; background: rgba(13, 15, 19, .94); border-top: 1px solid var(--line2); padding: 5px 6px 6px; display: none; }
 .card.tile:hover .cbtns, .card.tile:focus-within .cbtns { display: flex; }
@@ -854,11 +859,12 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
   #app.lay-big #stage, #app.lay-big.lay-left #stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: max-content; grid-template-areas: "pgm" "tr" "side"; }
   #app.lay-big #pgmBox { width: 100%; }
   #app.lay-big #sideCol { overflow: visible; contain: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 46vw), 1fr)); align-items: start; }
-  #app.lay-big #sideCol > .screen { grid-column: 1 / -1; max-width: 560px; justify-self: center; }
+  #app.lay-big #sideCol .screen.pvw { max-width: 560px; justify-self: center; }
   #app.lay-big #tilesSide { display: contents; }
   #app.lay-big #tilesRow { display: none !important; }
   #app.lay-big .big-grip { display: none !important; }
-  #app.lay-big #sideCol > .screen { grid-area: auto; grid-column: 1 / -1; align-self: start; }
+  #app.lay-big #sideCol .screen.pvw { grid-area: auto; grid-column: 1 / -1; align-self: start; height: auto; }
+  #app.lay-big #tilesSide { grid-template-rows: none; }
   /* transisi tegak: [Quick Play | CUT | FTB] / slot transisi / [T-bar | Stinger] — rapi, tidak bertumpuk */
   #app.lay-big #trans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; contain: none; align-self: auto; overflow: visible; }
   #app.lay-big #trans .tlbl { display: none; }

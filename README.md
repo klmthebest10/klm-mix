@@ -140,6 +140,9 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
+### Baru di v1.20.0-beta.3
+Versi uji (beta, PC): grid preview di samping Program kini **3 baris setinggi Program** — 1–3 input = 1 kolom (selebar mungkin), 4–6 input = otomatis 2 kolom dengan kotak sedikit lebih kecil (**maksimal 6 input**; monitor Preview kecil, bila ditampilkan, memakai 1 kotak). Ukuran Program, panel transisi (selebar minimum, tanpa ruang kosong) dan grid dihitung bersamaan agar pas dalam 1 layar. Kartu di daftar input sedikit lebih kecil, dan bilah atas lebih ringkas di layar laptop.
+
 ### Baru di v1.20.0-beta.2
 Versi uji (beta, PC):
 - **Tata letak baru: "Program besar + grid preview"** (menu **Tata letak** di bilah atas). Monitor Program dibuat sangat besar; kotak-kotak preview (grid) hanya berada **di samping Program — kanan atau kiri** (digulir bila banyak), tidak ada kotak di bawah Program. Panel **transisi tetap di tengah** seperti tata letak awal: Program | Transisi | Grid (atau Grid | Transisi | Program).
