@@ -556,7 +556,7 @@
   // klik 1× = pilih ke Preview, klik 2× = pilih + zoom satu layar penuh (klik 2× lagi / Esc = kembali ke grid)
   E.pvZoom = null;
   E.gridIds = () => { const g = KM.settings.pvGrid; return g && g.ids ? g.ids.filter((id) => KM.getInput(id)) : []; };
-  E.gridActive = () => !!(KM.settings.pvGrid && KM.settings.pvGrid.on && !E.pvZoom);
+  E.gridActive = () => !!(KM.settings.pvGrid && KM.settings.pvGrid.on && !E.pvZoom && !(KM.settings.bigLayout && KM.settings.bigLayout.on)); // mode Program besar: grid preview ada di samping, bukan di monitor Preview
   /** tata letak grid Preview: panel dibagi rata kolom × baris memenuhi SELURUH lebar & tinggi Preview.
    *  Jumlah kolom dipilih agar gambar (rasio output) di tiap kotak sebesar mungkin; bila hampir sama (±10%),
    *  dipilih yang lebih banyak kolom (memanfaatkan lebar). Baris terakhir yang tidak penuh diletakkan di tengah. */
@@ -599,7 +599,7 @@
       v.fillStyle = '#000'; v.fillRect(c.x, c.y, c.w, c.h);
       try { drawInputRect(v, inp, c.x, c.y, c.w, c.h, 0); } catch (e) {}
       // label
-      const lbl = KM.inputNum(inp) + '  ' + inp.title;
+      const lbl = inp.title; // tanpa nomor input — tampilan bersih
       v.font = '700 ' + fs + 'px Plus Jakarta Sans, sans-serif';
       const tw = Math.min(c.w - 8, v.measureText(lbl).width + fs);
       v.fillStyle = 'rgba(0,0,0,.62)'; v.fillRect(c.x, c.y + c.h - fs * 1.6, tw, fs * 1.6);

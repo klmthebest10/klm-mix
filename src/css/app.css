@@ -187,7 +187,8 @@ code { font: 12px var(--mono); color: #9cc3ff; }
 .card.drag-over { outline: 2px dashed var(--acc); outline-offset: 2px; }
 .card .thumb { position: relative; aspect-ratio: 16/9; background: #000; cursor: pointer; overflow: hidden; contain: layout paint style; transform: translateZ(0); }
 .card .thumb canvas { width: 100%; height: 100%; display: block; }
-.card .thumb::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0, 0, 0, .45), transparent 30%); pointer-events: none; }
+/* gambar kartu bersih: tanpa bayangan gelap di atas, tanpa nomor & ikon jenis input (nomor tetap dipakai shortcut) */
+.card .thumb::after { content: none; }
 .card .num { position: absolute; left: 6px; top: 6px; z-index: 1; min-width: 22px; height: 20px; display: flex; align-items: center; justify-content: center; background: rgba(10, 12, 15, .86); padding: 0 6px; border-radius: 5px; font-weight: 800; font-size: 11.5px; border: 1px solid rgba(255, 255, 255, .08); }
 .card.program .num { background: var(--pgm); border-color: transparent; } .card.preview .num { background: var(--pvw); border-color: transparent; }
 .card .typ { position: absolute; right: 6px; top: 6px; z-index: 1; width: 22px; height: 20px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: rgba(10, 12, 15, .7); color: var(--tx2); font-size: 12px; }
@@ -845,7 +846,7 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
 #app.lay-big #tilesSide .card.tile .ctitle { flex: none; }
 #app.lay-big #inputs { --cardw: 150px; gap: 8px; } #app.lay-big #inputs .card .ctitle { font-size: 12px; padding: 5px 8px 2px; } /* daftar input sedikit lebih kecil */
 .card.tile .ctitle { padding: 5px 8px 6px; font-size: 12px; }
-.card.tile .cbtns { position: absolute; left: 0; right: 0; bottom: 0; z-index: 7; background: rgba(13, 15, 19, .94); border-top: 1px solid var(--line2); padding: 5px 6px 6px; display: none; }
+.card.tile .cbtns { position: absolute; left: 0; right: 0; bottom: 28px; /* di atas baris nama → gerigi tetap bisa diklik */ z-index: 7; background: rgba(13, 15, 19, .94); border-top: 1px solid var(--line2); padding: 5px 6px 6px; display: none; }
 .card.tile:hover .cbtns, .card.tile:focus-within .cbtns { display: flex; }
 .card.tile:hover .tline, .card.tile:focus-within .tline { display: none; }
 .big-grip { grid-column: 1 / -1; height: 8px; margin: -4px 0; cursor: ns-resize; position: relative; touch-action: none; display: none; }
@@ -885,3 +886,15 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
 
 @media (max-width: 1760px) { .lbl-x2 { display: none; } }
 @media (max-width: 1450px) { .lbl-x3 { display: none; } }
+
+/* tampilan bersih kartu input & kotak grid (semua mode): nomor & ikon jenis tidak ditampilkan di atas gambar; lencana LIVE/PVW tetap */
+.card .thumb > .num, .card .thumb > .typ { display: none !important; }
+.card .tly { left: 6px; }
+/* gerigi pengaturan di baris nama kotak grid (mode Program besar) */
+.card .ctitle .cset { display: none; }
+#app.lay-big .card.tile .ctitle { justify-content: space-between; gap: 6px; padding-left: 30px; } #app.lay-big .card.tile .ctitle > span { text-align: center; }
+#app.lay-big .card.tile .ctitle .cset { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--tx3); cursor: pointer; }
+#app.lay-big .card.tile .ctitle .cset:hover { background: var(--panel3); color: var(--tx); }
+#app.lay-big .card.tile .ctitle .cset .ki { width: 14px; height: 14px; margin: 0; }
+/* mode Program besar: tidak ada tombol grid di monitor Preview */
+#app.lay-big #pvwGrid { display: none !important; }

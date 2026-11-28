@@ -385,7 +385,7 @@
     if (sig === c.ovlSig) { const m = media.get(c.ovl); return m && m.ok ? c.ovl : (c.ovlPrev || '-'); }
     const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const g = cv.getContext('2d');
     const sx = w / tr.width, sy = h / tr.height; g.scale(sx, sy);
-    const gr = g.createLinearGradient(0, 0, 0, tr.height * 0.3); gr.addColorStop(0, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, tr.width, tr.height * 0.3);
+    // (tanpa gradasi gelap di atas — gambar kartu bersih)
     for (const p of parts) {
       const x = p.r.left - tr.left, y = p.r.top - tr.top, bw = p.r.width, bh = p.r.height;
       g.fillStyle = p.cs.backgroundColor; rrect(g, x, y, bw, bh, parseFloat(p.cs.borderTopLeftRadius) || 0); g.fill();

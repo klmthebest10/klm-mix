@@ -342,7 +342,8 @@
       ondblclick: () => (card._tile ? (LAY().click === 'pgm' ? null : KM.engine.cut(inp.id)) : inp.type === 'utc' || inp.type === 'score' ? UI.utcPanel(true, inp.type === 'score' ? 'score' : 'acara') : KM.dialogs.inputSettings(inp)),
       title: 'Klik: ke Preview • Ctrl+Klik: Cut • Dobel klik: pengaturan'
     }, inp.rt.thumb, num, h('span.tly'), h('span.typ', { title: KM.inputTypes[inp.type].label }, typeIcon(inp)));
-    const card = h('div.card', { draggable: true, 'data-id': inp.id }, th, h('div.ctitle', title), h('div.cbtns'));
+    const cset = h('button.cset', { title: 'Pengaturan input', draggable: false, onclick: (e) => { e.stopPropagation(); KM.dialogs.inputSettings(inp); } }, KI.el('settings'));
+    const card = h('div.card', { draggable: true, 'data-id': inp.id }, th, h('div.ctitle', title, cset), h('div.cbtns'));
     const tlx = timeline(inp, card); th.append(card._tpt, tlx.tl);
     card._inp = inp; card._th = th; card._num = num; card._title = title; card._pbar = tlx.fill;
     card.addEventListener('contextmenu', (e) => { e.preventDefault(); UI.inputMenu(inp, e.clientX, e.clientY); });
@@ -614,6 +615,7 @@
     else { if (pv.parentElement !== stage) stage.insertBefore(pv, $('#trans')); $('#tilesRow').hidden = true; }
     gripApply();
     renderLayMenu();
+    if (UI.renderGridBar) { UI.renderGridBar(); KM.changed('preview'); } // grid di monitor Preview tidak dipakai di mode Program besar
     UI.renderCards(); UI.fitStage();
     setTimeout(() => { UI.relayoutTiles(); KM.emit('resized'); }, 60);
   };
@@ -754,7 +756,7 @@
       { label: '⧉ Duplikat', fn: () => KM.inputs.duplicate(inp) },
       '-',
       { label: '👁 Ke Preview', fn: () => KM.engine.setPreview(inp.id) },
-      { label: (KM.engine.gridIds().includes(inp.id) ? '⊟ Keluarkan dari' : '⊞ Tambah ke') + ' grid di monitor Preview', fn: () => { UI.gridAdd(inp.id); if (!grid().on) UI.setGrid(true); } },
+      LAY().on ? null : { label: (KM.engine.gridIds().includes(inp.id) ? '⊟ Keluarkan dari' : '⊞ Tambah ke') + ' grid di monitor Preview', fn: () => { UI.gridAdd(inp.id); if (!grid().on) UI.setGrid(true); } },
       { label: inp.tile && LAY().on ? '↩ Kembalikan ke daftar input' : '▦ Pindah ke grid preview (samping Program)', fn: () => UI.setTile(inp, !(inp.tile && LAY().on)) },
       { label: '✂ Cut ke Program', fn: () => KM.engine.cut(inp.id) },
       { label: '📃 Tambah ke Playlist', fn: () => { KM.playlist.add(inp.id, KM.inputs.isPlayable(inp) ? 0 : 10); KM.toast('Ditambahkan ke playlist'); } },
