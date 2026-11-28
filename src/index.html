@@ -35,6 +35,10 @@
           <button data-act="open-rec-folder"><i data-ic="folder-open"></i>Buka folder rekaman</button>
         </div>
       </div>
+      <div class="dd" id="layDD">
+        <button class="mbtn" title="Tata letak layar"><i data-ic="layout"></i><span class="lbl-x2">Tata letak</span><i data-ic="chev-down"></i></button>
+        <div class="ddm" id="layMenu"></div>
+      </div>
       <button class="mbtn" data-act="settings"><i data-ic="settings"></i>Pengaturan</button>
       <button class="mbtn" data-act="phone"><i data-ic="phone"></i><span>HP <span class="lbl-x">&amp; Jaringan</span></span></button>
       <button class="mbtn" data-act="help"><i data-ic="help"></i>Bantuan</button>
@@ -81,6 +85,10 @@
       </div>
       <div class="cwrap"><canvas id="pgm"></canvas></div>
     </div>
+    <!-- tata letak "Program besar + grid preview": kolom samping (Preview kecil + kotak input) & baris bawah untuk sisa kotak -->
+    <div id="sideCol" hidden><div class="tiles" id="tilesSide"></div></div>
+    <div class="tiles" id="tilesRow" hidden></div>
+    <div class="big-grip" id="bigGrip" hidden title="Tarik untuk mengatur besar Program (klik 2× = ukuran bawaan)"></div>
   </section>
 
   <section id="lower">

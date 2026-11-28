@@ -337,8 +337,9 @@
     if (!inp.rt.thumb) { inp.rt.thumb = h('canvas'); inp.rt.thumb.width = 256; inp.rt.thumb.height = thumbH(); thumbIO && thumbIO.observe(inp.rt.thumb); }
     const num = h('span.num'), title = h('span', { ondblclick: async () => { const v = await UI.prompt('Ganti nama input', inp.title); if (v) { inp.title = v; KM.changed('inputs'); } } });
     const th = h('div.thumb', {
-      onclick: (e) => { if (e.ctrlKey) KM.engine.cut(inp.id); else KM.engine.setPreview(inp.id); },
-      ondblclick: () => (inp.type === 'utc' || inp.type === 'score' ? UI.utcPanel(true, inp.type === 'score' ? 'score' : 'acara') : KM.dialogs.inputSettings(inp)),
+      onclick: (e) => { if (e.ctrlKey || (card._tile && LAY().click === 'pgm')) KM.engine.cut(inp.id); else KM.engine.setPreview(inp.id); },
+      // di grid preview: klik 2× cepat = langsung ke Program; di daftar input: pengaturan input
+      ondblclick: () => (card._tile ? (LAY().click === 'pgm' ? null : KM.engine.cut(inp.id)) : inp.type === 'utc' || inp.type === 'score' ? UI.utcPanel(true, inp.type === 'score' ? 'score' : 'acara') : KM.dialogs.inputSettings(inp)),
       title: 'Klik: ke Preview • Ctrl+Klik: Cut • Dobel klik: pengaturan'
     }, inp.rt.thumb, num, h('span.tly'), h('span.typ', { title: KM.inputTypes[inp.type].label }, typeIcon(inp)));
     const card = h('div.card', { draggable: true, 'data-id': inp.id }, th, h('div.ctitle', title), h('div.cbtns'));
@@ -353,7 +354,9 @@
       const id = e.dataTransfer.getData('text/klm-input'); if (!id) return;
       e.preventDefault(); e.stopPropagation();
       const src = KM.getInput(id); if (!src || src === inp) return;
-      const arr = S.inputs; arr.splice(arr.indexOf(src), 1); arr.splice(arr.indexOf(inp), 0, src); KM.changed('inputs');
+      const arr = S.inputs; arr.splice(arr.indexOf(src), 1); arr.splice(arr.indexOf(inp), 0, src);
+      if (LAY().on) { if (card._tile) src.tile = 1; else delete src.tile; } // dijatuhkan di grid ↔ daftar input = pindah tempat
+      KM.changed('inputs');
     });
     return card;
   }
@@ -373,20 +376,23 @@
   }
   UI.renderCards = function () {
     const box = $('#inputs');
-    const want = [];
+    const want = [], tiles = [], big = LAY().on;
     S.inputs.forEach((inp, idx) => {
       let card = inp.rt.card;
       if (!card || card._inp !== inp) card = inp.rt.card = buildCard(inp);
       patchCard(card, inp, idx);
-      want.push(card);
+      const tile = !!(big && inp.tile);
+      if (card._tile !== tile) { card._tile = tile; card._sbox = null; card.classList.toggle('tile', tile); setThumbRes(inp, tile ? 512 : 256); }
+      (tile ? tiles : want).push(card);
     });
+    placeTiles(tiles);
     const keep = new Set(want);
     [...box.children].forEach((el) => { if (!keep.has(el)) { if (el._inp) releaseCard(el); el.remove(); } });
     // urutkan dengan memindah seminimal mungkin (kartu yang sudah di tempatnya tidak disentuh)
     want.forEach((card, i) => { const at = box.children[i]; if (at !== card) box.insertBefore(card, at || null); });
     if (!S.inputs.length) box.appendChild(emptyState());
     else box.appendChild(box._add || (box._add = h('div.card.add', { onclick: () => KM.dialogs.addInput(), title: 'Tambah input (Ctrl+I)' }, KI.el('plus'), 'Tambah Input')));
-    const c = $('#inCount'); if (c) c.textContent = S.inputs.length;
+    const c = $('#inCount'); if (c) c.textContent = want.length + (tiles.length ? ' (+' + tiles.length + ' di grid)' : '');
     UI.syncLiveThumbs();
     UI.updateCards();
   };
@@ -539,6 +545,120 @@
     box.appendChild(h('button.ic', { title: 'Pengaturan input', onclick: () => KM.dialogs.inputSettings(pv) }, KI.el('settings')));
   }
 
+  // ---------- TATA LETAK: Klasik  /  Program besar + grid preview ----------
+  // Mode "Program besar": monitor Program dibuat sangat besar; di sampingnya (kiri/kanan) kolom berisi Preview kecil + KOTAK
+  // input (grid preview). Kotak yang tidak muat di kolom samping lanjut di baris bawah Program. Input yang dipindah ke grid
+  // TIDAK tampil lagi di daftar input (kartunya sendiri yang pindah — thumbnail live, tombol & garis waktu ikut).
+  // Klik 1× = Preview, klik 2× cepat = langsung Program (atau mode "klik 1× = Program").
+  function LAY() { return (KM.settings.bigLayout = Object.assign({ on: false, side: 'right', pvw: false, click: 'pvw', cols: 1 }, KM.settings.bigLayout || {})); }
+  UI.layout = LAY;
+  function setThumbRes(inp, w) { const cv = inp.rt.thumb; if (!cv || cv.width === w) return; cv.width = w; cv.height = Math.round(w * 9 / 16); inp.rt.thumbAt = 0; }
+  const portraitLay = () => window.innerWidth < 1100 || window.innerHeight > window.innerWidth;
+  UI.setTile = (inp, on) => {
+    inp = KM.getInput(inp); if (!inp) return;
+    if (on) inp.tile = 1; else delete inp.tile;
+    if (on && !LAY().on) { LAY().on = true; KM.saveSettings(); UI.applyLayout(); KM.toast('Tata letak "Program besar + grid preview" diaktifkan'); }
+    KM.changed('inputs');
+  };
+  /** bagi kotak grid: sebanyak yang muat ke kolom samping, sisanya ke baris bawah */
+  function placeTiles(tiles) {
+    const sb = $('#tilesSide'), rb = $('#tilesRow'); if (!sb || !rb) return;
+    const L = LAY(), keep = new Set(tiles);
+    for (const bx of [sb, rb]) [...bx.children].forEach((el) => { if (el._inp && !keep.has(el)) el.remove(); if (!el._inp && el.classList.contains('tile-hint') && tiles.length) el.remove(); });
+    if (!L.on) return;
+    if (!tiles.length) { if (!sb.querySelector('.tile-hint')) sb.appendChild(h('div.tile-hint', KI.el('grid'), h('b', 'Grid preview kosong'), h('span', 'Seret kartu input ke sini, atau klik kanan input → "Pindah ke grid preview". Input yang dipindah tidak tampil lagi di daftar input.'))); rb.hidden = true; return; }
+    let k = tiles.length;
+    const root = document.documentElement;
+    if (!portraitLay()) {
+      // ukuran dihitung agar SEMUA muat di layar: Program sebesar mungkin, daftar input & panel tetap ≥ ±230 px di bawah
+      const cols = Math.max(1, L.cols | 0), gap = 8, ar = (KM.settings.width || 16) / (KM.settings.height || 9);
+      const sideW = $('#sideCol').clientWidth || 300, tw = (sideW - gap * (cols - 1)) / cols;
+      const sample = tiles.find((c) => c.isConnected && c.offsetHeight > 20 && c.parentElement === sb);
+      const th = sample ? sample.offsetHeight : tw * 9 / 16 + 32;
+      const avail = $('#app').clientHeight - $('#topbar').offsetHeight - $('#bottombar').offsetHeight;
+      const transH = $('#trans').offsetHeight || 44, lowerMin = avail > 820 ? 210 : 160, pad = 18 + gap;
+      const rtw = Math.round(KM.clamp(window.innerWidth * 0.12, 170, Math.min(tw, 250))), rth = rtw * 9 / 16 + 32; // kotak baris bawah lebih kecil
+      const colW = $('#stage').clientWidth - 20 - sideW - 10, maxMon = colW / ar + 40;
+      const pvH = L.pvw ? sideW / ar + 40 + gap : 0;
+      const cap = (mon) => Math.max(0, Math.floor((Math.min(mon, maxMon) + gap + transH - pvH + gap) / (th + gap))) * cols;
+      const user = KM.settings.bigMonH, rowOk = avail >= 760; // layar pendek (laptop): tanpa baris bawah, kolom samping digulir
+      let mon = user || Math.min(maxMon, avail - pad - transH - lowerMin);
+      let row = rowOk && tiles.length > cap(mon);
+      if (row && !user) mon = Math.min(mon, avail - pad - transH - lowerMin - rth - gap); // baris bawah → Program sedikit lebih pendek
+      mon = Math.max(240, mon);
+      k = row ? Math.min(tiles.length, cap(mon)) : tiles.length;
+      root.style.setProperty('--big-auto-h', Math.round(mon) + 'px');
+      root.style.setProperty('--tilew', Math.max(120, Math.floor(tw)) + 'px'); root.style.setProperty('--rtilew', rtw + 'px');
+    }
+    tiles.forEach((card, i) => { const bx = i < k ? sb : rb; if (card.parentElement !== bx || bx.children[i < k ? i : i - k] !== card) { card._sbox = null; bx.insertBefore(card, bx.children[i < k ? i : i - k] || null); } });
+    rb.hidden = tiles.length <= k;
+  }
+  let tileRaf = 0;
+  UI.relayoutTiles = () => { if (tileRaf || !LAY().on) return; tileRaf = requestAnimationFrame(() => { tileRaf = 0; UI.renderCards(); }); };
+  UI.applyLayout = function () {
+    const L = LAY(), app = $('#app'), stage = $('#stage'), side = $('#sideCol'), pv = $('#pvwBox'); if (!side || !pv) return;
+    app.classList.toggle('lay-big', !!L.on); app.classList.toggle('lay-left', !!L.on && L.side === 'left'); app.classList.toggle('lay-nopvw', !!L.on && !L.pvw);
+    app.classList.toggle('lay-c2', !!L.on && L.cols === 2);
+    side.hidden = !L.on; $('#bigGrip').hidden = !L.on;
+    if (L.on) { if (pv.parentElement !== side) side.insertBefore(pv, side.firstChild); }
+    else { if (pv.parentElement !== stage) stage.insertBefore(pv, $('#trans')); $('#tilesRow').hidden = true; }
+    gripApply();
+    renderLayMenu();
+    UI.renderCards(); UI.fitStage();
+    setTimeout(() => { UI.relayoutTiles(); KM.emit('resized'); }, 60);
+  };
+  function renderLayMenu() {
+    const m = $('#layMenu'); if (!m) return;
+    const L = LAY(), set = (o) => { Object.assign(L, o); KM.saveSettings(); UI.applyLayout(); };
+    const it = (on, label, fn, sub) => h('button' + (on ? '.on' : ''), { onclick: fn }, h('span.ck', on ? '●' : '○'), h('span', label, sub ? h('small', sub) : null));
+    m.replaceChildren(
+      h('div.ddh', 'Tata letak'),
+      it(!L.on, 'Klasik — Preview | Program', () => set({ on: false })),
+      it(L.on && L.side === 'right', 'Program besar + grid preview di kanan', () => set({ on: true, side: 'right' })),
+      it(L.on && L.side === 'left', 'Program besar + grid preview di kiri', () => set({ on: true, side: 'left' })),
+      h('hr'), h('div.ddh', 'Grid preview'),
+      it(L.click === 'pvw', 'Klik 1× = Preview, klik 2× = Program', () => set({ click: 'pvw' })),
+      it(L.click === 'pgm', 'Klik 1× = langsung Program (Cut)', () => set({ click: 'pgm' })),
+      it(L.cols !== 2, 'Kolom samping: 1 kotak', () => set({ cols: 1 })),
+      it(L.cols === 2, 'Kolom samping: 2 kotak (lebih banyak)', () => set({ cols: 2 })),
+      it(L.pvw, 'Monitor Preview kecil di atas grid', () => set({ pvw: !L.pvw })),
+      h('hr'),
+      h('button', { onclick: () => { S.inputs.forEach((i) => { i.tile = 1; }); if (!L.on) set({ on: true }); KM.changed('inputs'); } }, h('span.ck', '⊞'), h('span', 'Pindahkan semua input ke grid')),
+      h('button', { onclick: () => { S.inputs.forEach((i) => { delete i.tile; }); KM.changed('inputs'); } }, h('span.ck', '↩'), h('span', 'Kembalikan semua ke daftar input')));
+  }
+  // tinggi Program di mode besar bisa ditarik (garis di bawah Program); klik 2× = bawaan
+  function gripApply() {
+    const v = KM.settings.bigMonH, r = document.documentElement;
+    if (LAY().on && v && !portraitLay()) r.style.setProperty('--big-mon-h', Math.round(KM.clamp(v, 240, window.innerHeight - 46 - 54 - 150)) + 'px'); else r.style.removeProperty('--big-mon-h');
+  }
+  function initLayout() {
+    const g = $('#bigGrip');
+    if (g) {
+      let y0 = 0, h0 = 0, on = false;
+      g.addEventListener('pointerdown', (e) => { on = true; y0 = e.clientY; h0 = $('#pgmBox').offsetHeight; g.setPointerCapture(e.pointerId); e.preventDefault(); });
+      g.addEventListener('pointermove', (e) => { if (!on) return; KM.settings.bigMonH = h0 + (e.clientY - y0); gripApply(); UI.fitStage(); UI.relayoutTiles(); });
+      const end = () => { if (!on) return; on = false; KM.saveSettings(); KM.emit('resized'); };
+      g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
+      g.addEventListener('dblclick', () => { delete KM.settings.bigMonH; KM.saveSettings(); gripApply(); UI.fitStage(); UI.relayoutTiles(); });
+    }
+    // seret kartu ke grid / kembali ke daftar input
+    const drop = (el, tile) => {
+      if (!el) return;
+      el.addEventListener('dragover', (e) => { if (LAY().on && e.dataTransfer.types.includes('text/klm-input')) { e.preventDefault(); el.classList.add('drop-on'); } });
+      el.addEventListener('dragleave', (e) => { if (!el.contains(e.relatedTarget)) el.classList.remove('drop-on'); });
+      el.addEventListener('drop', (e) => {
+        el.classList.remove('drop-on'); const id = e.dataTransfer.getData('text/klm-input'); if (!id || !LAY().on) return;
+        e.preventDefault(); const inp = KM.getInput(id); if (!inp) return;
+        if (tile) inp.tile = 1; else delete inp.tile; KM.changed('inputs');
+      });
+    };
+    drop($('#sideCol'), true); drop($('#tilesRow'), true); drop($('#inputs'), false);
+    window.addEventListener('resize', () => { gripApply(); UI.relayoutTiles(); });
+    KM.on('resized', () => UI.relayoutTiles());
+    UI.applyLayout();
+  }
+  UI.initLayout = initLayout;
+
   // ---------- Preview grid ----------
   const grid = () => (KM.settings.pvGrid = KM.settings.pvGrid || { on: false, ids: [] });
   UI.gridAdd = (id, on) => { const g = grid(); const has = g.ids.includes(id); if (on == null ? !has : on) { if (!has) g.ids.push(id); } else g.ids = g.ids.filter((x) => x !== id); KM.saveSettings(); renderGridBar(); };
@@ -624,7 +744,8 @@
       { label: '⧉ Duplikat', fn: () => KM.inputs.duplicate(inp) },
       '-',
       { label: '👁 Ke Preview', fn: () => KM.engine.setPreview(inp.id) },
-      { label: (KM.engine.gridIds().includes(inp.id) ? '⊟ Keluarkan dari' : '⊞ Tambah ke') + ' grid Preview', fn: () => { UI.gridAdd(inp.id); if (!grid().on) UI.setGrid(true); } },
+      { label: (KM.engine.gridIds().includes(inp.id) ? '⊟ Keluarkan dari' : '⊞ Tambah ke') + ' grid di monitor Preview', fn: () => { UI.gridAdd(inp.id); if (!grid().on) UI.setGrid(true); } },
+      { label: inp.tile && LAY().on ? '↩ Kembalikan ke daftar input' : '▦ Pindah ke grid preview (samping Program)', fn: () => UI.setTile(inp, !(inp.tile && LAY().on)) },
       { label: '✂ Cut ke Program', fn: () => KM.engine.cut(inp.id) },
       { label: '📃 Tambah ke Playlist', fn: () => { KM.playlist.add(inp.id, KM.inputs.isPlayable(inp) ? 0 : 10); KM.toast('Ditambahkan ke playlist'); } },
       { label: '✨ Jadikan Stinger 1', fn: () => { KM.settings.stingers[0].inputId = inp.id; KM.saveSettings(); KM.toast('Stinger 1 = ' + inp.title); } },
@@ -951,7 +1072,7 @@
     KM.$$('.dtabs button').forEach((b) => b.addEventListener('click', () => UI.dockTab(b.dataset.tab)));
     KM.$$('.dd > .mbtn').forEach((b) => b.addEventListener('click', () => b.parentElement.classList.toggle('open')));
     document.addEventListener('mousedown', (e) => { if (!e.target.closest('.dd')) KM.$$('.dd.open').forEach((d) => d.classList.remove('open')); });
-    UI.renderCards(); updateBars(); initPvGrid();
+    UI.renderCards(); updateBars(); initPvGrid(); initLayout();
     // gabungkan banyak perubahan menjadi satu update per frame (UI lebih ringan)
     let pendRender = false, pendUpdate = false, raf = 0;
     const flush = () => { raf = 0; if (pendRender) UI.renderCards(); else if (pendUpdate) UI.updateCards(); pendRender = pendUpdate = false; updateBars(); };

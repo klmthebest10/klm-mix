@@ -808,3 +808,78 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
 /* kartu video: meter audio berhenti di atas garis waktu, label waktu di sebelah kiri meter */
 .card.playable .ameter { bottom: 16px; }
 .card.playable .ameter ~ .tpt, .card.playable .tpt { right: 15px; }
+
+/* ======================================================================================================================
+   TATA LETAK "Program besar + grid preview" (#app.lay-big). Program sangat besar; kolom samping kiri/kanan berisi monitor
+   Preview kecil + kotak input (grid preview); kotak yang tidak muat lanjut di baris bawah. Transisi jadi bilah mendatar.
+   ====================================================================================================================== */
+.ddm .ddh { padding: 6px 10px 3px; font-size: 10.5px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--tx3); }
+.ddm button .ck { width: 16px; text-align: center; color: var(--tx3); flex: none; }
+.ddm button.on .ck { color: var(--acc); }
+.ddm button small { display: block; color: var(--tx3); font-size: 11px; }
+#app.lay-big { --sidew: clamp(220px, 16vw, 340px); --mon-h: var(--big-mon-h, var(--big-auto-h, clamp(300px, calc(100vh - 46px - 54px - 300px), 70vh))); }
+#app.lay-big.lay-c2 { --sidew: clamp(380px, 29vw, 600px); }
+#app.lay-big #stage { grid-template-columns: minmax(0, 1fr) var(--sidew); grid-template-rows: max-content max-content max-content; grid-template-areas: "pgm side" "tr side" "row row"; align-items: start; position: relative; gap: 8px 10px; }
+#app.lay-big.lay-left #stage { grid-template-columns: var(--sidew) minmax(0, 1fr); grid-template-areas: "side pgm" "side tr" "row row"; }
+#app.lay-big #pgmBox { grid-area: pgm; }
+#app.lay-big #sideCol { grid-area: side; align-self: stretch; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: hidden; contain: size; } /* tinggi = Program + transisi; isinya digulir, tidak memperbesar baris */
+#app.lay-big #sideCol[hidden] { display: none; }
+#app.lay-big #sideCol > .screen { width: 100%; justify-self: stretch; align-self: stretch; flex: none; grid-area: auto; }
+#app.lay-big.lay-nopvw #sideCol > .screen { display: none; }
+.tiles { display: grid; gap: 8px; align-content: start; min-height: 0; grid-auto-rows: max-content; }
+#tilesSide { grid-template-columns: repeat(var(--scols, 1), minmax(0, 1fr)); flex: 1; overflow-x: hidden; overflow-y: auto; border-radius: var(--r); scrollbar-width: thin; }
+#app.lay-c2 #tilesSide { --scols: 2; }
+#app.lay-big #tilesRow { grid-area: row; grid-auto-flow: column; grid-auto-columns: var(--rtilew, 220px); grid-template-columns: none; justify-content: start; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; } /* satu baris, geser ke samping bila banyak */
+#tilesRow[hidden] { display: none !important; }
+#sideCol.drop-on, #tilesRow.drop-on, #inputs.drop-on { outline: 2px dashed var(--acc); outline-offset: 2px; border-radius: var(--r); }
+.tile-hint { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 18px 14px; min-height: 140px; border: 1.5px dashed var(--line3); border-radius: var(--r); color: var(--tx3); font-size: 12px; line-height: 1.45; }
+.tile-hint .ki { width: 26px; height: 26px; color: var(--tx2); } .tile-hint b { color: var(--tx2); font-size: 13px; }
+/* kartu sebagai kotak grid: gambar + nama; tombol muncul saat kursor di atas kotak (tidak memakan ruang) */
+.card.tile { width: auto; }
+.card.tile .ctitle { padding: 5px 8px 6px; font-size: 12px; }
+.card.tile .cbtns { position: absolute; left: 0; right: 0; bottom: 0; z-index: 7; background: rgba(13, 15, 19, .94); border-top: 1px solid var(--line2); padding: 5px 6px 6px; display: none; }
+.card.tile:hover .cbtns, .card.tile:focus-within .cbtns { display: flex; }
+.card.tile:hover .tline, .card.tile:focus-within .tline { display: none; }
+/* bilah transisi mendatar di bawah Program */
+#app.lay-big #trans { grid-area: tr; flex-direction: row; flex-wrap: wrap; align-items: center; overflow: visible; gap: 6px; padding: 0; }
+#app.lay-big #trans > * { flex: none; }
+#app.lay-big #trans .tlbl { display: none; }
+#app.lay-big #trans .tb { height: 34px; padding: 0 12px; }
+#app.lay-big #trans .tb.cut { height: 38px; min-width: 96px; }
+#app.lay-big #tslots { flex-direction: row; flex-wrap: wrap; gap: 5px; }
+#app.lay-big .tslot { width: 156px; }
+#app.lay-big #trans .tbar-wrap { display: flex !important; flex-direction: row; align-items: center; gap: 8px; flex: 1 1 160px !important; min-height: 0; height: 34px; padding: 0 10px; }
+#app.lay-big #tbar { writing-mode: horizontal-tb; width: auto; flex: 1; height: 26px; min-height: 0; }
+#app.lay-big #tbar::-webkit-slider-runnable-track { height: 6px; width: auto; background: var(--line2); border-radius: 6px; }
+#app.lay-big #tbar::-webkit-slider-thumb { width: 16px; height: 26px; margin: -10px 0 0 0; }
+#app.lay-big .sting { display: flex; gap: 5px; } #app.lay-big .sting .tb { height: 34px; }
+.big-grip { grid-column: 1 / -1; height: 8px; margin: -4px 0; cursor: ns-resize; position: relative; touch-action: none; display: none; }
+#app.lay-big .big-grip:not([hidden]) { display: block; grid-area: auto; position: absolute; left: 0; right: 0; bottom: 0; margin: 0; z-index: 4; }
+#app.lay-big .big-grip::after { content: ''; position: absolute; left: 50%; top: 2px; width: 54px; height: 3px; margin-left: -27px; border-radius: 2px; background: var(--line3); opacity: .55; }
+#app.lay-big .big-grip:hover::after { background: var(--acc); opacity: 1; }
+#app.lay-big.utc-mode .big-grip { display: none !important; }
+/* layar sempit / tegak (HP, tablet, monitor diputar): Program penuh lebar, transisi, lalu Preview kecil + grid tersusun rapi */
+@media (max-width: 1099px), (orientation: portrait) {
+  #app.lay-big { --mon-h: var(--big-mon-h-p, 46vh); }
+  #app.lay-big #stage, #app.lay-big.lay-left #stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: max-content; grid-template-areas: "pgm" "tr" "side"; }
+  #app.lay-big #pgmBox { width: 100%; }
+  #app.lay-big #sideCol { overflow: visible; contain: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 46vw), 1fr)); align-items: start; }
+  #app.lay-big #sideCol > .screen { grid-column: 1 / -1; max-width: 560px; justify-self: center; }
+  #app.lay-big #tilesSide { display: contents; }
+  #app.lay-big #tilesRow { display: none !important; }
+  #app.lay-big .big-grip { display: none !important; }
+  #app.lay-big #sideCol > .screen { grid-area: auto; grid-column: 1 / -1; align-self: start; }
+  /* transisi tegak: [Quick Play | CUT | FTB] / slot transisi / [T-bar | Stinger] — rapi, tidak bertumpuk */
+  #app.lay-big #trans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  #app.lay-big #trans > * { min-width: 0; width: auto; }
+  #app.lay-big #trans .tb.qp { grid-row: 1; grid-column: 1; } #app.lay-big #trans .tb.cut { grid-row: 1; grid-column: 2; } #app.lay-big #ftbBtn { grid-row: 1; grid-column: 3; height: 38px; }
+  #app.lay-big #tslots { grid-row: 2; grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
+  #app.lay-big .tslot { width: auto; }
+  #app.lay-big #trans .tbar-wrap { grid-row: 3; grid-column: 1 / span 2; }
+  #app.lay-big .sting { grid-row: 3; grid-column: 3; display: grid; grid-template-columns: 1fr 1fr; }
+  .card.tile .cbtns { position: static; display: flex; background: none; border: 0; } /* layar sentuh: tombol selalu tampil */
+  .card.tile .tline { display: block !important; }
+}
+@media (max-width: 620px) { #app.lay-big #sideCol { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+@media (max-width: 1760px) { .lbl-x2 { display: none; } }
