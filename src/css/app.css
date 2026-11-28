@@ -819,8 +819,11 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
 .ddm button small { display: block; color: var(--tx3); font-size: 11px; }
 #app.lay-big { --sidew: clamp(220px, 16vw, 340px); --mon-h: var(--big-mon-h, var(--big-auto-h, clamp(300px, calc(100vh - 46px - 54px - 300px), 70vh))); }
 #app.lay-big.lay-c2 { --sidew: clamp(380px, 29vw, 600px); }
-#app.lay-big #stage { grid-template-columns: minmax(0, 1fr) var(--sidew); grid-template-rows: max-content max-content max-content; grid-template-areas: "pgm side" "tr side" "row row"; align-items: start; position: relative; gap: 8px 10px; }
-#app.lay-big.lay-left #stage { grid-template-columns: var(--sidew) minmax(0, 1fr); grid-template-areas: "side pgm" "side tr" "row row"; }
+/* Program | transisi (tetap di tengah, seperti tata letak awal) | grid preview — atau grid | transisi | Program */
+#app.lay-big #stage { grid-template-columns: minmax(0, 1fr) 176px var(--sidew); grid-template-rows: max-content; grid-template-areas: "pgm tr side"; align-items: start; position: relative; }
+#app.lay-big.lay-left #stage { grid-template-columns: var(--sidew) 176px minmax(0, 1fr); grid-template-areas: "side tr pgm"; }
+#app.lay-big #trans { grid-area: tr; align-self: stretch; contain: size; }
+@media (max-width: 1300px) { #app.lay-big #stage { grid-template-columns: minmax(0, 1fr) 150px var(--sidew); } #app.lay-big.lay-left #stage { grid-template-columns: var(--sidew) 150px minmax(0, 1fr); } }
 #app.lay-big #pgmBox { grid-area: pgm; }
 #app.lay-big #sideCol { grid-area: side; align-self: stretch; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: hidden; contain: size; } /* tinggi = Program + transisi; isinya digulir, tidak memperbesar baris */
 #app.lay-big #sideCol[hidden] { display: none; }
@@ -829,7 +832,7 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
 .tiles { display: grid; gap: 8px; align-content: start; min-height: 0; grid-auto-rows: max-content; }
 #tilesSide { grid-template-columns: repeat(var(--scols, 1), minmax(0, 1fr)); flex: 1; overflow-x: hidden; overflow-y: auto; border-radius: var(--r); scrollbar-width: thin; }
 #app.lay-c2 #tilesSide { --scols: 2; }
-#app.lay-big #tilesRow { grid-area: row; grid-auto-flow: column; grid-auto-columns: var(--rtilew, 220px); grid-template-columns: none; justify-content: start; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; } /* satu baris, geser ke samping bila banyak */
+#app.lay-big #tilesRow { display: none !important; grid-area: auto; grid-auto-flow: column; grid-auto-columns: var(--rtilew, 220px); grid-template-columns: none; justify-content: start; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; } /* satu baris, geser ke samping bila banyak */
 #tilesRow[hidden] { display: none !important; }
 #sideCol.drop-on, #tilesRow.drop-on, #inputs.drop-on { outline: 2px dashed var(--acc); outline-offset: 2px; border-radius: var(--r); }
 .tile-hint { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 18px 14px; min-height: 140px; border: 1.5px dashed var(--line3); border-radius: var(--r); color: var(--tx3); font-size: 12px; line-height: 1.45; }
@@ -840,19 +843,6 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
 .card.tile .cbtns { position: absolute; left: 0; right: 0; bottom: 0; z-index: 7; background: rgba(13, 15, 19, .94); border-top: 1px solid var(--line2); padding: 5px 6px 6px; display: none; }
 .card.tile:hover .cbtns, .card.tile:focus-within .cbtns { display: flex; }
 .card.tile:hover .tline, .card.tile:focus-within .tline { display: none; }
-/* bilah transisi mendatar di bawah Program */
-#app.lay-big #trans { grid-area: tr; flex-direction: row; flex-wrap: wrap; align-items: center; overflow: visible; gap: 6px; padding: 0; }
-#app.lay-big #trans > * { flex: none; }
-#app.lay-big #trans .tlbl { display: none; }
-#app.lay-big #trans .tb { height: 34px; padding: 0 12px; }
-#app.lay-big #trans .tb.cut { height: 38px; min-width: 96px; }
-#app.lay-big #tslots { flex-direction: row; flex-wrap: wrap; gap: 5px; }
-#app.lay-big .tslot { width: 156px; }
-#app.lay-big #trans .tbar-wrap { display: flex !important; flex-direction: row; align-items: center; gap: 8px; flex: 1 1 160px !important; min-height: 0; height: 34px; padding: 0 10px; }
-#app.lay-big #tbar { writing-mode: horizontal-tb; width: auto; flex: 1; height: 26px; min-height: 0; }
-#app.lay-big #tbar::-webkit-slider-runnable-track { height: 6px; width: auto; background: var(--line2); border-radius: 6px; }
-#app.lay-big #tbar::-webkit-slider-thumb { width: 16px; height: 26px; margin: -10px 0 0 0; }
-#app.lay-big .sting { display: flex; gap: 5px; } #app.lay-big .sting .tb { height: 34px; }
 .big-grip { grid-column: 1 / -1; height: 8px; margin: -4px 0; cursor: ns-resize; position: relative; touch-action: none; display: none; }
 #app.lay-big .big-grip:not([hidden]) { display: block; grid-area: auto; position: absolute; left: 0; right: 0; bottom: 0; margin: 0; z-index: 4; }
 #app.lay-big .big-grip::after { content: ''; position: absolute; left: 50%; top: 2px; width: 54px; height: 3px; margin-left: -27px; border-radius: 2px; background: var(--line3); opacity: .55; }
@@ -870,7 +860,12 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
   #app.lay-big .big-grip { display: none !important; }
   #app.lay-big #sideCol > .screen { grid-area: auto; grid-column: 1 / -1; align-self: start; }
   /* transisi tegak: [Quick Play | CUT | FTB] / slot transisi / [T-bar | Stinger] — rapi, tidak bertumpuk */
-  #app.lay-big #trans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  #app.lay-big #trans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; contain: none; align-self: auto; overflow: visible; }
+  #app.lay-big #trans .tlbl { display: none; }
+  #app.lay-big #trans .tbar-wrap { display: flex !important; flex-direction: row; align-items: center; gap: 8px; min-height: 0; height: 34px; padding: 0 10px; }
+  #app.lay-big #tbar { writing-mode: horizontal-tb; width: auto; flex: 1; height: 26px; min-height: 0; }
+  #app.lay-big #tbar::-webkit-slider-runnable-track { height: 6px; width: auto; background: var(--line2); border-radius: 6px; }
+  #app.lay-big #tbar::-webkit-slider-thumb { width: 16px; height: 26px; margin: -10px 0 0 0; }
   #app.lay-big #trans > * { min-width: 0; width: auto; }
   #app.lay-big #trans .tb.qp { grid-row: 1; grid-column: 1; } #app.lay-big #trans .tb.cut { grid-row: 1; grid-column: 2; } #app.lay-big #ftbBtn { grid-row: 1; grid-column: 3; height: 38px; }
   #app.lay-big #tslots { grid-row: 2; grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
@@ -883,3 +878,4 @@ body.lite .modal-bg { background: rgba(4, 6, 10, .86); }
 @media (max-width: 620px) { #app.lay-big #sideCol { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 @media (max-width: 1760px) { .lbl-x2 { display: none; } }
+@media (max-width: 1450px) { .lbl-x3 { display: none; } }

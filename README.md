@@ -140,13 +140,13 @@ Video (MP4/MOV/MKV/WebM), Gambar/GIF, **Daftar Putar** (video+foto), Kamera/capt
 - **Trigger** per input (saat masuk/keluar Program, saat video selesai, saat masuk Preview) dan **shortcut kustom** untuk semua 206 fungsi
 - **Plugin VST3 & VST2 asli** di rak efek input maupun Master (lihat *Baru di v1.8*), plus **efek audio bawaan**: high-pass filter, reverb, **auto-ducking** (musik turun saat mic bicara), **limiter master**, output Bus A/B ke perangkat audio lain
 
-### Baru di v1.20.0-beta.1
+### Baru di v1.20.0-beta.2
 Versi uji (beta, PC):
-- **Tata letak baru: "Program besar + grid preview"** (menu **Tata letak** di bilah atas). Monitor Program dibuat sangat besar; di sampingnya — **kanan atau kiri** — kolom kotak input (grid preview), dan kotak yang tidak muat lanjut di baris bawah Program. Transisi (Quick Play, CUT, slot transisi, T-Bar, Stinger, FTB) menjadi bilah mendatar di bawah Program.
+- **Tata letak baru: "Program besar + grid preview"** (menu **Tata letak** di bilah atas). Monitor Program dibuat sangat besar; kotak-kotak preview (grid) hanya berada **di samping Program — kanan atau kiri** (digulir bila banyak), tidak ada kotak di bawah Program. Panel **transisi tetap di tengah** seperti tata letak awal: Program | Transisi | Grid (atau Grid | Transisi | Program).
 - **Pindahkan input ke grid:** seret kartu ke kolom grid, atau klik kanan input → "Pindah ke grid preview". Input yang dipindah **tidak tampil lagi di daftar input** (kartunya sendiri yang pindah: gambar live, tombol, garis waktu video ikut). Kembalikan dengan menyeret ke daftar input / klik kanan → "Kembalikan ke daftar input". Ada juga "Pindahkan semua" / "Kembalikan semua".
-- **Mode klik grid:** *Klik 1× = Preview, klik 2× cepat = langsung Program* (bawaan) atau *Klik 1× = langsung Program*. Pilihan kolom samping 1 atau 2 kotak, dan monitor Preview kecil di atas grid bisa ditampilkan.
-- Besar Program bisa ditarik (garis di bawah grid, klik 2× = ukuran otomatis). Ukuran otomatis menjaga daftar input & panel tetap terlihat; di layar pendek kolom grid digulir.
-- **Layar tegak / sempit:** Program penuh lebar, transisi tersusun 3 baris rapi, lalu Preview + kotak grid dalam kisi yang menyesuaikan lebar layar; tombol kotak selalu tampil untuk layar sentuh.
+- **Mode klik grid:** *Klik 1× = Preview, klik 2× cepat = langsung Program* (bawaan) atau *Klik 1× = langsung Program*. Kolom grid 1 atau 2 kotak; monitor Preview kecil di atas grid bisa ditampilkan.
+- Besar Program bisa ditarik (garis di bawah Program, klik 2× = ukuran otomatis); ukuran otomatis menjaga daftar input & panel tetap terlihat.
+- **Layar tegak / sempit:** Program penuh lebar, transisi tersusun rapi 3 baris, lalu Preview + kotak grid dalam kisi yang menyesuaikan lebar layar; tombol kotak selalu tampil untuk layar sentuh.
 - Tata letak Klasik tetap sama seperti sebelumnya.
 
 ### Baru di v1.19.1

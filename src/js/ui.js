@@ -567,31 +567,21 @@
     for (const bx of [sb, rb]) [...bx.children].forEach((el) => { if (el._inp && !keep.has(el)) el.remove(); if (!el._inp && el.classList.contains('tile-hint') && tiles.length) el.remove(); });
     if (!L.on) return;
     if (!tiles.length) { if (!sb.querySelector('.tile-hint')) sb.appendChild(h('div.tile-hint', KI.el('grid'), h('b', 'Grid preview kosong'), h('span', 'Seret kartu input ke sini, atau klik kanan input → "Pindah ke grid preview". Input yang dipindah tidak tampil lagi di daftar input.'))); rb.hidden = true; return; }
-    let k = tiles.length;
+    const k = tiles.length; // semua kotak di kolom samping (digulir bila banyak) — tidak ada kotak di bawah Program
     const root = document.documentElement;
     if (!portraitLay()) {
-      // ukuran dihitung agar SEMUA muat di layar: Program sebesar mungkin, daftar input & panel tetap ≥ ±230 px di bawah
+      // Program sebesar mungkin; daftar input & panel tetap ≥ ±210 px di bawah
       const cols = Math.max(1, L.cols | 0), gap = 8, ar = (KM.settings.width || 16) / (KM.settings.height || 9);
       const sideW = $('#sideCol').clientWidth || 300, tw = (sideW - gap * (cols - 1)) / cols;
-      const sample = tiles.find((c) => c.isConnected && c.offsetHeight > 20 && c.parentElement === sb);
-      const th = sample ? sample.offsetHeight : tw * 9 / 16 + 32;
       const avail = $('#app').clientHeight - $('#topbar').offsetHeight - $('#bottombar').offsetHeight;
-      const transH = $('#trans').offsetHeight || 44, lowerMin = avail > 820 ? 210 : 160, pad = 18 + gap;
-      const rtw = Math.round(KM.clamp(window.innerWidth * 0.12, 170, Math.min(tw, 250))), rth = rtw * 9 / 16 + 32; // kotak baris bawah lebih kecil
-      const colW = $('#stage').clientWidth - 20 - sideW - 10, maxMon = colW / ar + 40;
-      const pvH = L.pvw ? sideW / ar + 40 + gap : 0;
-      const cap = (mon) => Math.max(0, Math.floor((Math.min(mon, maxMon) + gap + transH - pvH + gap) / (th + gap))) * cols;
-      const user = KM.settings.bigMonH, rowOk = avail >= 760; // layar pendek (laptop): tanpa baris bawah, kolom samping digulir
-      let mon = user || Math.min(maxMon, avail - pad - transH - lowerMin);
-      let row = rowOk && tiles.length > cap(mon);
-      if (row && !user) mon = Math.min(mon, avail - pad - transH - lowerMin - rth - gap); // baris bawah → Program sedikit lebih pendek
-      mon = Math.max(240, mon);
-      k = row ? Math.min(tiles.length, cap(mon)) : tiles.length;
+      const lowerMin = avail > 820 ? 210 : 160, pad = 18;
+      const colW = $('#stage').clientWidth - 20 - sideW - ($('#trans').offsetWidth || 176) - 20, maxMon = colW / ar + 40;
+      const mon = Math.max(240, Math.min(maxMon, avail - pad - lowerMin));
       root.style.setProperty('--big-auto-h', Math.round(mon) + 'px');
-      root.style.setProperty('--tilew', Math.max(120, Math.floor(tw)) + 'px'); root.style.setProperty('--rtilew', rtw + 'px');
+      root.style.setProperty('--tilew', Math.max(120, Math.floor(tw)) + 'px');
     }
     tiles.forEach((card, i) => { const bx = i < k ? sb : rb; if (card.parentElement !== bx || bx.children[i < k ? i : i - k] !== card) { card._sbox = null; bx.insertBefore(card, bx.children[i < k ? i : i - k] || null); } });
-    rb.hidden = tiles.length <= k;
+    rb.hidden = true;
   }
   let tileRaf = 0;
   UI.relayoutTiles = () => { if (tileRaf || !LAY().on) return; tileRaf = requestAnimationFrame(() => { tileRaf = 0; UI.renderCards(); }); };
