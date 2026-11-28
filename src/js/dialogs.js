@@ -270,8 +270,8 @@
       const urls = phoneUrls();
       form.append(
         row('Slot kamera', sel([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], slot, (v) => { o.slot = +v; })),
-        row('Kualitas', sel([['720p30', '720p 30fps (ringan)'], ['720p60', '720p 60fps'], ['1080p30', '1080p 30fps'], ['1080p60', '1080p 60fps (HP kuat)']], o.quality, (v) => { o.quality = v; }),
-          h('label', 'Bitrate'), sel([[2500, '2.5 Mbps'], [4000, '4 Mbps'], [6000, '6 Mbps'], [8000, '8 Mbps'], [12000, '12 Mbps']], o.bitrate, (v) => { o.bitrate = +v; })),
+        row('Kualitas', sel([['720p30', '720p 30fps (ringan)'], ['720p60', '720p 60fps'], ['1080p30', '1080p 30fps'], ['1080p60', '1080p 60fps (HP kuat)'], ['1440p30', '1440p (2K) 30fps'], ['2160p30', 'Maks kamera HP (hingga 4K) 30fps']], o.quality, (v) => { o.quality = v; }),
+          h('label', 'Bitrate'), sel([[2500, '2.5 Mbps'], [4000, '4 Mbps'], [6000, '6 Mbps'], [8000, '8 Mbps'], [12000, '12 Mbps'], [20000, '20 Mbps (2K/4K, Wi-Fi 5 GHz)']], o.bitrate, (v) => { o.bitrate = +v; })),
         chk('Kirim audio mic HP', true, (v) => { o.audio = v; }),
         h('div.sec', { style: { marginTop: '10px' } }, h('h4', '📱 Hubungkan HP (Wi-Fi yang sama)'),
           h('div.row', D.qr(urls[0] ? urls[0].cam : ''), h('div.grow',
@@ -583,15 +583,15 @@
       const z = h('input', { type: 'range', min: zr.min, max: zr.max, step: 0.05, value: inp.rt.zoom || zr.min, oninput: () => { L.zoomTo(inp, +z.value); zv.textContent = (+z.value).toFixed(1) + '×' + (zr.hw ? ' (lensa HP)' : ' (digital)'); } });
       return h('div.sec', h('h4', '📱 KLMCAM ', peer ? h('span.pill.ok', 'Terhubung: ' + (peer.name || peer.ip)) : h('span.pill.warn', 'Menunggu HP slot ' + o.slot)),
         row('Slot', sel([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], o.slot, (v) => { o.slot = +v; inp.rt.camId = null; KM.inputTypes.klmcam.setStream(inp, null); L.bindCams(); })),
-        row('Kualitas', sel([['720p30', '720p 30'], ['720p60', '720p 60'], ['1080p30', '1080p 30'], ['1080p60', '1080p 60']], o.quality, (v) => L.camControl(inp, 'quality', v)),
-          h('label', 'Bitrate'), sel([[2500, '2.5 Mbps'], [4000, '4 Mbps'], [6000, '6 Mbps'], [8000, '8 Mbps'], [12000, '12 Mbps']], o.bitrate, (v) => { o.bitrate = +v; L.camControl(inp, 'quality', o.quality); })),
+        row('Kualitas', sel([['720p30', '720p 30'], ['720p60', '720p 60'], ['1080p30', '1080p 30'], ['1080p60', '1080p 60'], ['1440p30', '1440p 30 (2K)'], ['2160p30', 'Maks HP (4K) 30']], o.quality, (v) => L.camControl(inp, 'quality', v)),
+          h('label', 'Bitrate'), sel([[2500, '2.5 Mbps'], [4000, '4 Mbps'], [6000, '6 Mbps'], [8000, '8 Mbps'], [12000, '12 Mbps'], [20000, '20 Mbps (2K/4K, Wi-Fi 5 GHz)']], o.bitrate, (v) => { o.bitrate = +v; L.camControl(inp, 'quality', o.quality); })),
         row('Zoom', z, zv),
         h('div.row', h('button.btn', { onclick: () => L.camControl(inp, 'switch') }, '🔄 Ganti kamera depan/belakang'),
           h('button.btn', { onclick: () => { inp.rt.torch = !inp.rt.torch; L.camControl(inp, 'torch', inp.rt.torch); } }, '🔦 Senter'),
           h('button.btn', { onclick: () => L.camControl(inp, 'focus', 'auto') }, '🎯 Fokus otomatis'),
           h('button.btn', { onclick: () => L.restartCam(inp) }, '↻ Sambung ulang')),
         peer && peer.info ? h('p.muted', `HP: ${peer.info.w}×${peer.info.h} @${peer.info.fps}fps` + (peer.info.facing ? ' • kamera ' + (peer.info.facing === 'user' ? 'depan' : 'belakang') : '') + ` • baterai ${peer.info.battery != null ? peer.info.battery + '%' : '?'}`) : null,
-        h('p.muted', 'Tips latensi rendah: gunakan Wi-Fi 5 GHz / router dekat, 720p60 atau 1080p30, dan atur Delay audio jika perlu.'));
+        h('p.muted', 'Tips latensi rendah: gunakan Wi-Fi 5 GHz / router dekat, 720p60 atau 1080p30, dan atur Delay audio jika perlu. 2K/4K butuh Wi-Fi 5 GHz kuat; Penguat Wi-Fi & Ringan otomatis di HP menjaga tetap real-time.'));
     },
     title(inp) { return h('div.sec', h('h4', 'Title Cepat (kanvas)'), KM.dock.titleEditor(inp)); },
     bars(inp) { return h('div.sec', h('p.muted', 'Color bars standar untuk kalibrasi monitor.')); },
@@ -725,6 +725,7 @@
           KM.isElectron ? h('button.btn.sm.pri', { onclick: () => window.klm.invoke('app:relaunch') }, 'Buka ulang sekarang') : null);
         const outChanged = () => {
           OUT.dirty = true; note.style.display = '';
+          if (KM.nengine && KM.nengine.kOut) KM.nengine.kOut(); // KLMCAM resolusi tinggi diperkecil ke ukuran output baru
           clearTimeout(OUT.askT);
           if (!KM.isElectron) return;
           OUT.askT = setTimeout(async () => {

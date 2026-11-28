@@ -200,7 +200,7 @@
     const ae = document.activeElement; if (ae && box.contains(ae) && /INPUT|SELECT/.test(ae.tagName)) return; // sedang menggeser zoom / memilih
     const cams = S.inputs.filter((i) => i.type === 'klmcam');
     const u = urls[0] || {};
-    const QS = [['720p30', '720p 30'], ['720p60', '720p 60'], ['1080p30', '1080p 30'], ['1080p60', '1080p 60']];
+    const QS = [['720p30', '720p 30'], ['720p60', '720p 60'], ['1080p30', '1080p 30'], ['1080p60', '1080p 60'], ['1440p30', '1440p 30 (2K)'], ['2160p30', 'Maks HP (4K) 30']];
     const on = cams.filter((i) => i.rt.camId && L.peers.get(i.rt.camId)).length;
     // fps kamera HP tidak sebanding dengan fps output (mis. 60 → 50p): tiap ±6 frame satu terlewat → gerak tampak sedikit patah.
     // Itu sifat konversi, bukan gangguan jaringan — beri tahu cara memperbaikinya.
@@ -215,14 +215,16 @@
       const zr = L.zoomRange(inp);
       const z = h('input', { type: 'range', min: zr.min, max: zr.max, step: 0.05, value: inp.rt.zoom || zr.min, title: zr.hw ? 'Zoom lensa HP' : 'Zoom digital', oninput: () => { L.zoomTo(inp, +z.value); zv.textContent = (+z.value).toFixed(1) + '×'; } });
       const q = h('select', { title: 'Kualitas video HP', onchange: () => { o.quality = q.value; L.camControl(inp, 'quality', q.value); } }, QS.map(([v, l]) => h('option', { value: v, selected: v === o.quality }, l)));
-      // stabilisasi (EIS) & shutter diatur di HP; nilai yang tampil = nilai yang sedang dipakai HP
+      // shutter, penguat Wi-Fi & ringan otomatis diatur di HP; nilai yang tampil = nilai yang sedang dipakai HP
       const po = (peer && peer.info && peer.info.opt) || null;
-      const ES = [['off', 'Mati'], ['low', 'Ringan'], ['mid', 'Sedang'], ['high', 'Kuat']];
       const SS = [['auto', 'Otomatis tepat'], ['cam', 'Bawaan HP'], ['50', '1/50'], ['60', '1/60'], ['100', '1/100'], ['120', '1/120'], ['250', '1/250'], ['500', '1/500'], ['1000', '1/1000']];
-      const es = h('select', { title: po && po.eisOk === false ? 'Stabilisasi tidak didukung aplikasi/peramban HP ini' : 'Stabilisasi gambar digital (EIS) di HP', disabled: !po, onchange: () => L.camControl(inp, 'camopt', { eis: es.value }) }, ES.map(([v, l]) => h('option', { value: v, selected: po && v === po.eis }, l)));
+      const wb = h('select', { title: 'Penguat koneksi Wi-Fi: Wi-Fi HP mode latensi rendah (aplikasi APK) + bitrate mengikuti kemampuan jaringan → real-time', disabled: !po, onchange: () => L.camControl(inp, 'camopt', { boost: wb.value === '1' }) }, [['1', 'Aktif'], ['0', 'Mati']].map(([v, l]) => h('option', { value: v, selected: po && (po.boost !== false) === (v === '1') }, l)));
+      const al = h('select', { title: 'Ringan otomatis: bila HP tidak sanggup, kualitas diturunkan sendiri agar tetap mulus', disabled: !po, onchange: () => L.camControl(inp, 'camopt', { auto: al.value === '1' }) }, [['1', 'Aktif'], ['0', 'Mati']].map(([v, l]) => h('option', { value: v, selected: po && (po.auto !== false) === (v === '1') }, l)));
+      const wf = peer && peer.info && peer.info.wifi;
       const ss = h('select', { title: po && po.shutterOk === false ? 'HP ini tidak mengizinkan shutter diatur (memakai otomatis HP)' : 'Shutter speed kamera HP (Otomatis tepat: ±1/(2×fps), tanpa kedip lampu)', disabled: !po, onchange: () => L.camControl(inp, 'camopt', { shutter: ss.value }) }, SS.map(([v, l]) => h('option', { value: v, selected: po && v === po.shutter }, l)));
       const pz = KM.nengine && KM.nengine.kPauses ? KM.nengine.kPauses(inp) : 0;
-      const ex = peer && peer.info ? [peer.info.shutter ? peer.info.shutter + (peer.info.iso ? ' ISO ' + peer.info.iso : '') : '', peer.info.eis ? 'EIS ' + (peer.info.eis.mode === 'gyro' ? 'giroskop' : 'gambar') : '',
+      const ex = peer && peer.info ? [peer.info.shutter ? peer.info.shutter + (peer.info.iso ? ' ISO ' + peer.info.iso : '') : '',
+        wf && wf.rssi ? '📶 ' + wf.rssi + ' dBm' + (wf.freq ? ' ' + (wf.freq >= 4900 ? '5 GHz' : '2,4 GHz') : '') + (wf.lock ? ' ⚡' : '') : wf && wf.lock ? '⚡ penguat Wi-Fi' : '',
         peer.info.hitch ? 'HP tersendat ' + peer.info.hitch + '×/mnt' : '', pz ? '⏸ ' + pz + '× tersendat/mnt (jaringan)' : '', fpsHint(peer.info)].filter(Boolean).join(' • ') : '';
       return fold('cam-' + inp.id, KM.inputNum(inp) + '. ' + inp.title, {
         cls: 'camq' + (tl === 'program' ? '.pgm' : tl === 'preview' ? '.pvw' : ''),
@@ -236,7 +238,7 @@
           h('button.btn.sm', { onclick: () => L.camControl(inp, 'focus', 'auto'), title: 'Fokus otomatis' }, '🎯 Fokus'),
           h('button.btn.sm', { onclick: () => L.restartCam(inp), title: 'Sambung ulang' }, '↻ Ulang'),
           h('button.btn.sm', { onclick: () => KM.dialogs.inputSettings(inp), title: 'Pengaturan lengkap' }, '⚙ Atur')),
-        h('div.kv2', h('span.muted', 'Zoom'), h('div.row', z, zv), h('span.muted', 'Kualitas'), q, h('span.muted', 'Stabil'), es, h('span.muted', 'Shutter'), ss),
+        h('div.kv2', h('span.muted', 'Zoom'), h('div.row', z, zv), h('span.muted', 'Kualitas'), q, h('span.muted', 'Shutter'), ss, h('span.muted', 'Penguat Wi-Fi'), wb, h('span.muted', 'Ringan otomatis'), al),
         ex ? h('p.muted.cinfo', ex) : null);
     };
     box.replaceChildren(h('div.sidep.utcq',

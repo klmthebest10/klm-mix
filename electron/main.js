@@ -946,11 +946,8 @@ function smokeTest() {
             paint(); window.__kpaint = setInterval(paint, 33);
             const a = new RTCPeerConnection(), b = new RTCPeerConnection(); window.__kpc = [a, b];
             a.onicecandidate = (e) => e.candidate && b.addIceCandidate(e.candidate); b.onicecandidate = (e) => e.candidate && a.addIceCandidate(e.candidate);
-            // trek dikirim lewat stabilisasi EIS HP (cam-stab.js) seperti di KLMCAM sungguhan
-            if (!window.KLMStab) { try { (0, eval)(await (await fetch('/cam-stab.js', { cache: 'no-store' })).text()); } catch (e) {} }
             const raw = cv.captureStream(30).getVideoTracks()[0];
-            window.__kstab = window.KLMStab && KLMStab.supported() ? KLMStab.create(raw, { level: 'mid' }) : null;
-            const tr = a.addTransceiver(window.__kstab ? window.__kstab.track : raw, { direction: 'sendonly' });
+            const tr = a.addTransceiver(raw, { direction: 'sendonly' });
             const caps = (RTCRtpSender.getCapabilities('video') || { codecs: [] }).codecs, h = caps.filter((c) => /h264/i.test(c.mimeType));
             if (h.length) tr.setCodecPreferences(h.concat(caps.filter((c) => !/h264/i.test(c.mimeType)))); // codec apa pun bisa (frame didekode Chromium)
             b.ontrack = (e) => KM.nengine.kAttach(KM.getInput(window.__kinp), e.receiver);
@@ -962,7 +959,7 @@ function smokeTest() {
           else {
             await wait(6000);
             const ks = JSON.parse(await js(`JSON.stringify((() => { const i = KM.getInput(window.__kinp); const id = 'k' + String(i.id).replace(/[^\\w]/g, '').slice(0, 30); const k = KM.nengine.kcams.get(id); return { id, k: k || null, scriptTransform: !!window.RTCRtpScriptTransform, stat: KM.nengine.camStat }; })())`));
-            log('KLMCAM native: ' + JSON.stringify(ks) + ' • jalur frame ' + JSON.stringify(nEngine.kstats ? nEngine.kstats() : {}) + ' • EIS ' + await js('JSON.stringify(window.__kstab ? window.__kstab.info() : "tidak didukung")'));
+            log('KLMCAM native: ' + JSON.stringify(ks) + ' • jalur frame ' + JSON.stringify(nEngine.kstats ? nEngine.kstats() : {}) );
             if (!ks.k || !ks.k.ok) { fail++; log('GAGAL: frame H.264 KLMCAM tidak terdekode mesin native'); }
             else {
               await js('KM.engine.setPreview(window.__kinp)'); await wait(1500);
@@ -972,48 +969,22 @@ function smokeTest() {
               const p3 = JSON.parse(px || 'null');
               if (!kp.pvw) { fail++; log('GAGAL: KLMCAM native tidak tampil di monitor Preview native (' + kp.why + ')'); }
               else if (!p3 || Math.abs(p3[0] - 32) > 16 || Math.abs(p3[1] - 128) > 16 || Math.abs(p3[2] - 192) > 16) { fail++; log('GAGAL: warna KLMCAM native salah'); }
-              else log('KLMCAM native: OK — H.264 dari WebRTC didekode mesin native dengan warna benar');
+              else {
+                log('KLMCAM native: OK — H.264 dari WebRTC didekode mesin native dengan warna benar');
+                // resolusi HP lebih besar dari output → diperkecil di GPU (WebGL2) di pekerja, warna harus tetap benar
+                await js('KM.nengine.kOutTest(320, 180)'); await wait(2500);
+                const gs = JSON.parse(await js(`JSON.stringify((() => { const i = KM.getInput(window.__kinp); const id = 'k' + String(i.id).replace(/[^\\w]/g, '').slice(0, 30); const k = KM.nengine.kcams.get(id); return k && k.raw ? { fmt: k.raw.fmt, w: k.raw.w, h: k.raw.h, sw: k.raw.sw, sh: k.raw.sh, err: k.raw.err } : null; })())`));
+                const p4 = JSON.parse(await js(`KM.nengine.probe('pvw', 0.5, 0.75).then((p) => JSON.stringify(p))`) || 'null');
+                log('KLMCAM diperkecil di GPU: ' + JSON.stringify(gs) + ' piksel ' + JSON.stringify(p4));
+                await js('KM.nengine.kOut()');
+                if (!gs || !/→gl/.test(gs.fmt || '') || gs.w !== 320) { fail++; log('GAGAL: KLMCAM resolusi tinggi tidak diperkecil di GPU (' + (gs && gs.err) + ')'); }
+                else if (!p4 || Math.abs(p4[0] - 32) > 20 || Math.abs(p4[1] - 128) > 20 || Math.abs(p4[2] - 192) > 20) { fail++; log('GAGAL: warna KLMCAM setelah diperkecil di GPU salah'); }
+                else log('KLMCAM resolusi tinggi: OK — diperkecil ke ukuran output di GPU, warna benar');
+              }
             }
           }
-          await js('(() => { clearInterval(window.__kpaint); (window.__kpc || []).forEach((p) => p.close()); if (window.__kstab) window.__kstab.stop(); if (window.__kinp) KM.inputs.remove(window.__kinp); return 1; })()');
+          await js('(() => { clearInterval(window.__kpaint); (window.__kpc || []).forEach((p) => p.close()); if (window.__kinp) KM.inputs.remove(window.__kinp); return 1; })()');
         } catch (e) { fail++; log('GAGAL KLMCAM native: ' + e.message); }
-        // --- stabilisasi KLMCAM (EIS): gambar bergoyang + giroskop tiruan (sumbu/arah/jeda tidak diberitahu) → goyangan harus jauh berkurang ---
-        try {
-          const er = JSON.parse(await js(`(async () => {
-            if (!window.KLMStab) { try { (0, eval)(await (await fetch('/cam-stab.js', { cache: 'no-store' })).text()); } catch (e) {} }
-            if (!window.KLMStab || !KLMStab.supported()) return JSON.stringify({ skip: 'MediaStreamTrackProcessor/Generator tidak ada' });
-            const W = 960, H = 540, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
-            const sc = document.createElement('canvas'); sc.width = W + 300; sc.height = H + 300; const sg = sc.getContext('2d'), im = sg.createImageData(sc.width, sc.height);
-            let sd = 7; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
-            for (let i = 0; i < im.data.length; i += 4) { const v = 60 + rnd() * 120; im.data[i] = v; im.data[i + 1] = v * 0.9; im.data[i + 2] = v * 0.8; im.data[i + 3] = 255; }
-            sg.putImageData(im, 0, 0); sg.filter = 'blur(2px)'; sg.drawImage(sc, 0, 0); sg.filter = 'none'; sg.fillStyle = '#fff'; sg.fillRect(150 + W / 2 - 16, 150 + H / 2 - 16, 32, 32);
-            const th = (t) => { const s = t / 1000; return { a: 0.012 * Math.sin(2 * Math.PI * 4.1 * s) + 0.006 * Math.sin(2 * Math.PI * 7.3 * s + 1), b: 0.015 * Math.sin(2 * Math.PI * 3.3 * s + 0.5) + 0.007 * Math.sin(2 * Math.PI * 6.1 * s) }; };
-            const KX = 650, KY = -800, LAG = 50;
-            const pt = setInterval(() => { const q = th(performance.now() - LAG); g.drawImage(sc, -150 + KX * q.b, -150 + KY * q.a); }, 16);
-            const gt = setInterval(() => { const t = performance.now(), q = th(t), n = th(t + 10); window.dispatchEvent(new DeviceMotionEvent('devicemotion', { rotationRate: { alpha: 0, beta: (n.a - q.a) * 100 * 180 / Math.PI, gamma: (n.b - q.b) * 100 * 180 / Math.PI }, interval: 10 })); }, 10);
-            const cam = c.captureStream(30).getVideoTracks()[0], st = KLMStab.create(cam, { level: 'mid' });
-            const meas = async (tr, ms) => {
-              const rd = new MediaStreamTrackProcessor({ track: tr }).readable.getReader(), oc = new OffscreenCanvas(240, 135), x = oc.getContext('2d', { willReadFrequently: true }), xs = [], ys = [], t0 = performance.now();
-              while (performance.now() - t0 < ms) { const { value: f, done } = await rd.read(); if (done) break; x.drawImage(f, 0, 0, 240, 135); f.close();
-                const d = x.getImageData(0, 0, 240, 135).data; let sx = 0, sy = 0, n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 240 && d[i + 1] > 240 && d[i + 2] > 240) { const k = i / 4; sx += k % 240; sy += (k / 240) | 0; n++; }
-                if (n) { xs.push(sx / n * 4); ys.push(sy / n * 4); } }
-              rd.cancel();
-              const sdv = (a) => { const t = a.slice(Math.floor(a.length / 2)); const m = t.reduce((p, v) => p + v, 0) / Math.max(1, t.length); return +Math.sqrt(t.reduce((p, v) => p + (v - m) * (v - m), 0) / Math.max(1, t.length)).toFixed(1); };
-              return { n: xs.length, x: sdv(xs), y: sdv(ys) };
-            };
-            const [raw, out] = await Promise.all([meas(cam, 10000), meas(st.track, 10000)]);
-            const info = st.info(); clearInterval(pt); clearInterval(gt); st.stop(); cam.stop();
-            return JSON.stringify({ raw, out, info });
-          })()`));
-          if (er.skip) { fail++; log('GAGAL: stabilisasi KLMCAM tidak bisa berjalan di Chromium aplikasi — ' + er.skip); }
-          else {
-            const g0 = Math.hypot(er.raw.x, er.raw.y), g1 = Math.hypot(er.out.x, er.out.y);
-            log('stabilisasi KLMCAM (EIS): goyangan ' + g0.toFixed(1) + ' px → ' + g1.toFixed(1) + ' px • ' + JSON.stringify(er));
-            // runner lambat (frame banyak terbuang) → kalibrasi giroskop boleh belum jadi; yang wajib: goyangan teredam
-            if (!(er.out.n > 60) || !(g1 < g0 * 0.5) || (er.out.n > 200 && er.info.mode !== 'gyro')) { fail++; log('GAGAL: stabilisasi KLMCAM tidak meredam goyangan / giroskop tidak terkalibrasi'); }
-            else log('Stabilisasi KLMCAM: OK');
-          }
-        } catch (e) { fail++; log('GAGAL stabilisasi KLMCAM: ' + e.message); }
         // --- Fase 4b: output native — rekam MP4 & streaming MPEG-TS dikodekan mesin native (kanvas Program JS berhenti) ---
         try {
           const ff = server.hub.ffmpegPath();

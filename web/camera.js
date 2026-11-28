@@ -6,11 +6,13 @@
   const cfg = {
     slot: KMP.get('slot', 1), name: KMP.get('camname', KMP.deviceName()), facing: KMP.get('facing', 'environment'),
     quality: KMP.get('quality', '1080p30'), ns: KMP.get('ns', false), mirror: KMP.get('mirror', true), mic: true, fpsLock: KMP.get('fpsLock', true),
-    eis: KMP.get('eis', 'mid'), shutter: String(KMP.get('shutter', 'auto')), hz: String(KMP.get('hz', hzDefault())), bright: +KMP.get('bright', 0) || 0
+    shutter: String(KMP.get('shutter', 'auto')), hz: String(KMP.get('hz', hzDefault())), bright: +KMP.get('bright', 0) || 0,
+    auto: KMP.get('autoLite', true) !== false, boost: KMP.get('wifiBoost', true) !== false
   };
+  const QUALS = ['720p30', '720p60', '1080p30', '1080p60', '1440p30', '2160p30'];
+  if (!QUALS.includes(cfg.quality)) cfg.quality = '1080p30';
   const SHUTTERS = ['auto', 'cam', '50', '60', '100', '120', '250', '500', '1000'];
   if (!SHUTTERS.includes(cfg.shutter)) cfg.shutter = 'auto';
-  if (!['off', 'low', 'mid', 'high'].includes(cfg.eis)) cfg.eis = 'mid';
   // frekuensi listrik (kedip lampu) dari zona waktu: 60 Hz di Korea, Amerika (kecuali sebagian selatan), Taiwan, Filipina, Arab Saudi
   function hzDefault() { let z = ''; try { z = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) {} return /^(America\/(?!Argentina|Santiago|Montevideo|Asuncion|La_Paz|Punta_Arenas)|Asia\/(Seoul|Taipei|Manila|Riyadh)|Pacific\/(Honolulu|Guam|Saipan))/.test(z) ? '60' : '50'; }
   // mode internet: kode ruang dari tautan (#r=KODE&s=slot) atau dari pengaturan
@@ -21,9 +23,10 @@
   let iceCfg = [], netRate = 1, discT = 0;
   let settings = parseQ(cfg.quality);
   let vTrack = null, aTrack = null, pc = null, conn = null, started = false, tally = 'off', qPending = false;
-  let lastBytes = 0, lastT = 0, kbps = 0, battery = null, torchOn = false;
+  let lastBytes = 0, lastT = 0, kbps = 0, battery = null, torchOn = false, availCap = 0;
 
-  function parseQ(q) { const m = /(\d+)p(\d+)/.exec(q || '1080p30') || [0, 1080, 30]; const hh = +m[1], f = +m[2]; return { height: hh, width: Math.round(hh * 16 / 9), fps: f, bitrate: hh >= 1080 ? (f >= 50 ? 9000 : 6000) : (f >= 50 ? 6000 : 4000), audio: true }; }
+  // bitrate per kualitas (H.264 encoder hardware HP). 2160p = "maks kamera HP": kamera memberi resolusi terdekat yang ia sanggup
+  function parseQ(q) { const m = /(\d+)p(\d+)/.exec(q || '1080p30') || [0, 1080, 30]; const hh = +m[1], f = +m[2]; return { height: hh, width: Math.round(hh * 16 / 9), fps: f, bitrate: hh >= 2160 ? 20000 : hh >= 1440 ? 12000 : hh >= 1080 ? (f >= 50 ? 9000 : 6000) : (f >= 50 ? 6000 : 4000), audio: true }; }
 
   // ---------- UI ----------
   function setStatus(s) {
@@ -221,7 +224,7 @@
     const changed = !settings || s.width !== settings.width || s.height !== settings.height || s.fps !== settings.fps;
     settings = Object.assign({}, settings, s);
     const q = qName(settings);
-    if (/^(720|1080)p(30|60)$/.test(q) && q !== cfg.quality) { cfg.quality = q; KMP.set('quality', q); }
+    if (QUALS.includes(q) && q !== cfg.quality) { cfg.quality = q; KMP.set('quality', q); }
     if ($('panel').classList.contains('show')) $('sQual').value = cfg.quality;
     return changed;
   }
@@ -237,13 +240,57 @@
     try {
       const p = snd.getParameters();
       if (!p.encodings || !p.encodings.length) p.encodings = [{}];
-      p.encodings[0].maxBitrate = Math.round((settings.bitrate || 6000) * 1000 * netRate);
+      let kb = Math.round((settings.bitrate || 6000) * netRate); if (availCap > 0) kb = Math.max(800, Math.min(kb, availCap));
+      p.encodings[0].maxBitrate = kb * 1000;
       p.encodings[0].maxFramerate = settings.fps;
       p.encodings[0].priority = 'high'; p.encodings[0].networkPriority = 'high';
       p.degradationPreference = 'maintain-framerate';
       await snd.setParameters(p);
     } catch (e) { console.warn(e); }
   }
+
+  // ---------- RINGAN OTOMATIS (HP kentang) ----------
+  // Bila encoder/kamera HP tidak sanggup (encoder dibatasi CPU, atau fps yang terkirim jauh di bawah target padahal kamera
+  // memberi cukup) selama ±8 detik → kualitas turun satu tingkat (fps dipertahankan, resolusi diturunkan) & PC ikut diberi tahu.
+  // Kamera dibuka ulang di resolusi lebih kecil → HP benar-benar lebih ringan (bukan hanya encodernya).
+  const LITE = { '2160p30': '1440p30', '1440p30': '1080p30', '1080p60': '720p60', '1080p30': '720p30', '720p60': '720p30' };
+  const AL = { bad: 0, at: 0 };
+  function autoLite(limit, encFps, capFps) {
+    if (!cfg.auto || !pc || reopening || performance.now() - AL.at < 15000) { AL.bad = 0; return; }
+    const want = settings.fps || 30, camOk = !capFps || capFps >= want * 0.85;
+    const bad = limit === 'cpu' || (encFps && camOk && encFps < want * 0.8);
+    AL.bad = bad ? AL.bad + 1 : 0;
+    if (AL.bad < 4) return;
+    AL.bad = 0; AL.at = performance.now();
+    const next = LITE[cfg.quality]; if (!next) return;
+    KMP.toast('HP tidak sanggup ' + cfg.quality.replace('p', 'p ') + ' fps — diturunkan ke ' + next.replace('p', 'p ') + ' agar tetap mulus tanpa lag', 5000);
+    cfg.quality = next; KMP.set('quality', next); settings = Object.assign({}, settings, parseQ(next));
+    reopenVideo().catch(() => {}).then(() => { if (conn && conn.open) conn.send({ t: 'cam-quality', quality: next }); sendInfo(); });
+  }
+
+  // ---------- PENGUAT KONEKSI Wi-Fi ----------
+  // Aplikasi APK: Wi-Fi HP dikunci mode LATENSI RENDAH (WifiLock LOW_LATENCY / HIGH_PERF → hemat daya Wi-Fi mati, paket tidak
+  // ditahan-tahan radio) selama kamera mengirim, plus info sinyal (dBm, 2,4/5 GHz, kecepatan link). Semua versi: bitrate dibatasi
+  // kemampuan jalur yang terukur (lihat statistik) & prioritas paket tinggi (DSCP) → real-time, tidak menumpuk antrean.
+  const WF = { P: window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.KlmWifi, lock: false, info: null, at: 0, warned: false };
+  async function wifiBoost() {
+    if (!WF.P) return;
+    try {
+      if (cfg.boost && started) { const r = await WF.P.start(); WF.lock = !!(r && r.locked); }
+      else { await WF.P.stop(); WF.lock = false; }
+    } catch (e) { WF.lock = false; }
+  }
+  async function wifiPoll() {
+    if (!WF.P || performance.now() - WF.at < 3500) return; WF.at = performance.now();
+    try { WF.info = await WF.P.info(); } catch (e) { WF.info = null; return; }
+    const w = WF.info; if (!w || !w.rssi || WF.warned) return;
+    const heavy = (settings.height || 1080) >= 1440 || (settings.fps || 30) >= 50;
+    if (w.rssi < -72 || (heavy && w.freq && w.freq < 4900)) {
+      WF.warned = true;
+      KMP.toast(w.rssi < -72 ? 'Sinyal Wi-Fi lemah (' + w.rssi + ' dBm) — dekatkan HP ke router agar video real-time & tidak patah' : 'HP memakai Wi-Fi 2,4 GHz — untuk ' + cfg.quality + ' pakai Wi-Fi 5 GHz agar mulus', 6000);
+    }
+  }
+  window.addEventListener('pagehide', () => { if (WF.P && WF.lock) { try { WF.P.stop(); } catch (e) {} } });
 
   // ---------- shutter speed, kecerahan & kunci FPS ----------
   // Shutter "tepat" untuk video: ±1/(2×fps) (aturan 180°: blur gerak alami, gerakan tidak patah-patah/strobo) dan kelipatan
@@ -299,7 +346,6 @@
     sendInfo();
   }
   async function exLuma() {
-    if (stab) { const l = stab.luma(); if (l >= 0) return l; }
     let src = null;
     if (video.srcObject && video.readyState >= 2) src = video;
     else { if (!EX.img && window.ImageCapture) EX.img = new ImageCapture(vTrack); if (EX.img) src = await EX.img.grabFrame(); }
@@ -341,12 +387,12 @@
   function exWatch() {
     if (FM.on || !video.requestVideoFrameCallback) return; FM.on = true;
     const cb = (now) => {
-      if (FM.last) { const g = now - FM.last; if (g < 3000) { if (g > FM.gap) FM.gap = g; if (!stab && g > Math.max(200, 4000 / (settings.fps || 30))) FM.hitch.push(now); } } // >3 dtk = pratinjau sempat dimatikan
+      if (FM.last) { const g = now - FM.last; if (g < 3000) { if (g > FM.gap) FM.gap = g; if (g > Math.max(200, 4000 / (settings.fps || 30))) FM.hitch.push(now); } } // >3 dtk = pratinjau sempat dimatikan
       FM.last = now; video.requestVideoFrameCallback(cb);
     };
     video.requestVideoFrameCallback(cb);
   }
-  const frameGap = () => Math.max(FM.gap, stab ? (stab.info().gap || 0) : 0);
+  const frameGap = () => FM.gap;
   async function exSet(c) {
     EX.lastApply = performance.now(); FM.gap = 0;
     await vTrack.applyConstraints({ advanced: [c] }).catch(() => {});
@@ -418,18 +464,10 @@
     sendInfo();
   }
 
-  // ---------- stabilisasi gambar (EIS, lihat cam-stab.js) ----------
-  // kamera → (EIS) → trek keluaran: yang dikirim ke PC & yang tampil di pratinjau HP
-  let stab = null, outTrack = null, stabTold = false, stabSlow = 0;
-  function wrapTrack(t) {
-    if (stab) { stab.stop(); stab = null; }
-    if (cfg.eis !== 'off' && t) {
-      if (window.KLMStab && KLMStab.supported()) { try { stab = KLMStab.create(t, { level: cfg.eis }); } catch (e) { console.warn('EIS', e); stab = null; } }
-      if (!stab && !stabTold) { stabTold = true; KMP.toast('Stabilisasi gambar (EIS) tidak didukung aplikasi/peramban HP ini — perbarui Android System WebView / Chrome', 6000); }
-    }
-    stabSlow = 0;
-    return stab ? stab.track : t;
-  }
+  // kamera → trek keluaran (yang dikirim ke PC & tampil di pratinjau HP). Stabilisasi digital (EIS) dihapus: langsung trek kamera
+  // (paling ringan & tanpa jeda tambahan; OIS lensa HP tetap bekerja sendiri).
+  let outTrack = null;
+  const wrapTrack = (t) => t;
   async function useOut(t) {
     outTrack = t;
     if (!document.body.classList.contains('dim')) { video.srcObject = new MediaStream([outTrack]); video.play().catch(() => {}); }
@@ -437,20 +475,17 @@
     if (snd) { try { await snd.replaceTrack(outTrack); } catch (e) { console.warn(e); } }
     await tuneSender();
   }
-  /** pilihan stabilisasi / shutter / listrik / kecerahan (dari pengaturan HP atau dari panel KLMCAM di PC) */
+  /** pilihan shutter / listrik / kecerahan / ringan otomatis / penguat Wi-Fi (dari pengaturan HP atau panel KLMCAM di PC) */
   async function setCamOpt(o) {
     if (!o || typeof o !== 'object') return;
-    const before = { eis: cfg.eis, shutter: cfg.shutter, hz: cfg.hz, bright: cfg.bright };
-    if (['off', 'low', 'mid', 'high'].includes(o.eis)) cfg.eis = o.eis;
+    const before = { shutter: cfg.shutter, hz: cfg.hz, bright: cfg.bright };
+    if (typeof o.auto === 'boolean') { cfg.auto = o.auto; KMP.set('autoLite', cfg.auto); }
+    if (typeof o.boost === 'boolean') { cfg.boost = o.boost; KMP.set('wifiBoost', cfg.boost); wifiBoost(); }
     if (o.shutter != null && SHUTTERS.includes(String(o.shutter))) cfg.shutter = String(o.shutter);
     if (o.hz != null && ['50', '60'].includes(String(o.hz))) cfg.hz = String(o.hz);
     if (o.bright != null && isFinite(+o.bright)) cfg.bright = Math.max(-2, Math.min(2, +o.bright));
-    KMP.set('eis', cfg.eis); KMP.set('shutter', cfg.shutter); KMP.set('hz', cfg.hz); KMP.set('bright', cfg.bright);
+    KMP.set('shutter', cfg.shutter); KMP.set('hz', cfg.hz); KMP.set('bright', cfg.bright);
     if (vTrack) {
-      if (cfg.eis !== before.eis) {
-        if (stab && cfg.eis !== 'off' && before.eis !== 'off') stab.setLevel(cfg.eis);
-        else await useOut(wrapTrack(vTrack));
-      }
       if (cfg.shutter !== before.shutter || cfg.hz !== before.hz) await exApply();
       else if (cfg.bright !== before.bright && !EX.manual && evCaps()) { try { await vTrack.applyConstraints({ advanced: [{ exposureCompensation: camEv() }] }); } catch (e) {} }
     }
@@ -550,44 +585,43 @@
   setInterval(async () => {
     if (!vTrack) return;
     const s = vTrack.getSettings ? vTrack.getSettings() : {};
-    let fps = s.frameRate ? Math.round(s.frameRate) : settings.fps, loss = 0, rtt = 0, capFps = 0, limit = '';
+    let fps = s.frameRate ? Math.round(s.frameRate) : settings.fps, loss = 0, rtt = 0, capFps = 0, limit = '', avail = 0, encFps = 0;
     if (pc) {
       try {
         const st = await pc.getStats();
         st.forEach((r) => {
           if (r.type === 'outbound-rtp' && r.kind === 'video') {
             const now = r.timestamp; if (lastT) kbps = Math.round((r.bytesSent - lastBytes) * 8 / (now - lastT));
-            lastBytes = r.bytesSent; lastT = now; if (r.framesPerSecond) fps = Math.round(r.framesPerSecond);
+            lastBytes = r.bytesSent; lastT = now; if (r.framesPerSecond) { fps = Math.round(r.framesPerSecond); encFps = fps; }
             if (r.qualityLimitationReason && r.qualityLimitationReason !== 'none') limit = r.qualityLimitationReason;
           }
           if (r.type === 'media-source' && r.kind === 'video' && r.framesPerSecond) capFps = Math.round(r.framesPerSecond); // fps kamera sebenarnya
           if (r.type === 'remote-inbound-rtp' && r.kind === 'video') { loss = r.fractionLost || 0; rtt = Math.round((r.roundTripTime || 0) * 1000); }
+          if (r.type === 'candidate-pair' && r.nominated && r.state === 'succeeded' && r.availableOutgoingBitrate) avail = Math.round(r.availableOutgoingBitrate / 1000);
         });
         // jaringan berat (paket hilang / jeda tinggi) → turunkan bitrate agar gerakan tetap mulus & latensi tidak menumpuk; pulih perlahan
-        const before = netRate;
+        const before = netRate, beforeCap = availCap;
         if (loss > 0.08 || rtt > 450) netRate = Math.max(0.2, netRate * 0.7);
         else if (loss < 0.02 && rtt < 200) netRate = Math.min(1, netRate * 1.15);
-        if (Math.abs(netRate - before) > 0.01) tuneSender();
+        // PENGUAT KONEKSI: bitrate tidak melebihi ±85% kemampuan jalur Wi-Fi yang terukur → paket tidak mengantre di router/HP
+        // (antrean = gambar telat & patah). Batas ikut naik lagi saat jaringan membaik.
+        availCap = cfg.boost && avail > 300 ? Math.round(avail * 0.85) : 0;
+        if (Math.abs(netRate - before) > 0.01 || Math.abs(availCap - beforeCap) > Math.max(300, beforeCap * 0.1)) tuneSender();
       } catch (e) {}
     }
-    const si = stab ? stab.info() : null;
-    fpsGuardCheck((si && si.fpsIn) || capFps || fps); // dengan EIS: fps kamera asli diukur di EIS (sebelum diolah)
-    // EIS terlalu berat untuk HP ini (waktu olah per frame mendekati jatah 1 frame selama ±6 dtk) → turunkan tingkatnya otomatis
-    if (si && si.frames > 60 && si.ms > 750 / (settings.fps || 30)) {
-      if (++stabSlow >= 3) {
-        stabSlow = 0; const down = { high: 'mid', mid: 'low', low: 'off' }[cfg.eis] || 'off';
-        KMP.toast(down === 'off' ? 'Stabilisasi dimatikan otomatis: HP tidak sanggup (' + si.ms + ' ms/frame) — video diutamakan mulus' : 'Stabilisasi diturunkan ke ' + ({ mid: 'Sedang', low: 'Ringan' })[down] + ' agar video tetap mulus', 5000);
-        setCamOpt({ eis: down });
-      }
-    } else stabSlow = 0;
-    const hitch = si ? (si.hitch || 0) : (FM.hitch = FM.hitch.filter((t) => performance.now() - t < 60000)).length;
+    fpsGuardCheck(capFps || fps);
+    autoLite(limit, encFps, capFps);
+    const hitch = (FM.hitch = FM.hitch.filter((t) => performance.now() - t < 60000)).length;
     const exTxt = EX.manual ? shutterTxt(EX.u) + ' ISO ' + EX.iso : '';
+    if (cfg.boost) await wifiPoll();
+    const wf = WF.info, wTxt = wf && wf.rssi ? '📶 ' + wf.rssi + ' dBm' + (wf.freq ? ' • ' + (wf.freq >= 4900 ? '5 GHz' : '2,4 GHz') : '') + (wf.link ? ' • ' + wf.link + ' Mbps' : '') + (WF.lock ? ' • ⚡ penguat aktif' : '') : (cfg.boost && WF.lock ? '⚡ penguat Wi-Fi aktif' : '');
     $('stats').innerHTML = (s.width || '?') + '×' + (s.height || '?') + ' • ' + fps + '/' + settings.fps + ' fps' + (FG.on ? ' 🔒' : '') + (limit ? ' (' + (limit === 'cpu' ? 'HP berat' : limit === 'bandwidth' ? 'WiFi' : limit) + ')' : '')
-      + (exTxt || si || hitch ? '<br>' + [exTxt, si ? 'EIS ' + (si.mode === 'gyro' ? 'giro' : 'gambar') : '', hitch ? '⚠ tersendat ' + hitch + '×/mnt' : ''].filter(Boolean).join(' • ') : '')
-      + '<br>' + (pc ? kbps + ' kbps' + (rtt ? ' • ' + rtt + ' ms' : '') + (netRate < 0.99 ? ' • hemat ' + Math.round(netRate * 100) + '%' : '') : '') + (battery != null ? '<br>🔋 ' + battery + '%' : '');
+      + (exTxt || hitch ? '<br>' + [exTxt, hitch ? '⚠ tersendat ' + hitch + '×/mnt' : ''].filter(Boolean).join(' • ') : '')
+      + '<br>' + (pc ? kbps + ' kbps' + (rtt ? ' • ' + rtt + ' ms' : '') + (netRate < 0.99 ? ' • hemat ' + Math.round(netRate * 100) + '%' : '') : '') + (wTxt ? '<br>' + wTxt : '') + (battery != null ? '<br>🔋 ' + battery + '%' : '');
     lastInfo = { w: s.width, h: s.height, fps, capFps: capFps || 0, want: settings.fps, limit, fpsLock: FG.on || EX.manual, kbps, battery, rtt, loss: Math.round(loss * 100), net: !!cfg.room,
-      shutter: EX.manual ? shutterTxt(EX.u) : '', iso: EX.manual ? EX.iso : 0, eis: si ? { level: si.level, mode: si.mode, ms: si.ms, worker: !!si.worker } : null, hitch,
-      opt: { eis: cfg.eis, shutter: cfg.shutter, hz: cfg.hz, bright: cfg.bright, eisOk: !!(window.KLMStab && KLMStab.supported()), shutterOk: !EX.unsup && !!expCaps() } };
+      shutter: EX.manual ? shutterTxt(EX.u) : '', iso: EX.manual ? EX.iso : 0, hitch, avail,
+      wifi: wf ? { rssi: wf.rssi || 0, freq: wf.freq || 0, link: wf.link || 0, lock: !!WF.lock } : (WF.lock ? { lock: true } : null),
+      opt: { shutter: cfg.shutter, hz: cfg.hz, bright: cfg.bright, shutterOk: !EX.unsup && !!expCaps(), auto: cfg.auto, boost: cfg.boost, boostNative: !!WF.P } };
     sendInfo();
   }, 2000);
   let lastInfo = {};
@@ -618,7 +652,7 @@
     $('srvBox').style.display = KMP.servedByPc || KMP.hosted ? 'none' : ''; $('sRoom').value = cfg.room || '';
     $('sSrv').value = KMP.get('server', ''); $('sName').value = cfg.name; slotSel.value = cfg.slot; $('sFacing').value = cfg.facing; $('sQual').value = cfg.quality;
     $('sNs').checked = !!cfg.ns; $('sMirror').checked = !!cfg.mirror; $('sFpsLock').checked = !!cfg.fpsLock;
-    $('sEis').value = cfg.eis; $('sShutter').value = cfg.shutter; $('sHz').value = cfg.hz; $('sBright').value = String(cfg.bright); shutNote();
+    $('sAuto').checked = !!cfg.auto; $('sBoost').checked = !!cfg.boost; $('sShutter').value = cfg.shutter; $('sHz').value = cfg.hz; $('sBright').value = String(cfg.bright); shutNote();
     $('panel').classList.add('show');
   }
   // keterangan shutter yang akan dipakai untuk fps & listrik yang dipilih di panel
@@ -642,7 +676,7 @@
     const facing = $('sFacing').value, quality = $('sQual').value;
     KMP.set('camname', cfg.name); KMP.set('slot', cfg.slot); KMP.set('ns', cfg.ns); KMP.set('mirror', cfg.mirror);
     const fl = $('sFpsLock').checked; if (fl !== cfg.fpsLock) { cfg.fpsLock = fl; KMP.set('fpsLock', fl); if (!fl && FG.on) fpsGuardOff(''); else if (fl) FG.low = 0; }
-    setCamOpt({ eis: $('sEis').value, shutter: $('sShutter').value, hz: $('sHz').value, bright: +$('sBright').value });
+    setCamOpt({ auto: $('sAuto').checked, boost: $('sBoost').checked, shutter: $('sShutter').value, hz: $('sHz').value, bright: +$('sBright').value });
     $('panel').classList.remove('show');
     const qChanged = quality !== before.quality;
     if (qChanged) { cfg.quality = quality; KMP.set('quality', quality); settings = Object.assign({}, settings, parseQ(quality)); qPending = true; }
@@ -663,7 +697,8 @@
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { KMP.toast('Kamera butuh HTTPS. Buka lewat alamat https://… atau pakai aplikasi APK.', 5000); return; }
     try { await startMedia(); } catch (e) { KMP.toast('Izin kamera ditolak: ' + e.name, 4000); return; }
     started = true; $('start').style.display = 'none';
-    KMP.wakeLock();
+    KMP.wakeLock(); wifiBoost();
+    if ((settings.height || 0) >= 1440 && ((navigator.deviceMemory && navigator.deviceMemory <= 3) || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4))) KMP.toast('HP ini mungkin berat untuk ' + cfg.quality + ' — bila tersendat, kualitas diturunkan otomatis', 5000);
     connect();
     try { await document.documentElement.requestFullscreen(); await screen.orientation.lock('landscape'); } catch (e) {}
   };

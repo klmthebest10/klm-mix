@@ -826,8 +826,55 @@
   // kirim ulang paket, penyamaran paket hilang, irama tayang — sama seperti video call), pekerja (worker) hanya menyalin frame
   // jadi (NV12) dan mengirimnya langsung ke proses utama → mesin native. Frame tidak saling bergantung: frame yang terlewat
   // tidak pernah membuat gambar berhenti atau rusak, dan codec apa pun (H.264/VP8/VP9/AV1) bisa.
-  const KR = `let port = null; const cams = new Map();
+  // Resolusi tinggi dari HP (2K / 4K): frame diperkecil di GPU (WebGL2, tetap di pekerja) ke ukuran OUTPUT sebelum disalin →
+  // data yang menyeberang ke mesin native tidak lebih besar dari yang ditayangkan (4K→1080p: 4× lebih ringan), langsung NV12.
+  // Jalur yang sama menggantikan jalur kanvas BGRA yang lambat untuk frame tekstur GPU.
+  const KR = `let port = null; const cams = new Map(); let OUT = [1920, 1080];
 const hd = (f, h) => { const m = f.colorSpace && f.colorSpace.matrix; return m ? (m === 'bt709' ? 1 : 0) : (h >= 720 ? 1 : 0); };
+const G = { gl: null, bad: false, prog: null, tex: null, fb: null, ft: null, fw: 0, fh: 0, u: {} };
+function glInit() {
+  const cv = new OffscreenCanvas(4, 4), gl = cv.getContext('webgl2', { antialias: false, depth: false, stencil: false, alpha: true, premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
+  if (!gl) throw new Error('webgl2');
+  const sh = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; };
+  const vs = '#version 300 es\nvoid main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));gl_Position=vec4(p*2.0-1.0,0.0,1.0);}';
+  // satu gambar RGBA8 lebar W/4, tinggi H*1.5: baris 0..H-1 = bidang Y (4 piksel per texel), sisanya = bidang UV (2 pasang per texel)
+  // → hasil readPixels persis tata letak NV12. BT.709 rentang terbatas. u_o = jarak 4 sadapan (rata-rata) saat diperkecil jauh.
+  const fs = '#version 300 es\nprecision highp float;uniform sampler2D s;uniform vec2 wh;uniform vec2 o;out vec4 c;'
+    + 'vec3 px(vec2 u){return 0.25*(texture(s,u+vec2(-o.x,-o.y)).rgb+texture(s,u+vec2(o.x,-o.y)).rgb+texture(s,u+vec2(-o.x,o.y)).rgb+texture(s,u+vec2(o.x,o.y)).rgb);}'
+    + 'float Y(vec3 p){return dot(p,vec3(0.2126,0.7152,0.0722));}'
+    + 'void main(){float X=floor(gl_FragCoord.x),R=floor(gl_FragCoord.y);'
+    + 'if(R<wh.y){float v=(R+0.5)/wh.y;vec4 y;for(int k=0;k<4;k++){y[k]=16.0/255.0+219.0/255.0*Y(px(vec2((X*4.0+float(k)+0.5)/wh.x,v)));}c=y;}'
+    + 'else{float r=R-wh.y;float v=(2.0*r+1.0)/wh.y;vec4 q;for(int k=0;k<2;k++){vec3 p=px(vec2((2.0*(X*2.0+float(k))+1.0)/wh.x,v));float l=Y(p);'
+    + 'q[k*2]=128.0/255.0+224.0/255.0*(p.b-l)/1.8556;q[k*2+1]=128.0/255.0+224.0/255.0*(p.r-l)/1.5748;}c=q;}}';
+  const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+  gl.useProgram(pr); G.u = { s: gl.getUniformLocation(pr, 's'), wh: gl.getUniformLocation(pr, 'wh'), o: gl.getUniformLocation(pr, 'o') };
+  G.tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, G.tex);
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+  G.ft = gl.createTexture(); G.fb = gl.createFramebuffer(); G.gl = gl; G.prog = pr;
+}
+/** frame → NV12 berukuran tw×th lewat GPU; null bila WebGL2 tidak bisa */
+function glNV12(f, tw, th) {
+  if (G.bad) return null;
+  try {
+    if (!G.gl) glInit();
+    const gl = G.gl, fw = tw / 4, fh = th * 3 / 2;
+    if (G.fw !== fw || G.fh !== fh) {
+      gl.bindTexture(gl.TEXTURE_2D, G.ft); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, fw, fh, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, G.fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, G.ft, 0);
+      G.fw = fw; G.fh = fh;
+    }
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, G.tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, f);
+    const sw = f.displayWidth, shh = f.displayHeight, k = sw / tw; // rasio perkecil
+    gl.bindFramebuffer(gl.FRAMEBUFFER, G.fb); gl.viewport(0, 0, fw, fh);
+    gl.uniform1i(G.u.s, 0); gl.uniform2f(G.u.wh, tw, th); gl.uniform2f(G.u.o, k > 1.5 ? 0.25 / tw : 0, k > 1.5 ? 0.25 / th : 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const out = new Uint8Array(tw * th * 3 / 2); gl.readPixels(0, 0, fw, fh, gl.RGBA, gl.UNSIGNED_BYTE, out);
+    return out.buffer;
+  } catch (e) { G.bad = true; G.err = String(e && e.message || e); return null; }
+}
 async function pump(id, readable) {
   const c = cams.get(id); if (!c) return; const r = readable.getReader(); c.reader = r;
   let cv = null, cx = null;
@@ -838,9 +885,17 @@ async function pump(id, readable) {
     if (!c.on || !port || c.busy >= 2) { f.close(); if (c.on) c.drop++; continue; } // salinan sebelumnya belum selesai → lewati (frame mandiri, aman)
     c.busy++;
     (async () => { try {
-      const vr = f.visibleRect || { x: 0, y: 0, width: f.displayWidth, height: f.displayHeight }, W = vr.width & ~1, H = vr.height & ~1, rect = { x: vr.x, y: vr.y, width: W, height: H };
-      let buf = null, fmt = 0; const fm = f.format || '';
-      if (fm === 'NV12') { buf = new ArrayBuffer(W * H * 3 / 2); await f.copyTo(buf, { rect, layout: [{ offset: 0, stride: W }, { offset: W * H, stride: W }] }); }
+      const vr = f.visibleRect || { x: 0, y: 0, width: f.displayWidth, height: f.displayHeight };
+      let W = vr.width & ~1, H = vr.height & ~1, rect = { x: vr.x, y: vr.y, width: W, height: H };
+      let buf = null, fmt = 0, gpu = false; const fm = f.format || '';
+      // lebih besar dari output (HP 2K/4K) atau tekstur GPU → diperkecil & dikonversi di GPU
+      const sc = Math.min(1, OUT[0] / f.displayWidth, OUT[1] / f.displayHeight);
+      if (sc < 0.999 || !(fm === 'NV12' || fm === 'I420' || fm === 'I420A')) {
+        const tw = Math.max(4, Math.floor(f.displayWidth * sc / 4) * 4), th = Math.max(2, Math.floor(f.displayHeight * sc / 2) * 2);
+        const b = glNV12(f, tw, th); if (b) { buf = b; W = tw; H = th; gpu = true; }
+      }
+      if (gpu) {}
+      else if (fm === 'NV12') { buf = new ArrayBuffer(W * H * 3 / 2); await f.copyTo(buf, { rect, layout: [{ offset: 0, stride: W }, { offset: W * H, stride: W }] }); }
       else if (fm === 'I420' || fm === 'I420A') {
         const t = new Uint8Array(W * H * (fm === 'I420A' ? 5 : 3) / 2), q = W * H / 4;
         const lay = [{ offset: 0, stride: W }, { offset: W * H, stride: W / 2 }, { offset: W * H + q, stride: W / 2 }]; if (fm === 'I420A') lay.push({ offset: W * H * 3 / 2, stride: W });
@@ -852,15 +907,16 @@ async function pump(id, readable) {
         cx.drawImage(f, vr.x, vr.y, W, H, 0, 0, W, H); const d = cx.getImageData(0, 0, W, H).data;
         for (let i = 0; i < d.length; i += 4) { const t2 = d[i]; d[i] = d[i + 2]; d[i + 2] = t2; } buf = d.buffer; fmt = 2;
       }
-      const m = { id: c.eid, raw: 1, fmt, w: W, h: H, hd: hd(f, H), full: f.colorSpace && f.colorSpace.fullRange ? 1 : 0, ts: Math.max(0, Math.round(f.timestamp || 0)), buf };
-      try { port.postMessage(m); c.sent++; c.fmt = fm || 'gpu'; c.w = W; c.h = H; } catch (e) { port = null; }
+      const m = { id: c.eid, raw: 1, fmt, w: W, h: H, hd: gpu ? 1 : hd(f, H), full: gpu ? 0 : (f.colorSpace && f.colorSpace.fullRange ? 1 : 0), ts: Math.max(0, Math.round(f.timestamp || 0)), buf };
+      try { port.postMessage(m); c.sent++; c.fmt = (fm || 'gpu') + (gpu ? '→gl' : ''); c.w = W; c.h = H; c.sw = f.displayWidth; c.sh = f.displayHeight; } catch (e) { port = null; }
     } catch (e) { c.err = String(e && e.message || e); } finally { f.close(); c.busy--; } })();
   }
   c.reader = null;
 }
-setInterval(() => { const now = performance.now(); postMessage({ st: [...cams].map(([id, c]) => { c.gaps = c.gaps.filter((t) => now - t < 60000); return [id, { n: c.n, sent: c.sent, drop: c.drop, gaps: c.gaps.length, fmt: c.fmt, w: c.w, h: c.h, err: c.err, live: now - (c.lastAt || 0) < 1500 }]; }) }); }, 1000);
+setInterval(() => { const now = performance.now(); postMessage({ st: [...cams].map(([id, c]) => { c.gaps = c.gaps.filter((t) => now - t < 60000); return [id, { n: c.n, sent: c.sent, drop: c.drop, gaps: c.gaps.length, fmt: c.fmt, w: c.w, h: c.h, sw: c.sw, sh: c.sh, err: c.err || G.err || '', live: now - (c.lastAt || 0) < 1500 }]; }) }); }, 1000);
 onmessage = (e) => { const m = e.data || {};
   if (m.port) port = m.port;
+  if (m.out && m.out[0] > 0 && m.out[1] > 0) OUT = [m.out[0], m.out[1]];
   if (m.add) { const old = cams.get(m.add); if (old && old.reader) try { old.reader.cancel(); } catch (er) {} if (old && old.track) try { old.track.stop(); } catch (er) {}
     const c = { eid: m.add, on: !!m.on, busy: 0, n: 0, sent: 0, drop: 0, gaps: [], lastAt: 0, fmt: '', w: 0, h: 0, err: '', track: m.track || null }; cams.set(m.add, c);
     let rd = m.readable; if (!rd && m.track) { try { rd = new MediaStreamTrackProcessor({ track: m.track, maxBufferSize: 2 }).readable; } catch (er) { c.err = 'MediaStreamTrackProcessor: ' + er.message; } }
@@ -883,6 +939,7 @@ onmessage = (e) => { const m = e.data || {};
     let k = kcams.get(id); if (!k) { k = { ok: false, err: '', last: 0, n: 0 }; kcams.set(id, k); }
     k.err = ''; k.codec = ''; receiver.__klmK = id;
     const w = kw(), on = N.kWant();
+    kOut();
     // salinan trek dipindahkan ke pekerja (frame tidak melewati thread utama halaman); bila tidak bisa, aliran frame yang dipindah
     const t2 = receiver.track.clone();
     try { w.postMessage({ add: id, on, track: t2 }, [t2]); }
@@ -891,8 +948,13 @@ onmessage = (e) => { const m = e.data || {};
       catch (e2) { k.err = 'KLMCAM ke mesin native: ' + e2.message; try { t2.stop(); } catch (e3) {} }
     }
   };
+  // ukuran output → pekerja memperkecil frame HP yang lebih besar (2K/4K) ke ukuran ini di GPU
+  function kOut() { if (kWorker) kWorker.postMessage({ out: [+KM.settings.width || 1920, +KM.settings.height || 1080] }); }
+  N.kOut = kOut;
+  N.kOutTest = (w, h) => { if (kWorker) kWorker.postMessage({ out: [w, h] }); }; // uji otomatis: paksa perkecil di GPU
   function kSync() { // nyalakan / matikan penerusan sesuai keadaan mesin
     if (!kWorker) return;
+    kOut();
     for (const [id] of kcams) {
       const inp = KM.state.inputs.find((i) => i.type === 'klmcam' && kidOf(i) === id);
       if (!inp) { kWorker.postMessage({ del: id }); cmd('kdecoff ' + id); kcams.delete(id); continue; }
